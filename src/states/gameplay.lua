@@ -83,6 +83,8 @@ function gameplay:draw()
 
         local cam = self.camera
         love.graphics.push("all")
+        local zoom = cam.zoom or 1
+        love.graphics.scale(zoom, zoom)
         love.graphics.translate(-cam.x, -cam.y)
         self.world:draw()
         love.graphics.pop()

@@ -88,6 +88,28 @@ local function draw_minimap(context)
     end
 end
 
+local function draw_speed_fps(context)
+    local screenWidth = love.graphics.getWidth()
+    local minimap_size = 120
+    local margin = 20
+    local x = screenWidth - minimap_size - margin
+    local y = margin + minimap_size + 10
+
+    local player = context.player
+    local speed = 0
+    if player and player.body then
+        local vx, vy = player.body:getLinearVelocity()
+        speed = math.sqrt(vx * vx + vy * vy)
+    end
+
+    local fps = love.timer.getFPS()
+
+    love.graphics.setColor(1, 1, 1, 0.9)
+    love.graphics.setFont(love.graphics.getFont())
+    love.graphics.print(string.format("Speed: %.1f", speed), x, y)
+    love.graphics.print(string.format("FPS: %d", fps), x, y + 15)
+end
+
 return function(context)
     return tiny.system {
         draw = function()
@@ -98,6 +120,7 @@ return function(context)
 
             draw_player_health(player)
             draw_minimap(context)
+            draw_speed_fps(context)
 
             love.graphics.pop()
         end,

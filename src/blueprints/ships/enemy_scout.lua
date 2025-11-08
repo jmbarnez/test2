@@ -1,6 +1,6 @@
 local constants = require("src.constants.game")
 
-local scale = 18
+local scale = 12
 
 local hull_points = {
     0, -1.2 * scale,
@@ -77,14 +77,14 @@ return {
         },
         stats = {
             mass = 4,
-            main_thrust = 1800,
-            strafe_thrust = 900,
-            reverse_thrust = 900,
-            rotation_torque = 2600,
-            max_acceleration = 820,
-            max_speed = 240,
-            linear_damping = 0.05,
-            angular_damping = 0.05,
+            main_thrust = 150,
+            strafe_thrust = 95,
+            reverse_thrust = 110,
+            rotation_torque = 780,
+            max_acceleration = 100,
+            max_speed = 160,
+            linear_damping = 0.36,
+            angular_damping = 0.1,
         },
         hull = {
             max = 120,
@@ -114,7 +114,7 @@ return {
         {
             id = "laser_basic",
             overrides = {
-                laser = {
+                weapon = {
                     damagePerSecond = constants.weapons.laser.damage_per_second * 0.6,
                     offset = 1.2 * scale,
                     color = { 1, 0.2, 0.25 },
@@ -122,8 +122,8 @@ return {
                     alwaysFire = false,
                 },
                 weaponMount = {
-                    anchor = { x = 0, y = 0.85 },
-                    inset = 6,
+                    anchor = { x = 0, y = 1.0 },
+                    inset = 0,
                 },
             },
         },

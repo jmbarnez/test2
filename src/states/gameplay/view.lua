@@ -12,11 +12,15 @@ function View.initialize(state)
         height = love.graphics.getHeight(),
     }
 
+    local constants = require("src.constants.game")
+    local viewConfig = constants.view or {}
+
     state.camera = {
         x = 0,
         y = 0,
         width = state.viewport.width,
         height = state.viewport.height,
+        zoom = viewConfig.default_zoom or 1,
     }
 
     Starfield.initialize(state)
@@ -28,13 +32,14 @@ function View.updateCamera(state)
     end
 
     local cam = state.camera
-    cam.width = state.viewport.width
-    cam.height = state.viewport.height
+    local zoom = cam.zoom or 1
+    cam.width = state.viewport.width / zoom
+    cam.height = state.viewport.height / zoom
 
     local px = state.player.position.x
     local py = state.player.position.y
-    cam.x = px - cam.width / 2
-    cam.y = py - cam.height / 2
+    cam.x = px - cam.width * 0.5
+    cam.y = py - cam.height * 0.5
 
     local bounds = state.worldBounds
     local minX = bounds.x

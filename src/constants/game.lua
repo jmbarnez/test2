@@ -39,6 +39,11 @@ constants.window = {
     msaa = 0,                        -- Multisample anti-aliasing samples (0 = disabled)
 }
 
+-- View configuration (camera defaults)
+constants.view = {
+    default_zoom = 0.5,              -- Default camera zoom (2x magnification)
+}
+
 -- ============================================================================
 -- PHYSICS CONFIGURATION
 -- ============================================================================
