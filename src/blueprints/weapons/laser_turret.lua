@@ -30,6 +30,13 @@ return {
     id = "laser_turret",
     name = "Pulse Laser Turret",
     assign = "weapon",
+    icon = {
+        kind = "weapon",
+        shape = "beam",
+        color = { 1.0, 0.45, 0.3 },
+        accent = { 1.0, 0.68, 0.5 },
+        detail = { 1.0, 0.88, 0.75 },
+    },
     components = {
         weapon = {
             fireMode = "projectile",

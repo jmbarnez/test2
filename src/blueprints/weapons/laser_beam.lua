@@ -30,6 +30,13 @@ return {
     id = "laser_beam",
     name = "Beam Laser Cannon",
     assign = "weapon",
+    icon = {
+        kind = "weapon",
+        shape = "beam",
+        color = { 0.6, 0.8, 1.0 },
+        accent = { 0.35, 0.7, 1.0 },
+        detail = { 0.85, 0.95, 1.0 },
+    },
     components = {
         weapon = {
             fireMode = "hitscan",

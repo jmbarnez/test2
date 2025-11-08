@@ -272,7 +272,10 @@ return {
         },
         cargo = {
             capacity = 120,
-            items = {},
+            items = {
+                { weapon = "cannon" },
+                { weapon = "laser_beam" },
+            },
         },
         hull = {
             max = 100,

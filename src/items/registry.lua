@@ -86,6 +86,10 @@ function Items.instantiate(id, overrides)
         blueprintCategory = definition.blueprintCategory,
     }
 
+    if definition.icon then
+        instance.icon = deep_copy(definition.icon)
+    end
+
     if definition.createInstance then
         definition.createInstance(instance, overrides or {})
     elseif overrides then
@@ -118,6 +122,7 @@ function Items.registerWeaponBlueprint(blueprint)
         stackable = false,
         blueprintId = blueprintId,
         blueprintCategory = blueprint.category or "weapons",
+        icon = blueprint.icon and deep_copy(blueprint.icon) or nil,
         createInstance = function(instance, overrides)
             overrides = overrides or {}
             instance.quantity = 1
