@@ -27,21 +27,22 @@ end
 
 return {
     category = "weapons",
-    id = "laser_basic",
-    name = "Basic Laser Cannon",
+    id = "laser_beam",
+    name = "Beam Laser Cannon",
     assign = "weapon",
     components = {
         weapon = {
             fireMode = "hitscan",
-            width = weapon_defaults.width or 3,
+            constantKey = "laser",
+            width = weapon_defaults.width or 1.2,
             fadeDuration = weapon_defaults.fade_time or 0.08,
             fade = 0,
             firing = false,
             maxRange = weapon_defaults.max_range or 600,
             damagePerSecond = weapon_defaults.damage_per_second or 32,
             offset = weapon_defaults.offset or 30,
-            color = with_default(weapon_defaults.color, { 1, 0.3, 0.6 }),
-            glowColor = with_default(weapon_defaults.glow_color, { 1, 0.7, 0.9 }),
+            color = with_default(weapon_defaults.color, { 0.2, 0.8, 1.0 }),
+            glowColor = with_default(weapon_defaults.glow_color, { 0.5, 0.9, 1.0 }),
         },
         weaponMount = {
             forward = weapon_defaults.forward or 36,

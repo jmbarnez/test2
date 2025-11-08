@@ -14,8 +14,9 @@ return {
     enemies = {
         count = { min = 3, max = 3 },
         ship_id = "enemy_scout",
-        patrol_radius = 1500,
+        spawn_radius = 1500,
         spawn_safe_radius = 900,
+        wander_radius = 1500,
     },
     worldBounds = {
         x = 0,

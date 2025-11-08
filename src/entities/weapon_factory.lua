@@ -1,4 +1,5 @@
 local loader = require("src.blueprints.loader")
+local Items = require("src.items.registry")
 
 local weapon_factory = {}
 
@@ -103,6 +104,11 @@ function weapon_factory.instantiate(blueprint, context)
             name = blueprint.name,
         }
     }
+
+    weapon.isWeapon = true
+
+    local itemId = Items.registerWeaponBlueprint(blueprint)
+    weapon.itemId = itemId
 
     local components = blueprint.components or {}
     local overrides = context.overrides or {}

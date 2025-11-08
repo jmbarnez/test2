@@ -1,0 +1,187 @@
+local Items = {}
+
+local definitions = {}
+local weaponByBlueprint = {}
+
+local function deep_copy(value, cache)
+    if type(value) ~= "table" then
+        return value
+    end
+
+    cache = cache or {}
+    if cache[value] then
+        return cache[value]
+    end
+
+    local copy = {}
+    cache[value] = copy
+
+    for k, v in pairs(value) do
+        copy[deep_copy(k, cache)] = deep_copy(v, cache)
+    end
+
+    local mt = getmetatable(value)
+    if mt then
+        setmetatable(copy, mt)
+    end
+
+    return copy
+end
+
+local function apply_overrides(target, overrides)
+    if type(overrides) ~= "table" then
+        return target
+    end
+
+    for key, value in pairs(overrides) do
+        if type(value) == "table" then
+            local existing = target[key]
+            if type(existing) ~= "table" then
+                existing = {}
+                target[key] = existing
+            end
+            apply_overrides(existing, value)
+        else
+            target[key] = value
+        end
+    end
+
+    return target
+end
+
+function Items.register(definition)
+    assert(type(definition) == "table", "Item definition must be a table")
+    local id = assert(definition.id, "Item definition requires an id")
+
+    if definitions[id] then
+        return definitions[id]
+    end
+
+    definitions[id] = definition
+    return definition
+end
+
+function Items.has(id)
+    return definitions[id] ~= nil
+end
+
+function Items.get(id)
+    return definitions[id]
+end
+
+function Items.instantiate(id, overrides)
+    local definition = definitions[id]
+    if not definition then
+        return nil, string.format("unknown_item:%s", tostring(id))
+    end
+
+    local instance = {
+        id = id,
+        type = definition.type or "generic",
+        name = overrides and overrides.name or definition.name or id,
+        stackable = definition.stackable or false,
+        quantity = overrides and overrides.quantity or definition.defaultQuantity or 1,
+        metadata = definition.metadata and deep_copy(definition.metadata) or nil,
+        blueprintId = definition.blueprintId,
+        blueprintCategory = definition.blueprintCategory,
+    }
+
+    if definition.createInstance then
+        definition.createInstance(instance, overrides or {})
+    elseif overrides then
+        apply_overrides(instance, overrides)
+    end
+
+    return instance
+end
+
+function Items.registerWeaponBlueprint(blueprint)
+    if type(blueprint) ~= "table" then
+        return nil
+    end
+
+    local blueprintId = blueprint.id
+    if not blueprintId then
+        return nil
+    end
+
+    local itemId = "weapon:" .. blueprintId
+    if definitions[itemId] then
+        weaponByBlueprint[blueprintId] = itemId
+        return itemId
+    end
+
+    Items.register({
+        id = itemId,
+        type = "weapon",
+        name = blueprint.name or blueprintId,
+        stackable = false,
+        blueprintId = blueprintId,
+        blueprintCategory = blueprint.category or "weapons",
+        createInstance = function(instance, overrides)
+            overrides = overrides or {}
+            instance.quantity = 1
+            instance.installed = overrides.installed or false
+            instance.slot = overrides.slot
+            if overrides.mount then
+                instance.mount = deep_copy(overrides.mount)
+            end
+            if overrides.overrides then
+                instance.overrides = deep_copy(overrides.overrides)
+            end
+        end,
+    })
+
+    weaponByBlueprint[blueprintId] = itemId
+    return itemId
+end
+
+function Items.ensureWeaponItem(blueprint, overrides)
+    local itemId = Items.registerWeaponBlueprint(blueprint)
+    if not itemId then
+        return nil, "invalid_weapon_blueprint"
+    end
+    return Items.instantiate(itemId, overrides)
+end
+
+function Items.createWeaponItem(weaponId, overrides)
+    if not weaponId then
+        return nil, "invalid_weapon_id"
+    end
+
+    local itemId = weaponByBlueprint[weaponId]
+    if not itemId then
+        itemId = "weapon:" .. weaponId
+        if not definitions[itemId] then
+            Items.register({
+                id = itemId,
+                type = "weapon",
+                name = weaponId,
+                stackable = false,
+                blueprintId = weaponId,
+                blueprintCategory = "weapons",
+                createInstance = function(instance, overrides_)
+                    overrides_ = overrides_ or {}
+                    instance.quantity = 1
+                    instance.installed = overrides_.installed or false
+                    instance.slot = overrides_.slot
+                    if overrides_.mount then
+                        instance.mount = deep_copy(overrides_.mount)
+                    end
+                    if overrides_.overrides then
+                        instance.overrides = deep_copy(overrides_.overrides)
+                    end
+                end,
+            })
+        end
+        weaponByBlueprint[weaponId] = itemId
+    end
+
+    return Items.instantiate(itemId, overrides)
+end
+
+function Items.iterateDefinitions()
+    return pairs(definitions)
+end
+
+return Items

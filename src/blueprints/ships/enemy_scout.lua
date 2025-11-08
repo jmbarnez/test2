@@ -112,7 +112,7 @@ return {
     },
     weapons = {
         {
-            id = "laser_basic",
+            id = "laser_beam",
             overrides = {
                 weapon = {
                     damagePerSecond = constants.weapons.laser.damage_per_second * 0.6,

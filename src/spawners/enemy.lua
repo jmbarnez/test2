@@ -40,7 +40,7 @@ return function(context)
     local defaultCount = enemyConfig.count or 8
     local count = choose_count(defaultCount)
     local ship_id = enemyConfig.ship_id or enemyConfig.shipId or enemyConfig.ship or enemyConfig.default_ship or "enemy_scout"
-    local radius = enemyConfig.patrol_radius or math.min(bounds.width, bounds.height) * 0.25
+    local spawnRadius = enemyConfig.spawn_radius or math.min(bounds.width, bounds.height) * 0.25
     local safe_radius = enemyConfig.safe_radius or enemyConfig.spawn_safe_radius or 600
 
     local instantiateContext = {
@@ -59,10 +59,10 @@ return function(context)
         for attempt = 1, 24 do
             local spawn_x, spawn_y
 
-            if radius and radius > 0 then
-                local inner_override = math.min(radius * 0.85, radius)
+            if spawnRadius and spawnRadius > 0 then
+                local inner_override = math.min(spawnRadius * 0.85, spawnRadius)
                 inner_override = math.max(inner_override, safe_radius * 0.75)
-                spawn_x, spawn_y = random_point_in_ring(bounds, radius, inner_override)
+                spawn_x, spawn_y = random_point_in_ring(bounds, spawnRadius, inner_override)
             else
                 spawn_x = love.math.random(bounds.x, bounds.x + bounds.width)
                 spawn_y = love.math.random(bounds.y, bounds.y + bounds.height)
@@ -119,6 +119,20 @@ return function(context)
 
             enemy.enemy = true
             enemy.faction = enemy.faction or "enemy"
+
+            enemy.spawnPosition = enemy.spawnPosition or { x = spawn_x, y = spawn_y }
+            enemy.ai = enemy.ai or {}
+            enemy.ai.home = enemy.ai.home or enemy.spawnPosition
+            local wanderRadius = enemyConfig.wander_radius or spawnRadius
+            if wanderRadius and wanderRadius > 0 then
+                enemy.ai.wanderRadius = enemy.ai.wanderRadius or wanderRadius
+            end
+            if enemyConfig.wander_speed then
+                enemy.ai.wanderSpeed = enemy.ai.wanderSpeed or enemyConfig.wander_speed
+            end
+            if enemyConfig.wander_arrive_radius then
+                enemy.ai.wanderArriveRadius = enemy.ai.wanderArriveRadius or enemyConfig.wander_arrive_radius
+            end
 
             world:add(enemy)
             context.enemyCount = (context.enemyCount or 0) + 1

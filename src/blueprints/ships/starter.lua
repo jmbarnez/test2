@@ -260,15 +260,19 @@ return {
             },
         },
         stats = {
-            mass = 2.5,
-            main_thrust = 160,
-            reverse_thrust = 120,
-            strafe_thrust = 120,
-            rotation_torque = 900,
-            max_acceleration = 110,
-            max_speed = 180,
-            linear_damping = 0.38,
-            angular_damping = 0.09,
+            mass = 1.8,
+            main_thrust = 240,
+            reverse_thrust = 80,
+            strafe_thrust = 140,
+            rotation_torque = 450,
+            max_acceleration = 150,
+            max_speed = 220,
+            linear_damping = 0.6,
+            angular_damping = 0.15,
+        },
+        cargo = {
+            capacity = 120,
+            items = {},
         },
         hull = {
             max = 100,
@@ -300,7 +304,7 @@ return {
     },
     weapons = {
         {
-            id = "laser_basic",
+            id = "laser_turret",
             mount = {
                 anchor = { x = 0, y = 1.1 },
                 inset = 6,

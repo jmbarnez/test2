@@ -31,6 +31,8 @@ end
 function gameplay:enter(_, config)
     local sectorId = resolveSectorId(config)
 
+    self.cargoUI = { visible = false }
+
     World.loadSector(self, sectorId)
     World.initialize(self)
     View.initialize(self)
@@ -47,6 +49,7 @@ function gameplay:leave()
     View.teardown(self)
     FilmGrain.teardown(self)
     self.player = nil
+    self.cargoUI = nil
 end
 
 function gameplay:update(dt)
@@ -100,6 +103,16 @@ end
 
 function gameplay:updateCamera()
     View.updateCamera(self)
+end
+
+function gameplay:keypressed(key)
+    if key == "tab" then
+        if not self.cargoUI then
+            self.cargoUI = { visible = false }
+        end
+        self.cargoUI.visible = not self.cargoUI.visible
+        return
+    end
 end
 
 return gameplay

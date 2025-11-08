@@ -36,8 +36,14 @@ return function(context)
             local mx, my = love.mouse.getPosition()
             local cam = context.camera
             if cam then
-                mx = mx + cam.x
-                my = my + cam.y
+                local zoom = cam.zoom or 1
+                if zoom ~= 0 then
+                    mx = mx / zoom + cam.x
+                    my = my / zoom + cam.y
+                else
+                    mx = cam.x
+                    my = cam.y
+                end
             end
             local to_mouse_x = mx - entity.position.x
             local to_mouse_y = my - entity.position.y

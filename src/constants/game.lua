@@ -99,7 +99,11 @@ constants.ships = {
 constants.render = {
     clear_color = { 0.01, 0.01, 0.025 }, -- Background color (dark blue-black space)
     star_cull_margin = 4,            -- Extra pixels beyond viewport to render stars (prevents pop-in)
+    fonts = {
+        primary = "assets/fonts/Orbitron-Regular.ttf",
+    },
     lighting = {
+        enabled = false,
         -- Lighting shader defaults (tunable at runtime via Lighting.setConfig)
         -- direction components are normalized automatically
         -- *_strength parameters scale respective lighting terms per entity
@@ -198,11 +202,22 @@ constants.asteroids = {
 constants.weapons = {
     laser = {
         max_range = 720,             -- Maximum laser beam distance in pixels
-        width = 3,                   -- Laser beam width in pixels
+        width = 1.2,                 -- Laser beam width in pixels
         damage_per_second = 32,      -- Damage dealt per second of continuous fire
         fade_time = 0.08,            -- Beam fade-out duration in seconds
         color = { 1, 0.3, 0.6 },     -- Primary laser color (RGB, pink-red)
         glow_color = { 1, 0.7, 0.9 }, -- Glow/highlight color for visual effect
+    },
+    laser_turret = {
+        projectile_speed = 840,      -- Speed of each pulse projectile (pixels/sec)
+        projectile_lifetime = 0.28,  -- Lifetime to approximate short beam reach
+        projectile_size = 5,         -- Visual size of the bolt
+        damage = 22,                 -- Damage per pulse hit
+        fire_rate = 0.32,            -- Time between pulses (seconds)
+        color = { 1, 0.45, 0.3 },    -- Warmer turret bolt color
+        glow_color = { 1, 0.8, 0.6 }, -- Glow color to match
+        offset = 26,                 -- Default muzzle offset
+        forward = 28,                -- Default mount forward offset
     },
 }
 

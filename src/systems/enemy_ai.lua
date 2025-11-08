@@ -101,6 +101,133 @@ local function clamp_vector(vx, vy, maxMagnitude)
     return vx, vy
 end
 
+local function ensure_home(ai, entity)
+    if ai.home then
+        return ai.home
+    end
+
+    local spawn = entity.spawnPosition
+    if spawn then
+        ai.home = { x = spawn.x, y = spawn.y }
+        return ai.home
+    end
+
+    local pos = entity.position
+    if pos then
+        ai.home = { x = pos.x, y = pos.y }
+        return ai.home
+    end
+
+    return nil
+end
+
+local function choose_wander_point(home, radius)
+    local angle = love.math.random() * TAU
+    local dist = love.math.random() * radius
+    return home.x + math.cos(angle) * dist, home.y + math.sin(angle) * dist
+end
+
+local function handle_wander(entity, body, ai, stats, dt)
+    local position = entity.position
+    if not (position and position.x and position.y) then
+        return false
+    end
+
+    local home = ensure_home(ai, entity)
+    if not home then
+        return false
+    end
+
+    local radius = ai.wanderRadius or stats.wander_radius or 0
+    if radius <= 0 then
+        return false
+    end
+
+    local arriveRadius = ai.wanderArriveRadius or math.max(40, radius * 0.2)
+    local state = ensure_ai_state(entity)
+
+    local maxSpeed = stats.max_speed or 240
+    local wanderSpeed = ai.wanderSpeed or stats.wander_speed or (maxSpeed * 0.55)
+    wanderSpeed = math.min(wanderSpeed, maxSpeed)
+
+    local ex, ey = position.x, position.y
+    local radiusSq = radius * radius
+
+    local homeDx = ex - home.x
+    local homeDy = ey - home.y
+    local homeDistSq = homeDx * homeDx + homeDy * homeDy
+
+    if homeDistSq > radiusSq * 1.1 then
+        state.wanderTarget = { x = home.x, y = home.y }
+    end
+
+    if not state.wanderTarget then
+        local tx, ty = choose_wander_point(home, radius)
+        state.wanderTarget = { x = tx, y = ty }
+    end
+
+    local target = state.wanderTarget
+    local tx, ty = target.x, target.y
+    local dx, dy = tx - ex, ty - ey
+    local dirX, dirY, distance = normalize_vector(dx, dy)
+
+    if distance <= arriveRadius then
+        state.wanderTarget = nil
+        local vx, vy = body:getLinearVelocity()
+        local damping = math.max(0, 1 - dt * 5)
+        body:setLinearVelocity(vx * damping, vy * damping)
+
+        if entity.weapon then
+            entity.weapon.firing = false
+            entity.weapon.targetX = nil
+            entity.weapon.targetY = nil
+        end
+
+        return true
+    end
+
+    local desiredAngle = math.atan2(dy, dx) + math.pi * 0.5
+    local currentAngle = body:getAngle()
+    local delta = clamp_angle(desiredAngle - currentAngle)
+
+    body:setAngularVelocity(0)
+    body:setAngle(currentAngle + delta)
+    entity.rotation = body:getAngle()
+
+    local maxAccel = stats.max_acceleration or 600
+    local mass = stats.mass or body:getMass() or 1
+
+    local desiredVX = dirX * wanderSpeed
+    local desiredVY = dirY * wanderSpeed
+    desiredVX, desiredVY = clamp_vector(desiredVX, desiredVY, maxSpeed)
+
+    local currentVX, currentVY = body:getLinearVelocity()
+    local diffX, diffY = desiredVX - currentVX, desiredVY - currentVY
+    local diffLen = math.sqrt(diffX * diffX + diffY * diffY)
+
+    if diffLen > 0 then
+        local maxDelta = maxAccel * dt
+        if diffLen > maxDelta then
+            local scale = maxDelta / diffLen
+            diffX, diffY = diffX * scale, diffY * scale
+        end
+
+        body:applyLinearImpulse(diffX * mass, diffY * mass)
+    end
+
+    local newVX, newVY = body:getLinearVelocity()
+    newVX, newVY = clamp_vector(newVX, newVY, maxSpeed)
+    body:setLinearVelocity(newVX, newVY)
+
+    if entity.weapon then
+        entity.weapon.firing = false
+        entity.weapon.targetX = nil
+        entity.weapon.targetY = nil
+    end
+
+    return true
+end
+
 return function(context)
     context = context or {}
 
@@ -114,6 +241,7 @@ return function(context)
 
             local ai = entity.ai or {}
             local stats = entity.stats or {}
+            ensure_home(ai, entity)
             local detectionRange = ai.detectionRange or stats.detection_range or ai.engagementRange or stats.max_range
             local disengageRange = ai.disengageRange or stats.disengage_range or (detectionRange and detectionRange * 1.25)
 
@@ -126,6 +254,10 @@ return function(context)
             end
 
             if not (target and target.position) then
+                if handle_wander(entity, body, ai, stats, dt) then
+                    return
+                end
+
                 if entity.weapon then
                     entity.weapon.firing = false
                     entity.weapon.targetX = nil

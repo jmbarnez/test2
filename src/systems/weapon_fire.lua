@@ -3,7 +3,34 @@
 local tiny = require("libs.tiny")
 local constants = require("src.constants.game")
 
+local DEFAULT_PROJECTILE_COLOR = { 0.2, 0.8, 1.0 }
+local DEFAULT_PROJECTILE_GLOW = { 0.5, 0.9, 1.0 }
 local DEFAULT_WEAPON_OFFSET = 30
+
+local function clone_array(values)
+    if type(values) ~= "table" then
+        return values
+    end
+
+    local copy = {}
+    for i = 1, #values do
+        copy[i] = values[i]
+    end
+    return copy
+end
+
+local function deep_copy(value)
+    if type(value) ~= "table" then
+        return value
+    end
+
+    local copy = {}
+    for k, v in pairs(value) do
+        copy[deep_copy(k)] = deep_copy(v)
+    end
+
+    return copy
+end
 
 local function compute_muzzle_origin(entity)
     local weapon = entity.weapon or {}
@@ -48,24 +75,35 @@ local function spawn_projectile(tinyWorld, physicsWorld, shooter, startX, startY
     local lifetime = weapon.projectileLifetime or 2.0
     local size = weapon.projectileSize or 6
     local damage = weapon.damage or 45
-    
-    local projectile = {
-        position = { x = startX, y = startY },
-        velocity = { x = dirX * speed, y = dirY * speed },
-        rotation = math.atan2(dirY, dirX) + math.pi * 0.5,
-        projectile = {
-            lifetime = lifetime,
-            damage = damage,
-            owner = shooter,
-        },
-        drawable = {
-            type = "projectile",
-            size = size,
-            color = weapon.color or { 0.2, 0.8, 1.0 },
-            glowColor = weapon.glowColor or { 0.5, 0.9, 1.0 },
-        },
-    }
-    
+
+    local blueprint = weapon.projectileBlueprint
+    local projectile = blueprint and deep_copy(blueprint) or {}
+
+    projectile.position = projectile.position or {}
+    projectile.position.x = startX
+    projectile.position.y = startY
+
+    projectile.velocity = projectile.velocity or {}
+    projectile.velocity.x = dirX * speed
+    projectile.velocity.y = dirY * speed
+
+    projectile.rotation = math.atan2(dirY, dirX) + math.pi * 0.5
+
+    local projectileComponent = projectile.projectile or {}
+    projectileComponent.lifetime = projectileComponent.lifetime or lifetime
+    projectileComponent.damage = projectileComponent.damage or damage
+    projectileComponent.owner = shooter
+    projectile.projectile = projectileComponent
+
+    local drawable = projectile.drawable or {}
+    drawable.type = drawable.type or "projectile"
+    drawable.size = drawable.size or size
+    drawable.color = drawable.color or clone_array(weapon.color) or clone_array(DEFAULT_PROJECTILE_COLOR)
+    drawable.glowColor = drawable.glowColor or clone_array(weapon.glowColor) or clone_array(DEFAULT_PROJECTILE_GLOW)
+    projectile.drawable = drawable
+
+    local projectileSize = drawable.size or size
+
     -- Copy faction from shooter for friend/foe identification
     if shooter.faction then
         projectile.faction = shooter.faction
@@ -84,7 +122,7 @@ local function spawn_projectile(tinyWorld, physicsWorld, shooter, startX, startY
         body:setLinearVelocity(dirX * speed, dirY * speed)
         body:setAngle(math.atan2(dirY, dirX) + math.pi * 0.5)
         
-        local shape = love.physics.newCircleShape(size * 0.5)
+        local shape = love.physics.newCircleShape(projectileSize * 0.5)
         local fixture = love.physics.newFixture(body, shape)
         fixture:setSensor(true) -- Projectiles don't collide physically, just detect hits
         fixture:setUserData({ 
@@ -121,8 +159,14 @@ return function(context)
             local mx, my = love.mouse.getPosition()
             local cam = context.camera
             if cam then
-                mx = mx + cam.x
-                my = my + cam.y
+                local zoom = cam.zoom or 1
+                if zoom ~= 0 then
+                    mx = mx / zoom + cam.x
+                    my = my / zoom + cam.y
+                else
+                    mx = cam.x
+                    my = cam.y
+                end
             end
 
             local playerFiring = love.mouse.isDown(1)
@@ -191,9 +235,33 @@ return function(context)
 
                     -- HITSCAN MODE (Laser beams)
                     elseif fireMode == "hitscan" then
-                        if fire then
-                            local laserConst = weaponConst.laser or {}
-                            local maxRange = weapon.maxRange or laserConst.max_range or 600
+                        local beamConst = weaponConst[weapon.constantKey or "laser"] or {}
+                        local usesBurst = weapon.fireRate ~= nil
+                        local triggered = false
+
+                        if usesBurst and fire and (not weapon.cooldown or weapon.cooldown <= 0) then
+                            weapon.cooldown = weapon.fireRate
+                            if weapon.beamDuration and weapon.beamDuration > 0 then
+                                weapon.beamTimer = weapon.beamDuration
+                            else
+                                weapon.beamTimer = nil
+                            end
+                            triggered = true
+                        end
+
+                        local beamActive
+                        if usesBurst then
+                            if weapon.beamTimer and weapon.beamTimer > 0 then
+                                beamActive = true
+                            else
+                                beamActive = triggered
+                            end
+                        else
+                            beamActive = fire
+                        end
+
+                        if beamActive then
+                            local maxRange = weapon.maxRange or beamConst.max_range or 600
                             local endX = startX + dirX * maxRange
                             local endY = startY + dirY * maxRange
 
@@ -239,7 +307,7 @@ return function(context)
                                 end
 
                                 if shouldDamage and damageEntity and target then
-                                    local dps = weapon.damagePerSecond or laserConst.damage_per_second or 0
+                                    local dps = weapon.damagePerSecond or beamConst.damage_per_second or 0
                                     local damage = dps * dt
                                     if damage > 0 then
                                         damageEntity(target, damage)
@@ -247,12 +315,22 @@ return function(context)
                                 end
                             end
 
+                            local beamWidth = weapon.width or beamConst.width or 3
+
                             beams[#beams + 1] = {
                                 x1 = startX,
                                 y1 = startY,
                                 x2 = endX,
                                 y2 = endY,
+                                width = beamWidth,
                             }
+                        end
+
+                        if usesBurst and weapon.beamTimer then
+                            weapon.beamTimer = math.max(weapon.beamTimer - dt, 0)
+                            if weapon.beamTimer <= 0 then
+                                weapon.beamTimer = nil
+                            end
                         end
                     end
                 end
@@ -277,27 +355,33 @@ return function(context)
                 love.graphics.push()
                 love.graphics.translate(beam.x1, beam.y1)
                 love.graphics.rotate(angle)
-                
+
+                local baseWidth = beam.width or 3
+                local outerWidth = math.max(baseWidth, 1)
+                local midWidth = math.max(baseWidth * 0.6, 0.6)
+                local innerWidth = math.max(baseWidth * 0.35, 0.35)
+                local coreWidth = math.max(baseWidth * 0.18, 0.18)
+
                 -- Outer glow
                 love.graphics.setColor(0.2, 0.4, 1, 0.1)
-                love.graphics.setLineWidth(8)
+                love.graphics.setLineWidth(outerWidth)
                 love.graphics.line(0, 0, length, 0)
-                
+
                 -- Middle beam
                 love.graphics.setColor(0.4, 0.7, 1, 0.6)
-                love.graphics.setLineWidth(4)
+                love.graphics.setLineWidth(midWidth)
                 love.graphics.line(0, 0, length, 0)
-                
+
                 -- Inner core
                 love.graphics.setColor(0.8, 0.9, 1, 0.9)
-                love.graphics.setLineWidth(2)
+                love.graphics.setLineWidth(innerWidth)
                 love.graphics.line(0, 0, length, 0)
-                
+
                 -- Bright center
                 love.graphics.setColor(1, 1, 1, 1)
-                love.graphics.setLineWidth(0.8)
+                love.graphics.setLineWidth(coreWidth)
                 love.graphics.line(0, 0, length, 0)
-                
+
                 love.graphics.pop()
             end
             
