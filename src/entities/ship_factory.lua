@@ -51,6 +51,55 @@ local function deep_merge(target, source)
     return target
 end
 
+local function compute_polygon_radius(points)
+    local maxRadius = 0
+    for i = 1, #points, 2 do
+        local x = points[i]
+        local y = points[i + 1]
+        local radius = math.sqrt(x * x + y * y)
+        if radius > maxRadius then
+            maxRadius = radius
+        end
+    end
+    return maxRadius
+end
+
+local function compute_drawable_radius(drawable)
+    if type(drawable) ~= "table" then
+        return 0
+    end
+
+    if drawable._mountRadius then
+        return drawable._mountRadius
+    end
+
+    local radius = 0
+    local parts = drawable.parts
+
+    if type(parts) == "table" then
+        for i = 1, #parts do
+            local part = parts[i]
+            if part then
+                local partRadius = 0
+                if part.type == "ellipse" then
+                    local rx = part.radiusX or (part.width and part.width * 0.5) or part.radius or 0
+                    local ry = part.radiusY or (part.height and part.height * 0.5) or part.length or rx
+                    partRadius = math.max(math.abs(rx or 0), math.abs(ry or 0))
+                else
+                    partRadius = compute_polygon_radius(part.points or {})
+                end
+
+                if partRadius > radius then
+                    radius = partRadius
+                end
+            end
+        end
+    end
+
+    drawable._mountRadius = radius
+    return radius
+end
+
 local function resolve_spawn(spawn, context, entity)
     if context and context.position then
         local pos = context.position
@@ -204,6 +253,27 @@ local function instantiate_weapons(entity, blueprint, context)
         end
 
         if weapon_id then
+            if instantiate_context then
+                local mount = instantiate_context.mount
+                if mount then
+                    local mount_copy = deep_copy(mount)
+                    local anchor = mount_copy.anchor
+                    if anchor then
+                        local radius = entity.mountRadius or 0
+                        local anchorX = anchor.x or 0
+                        local anchorY = anchor.y or 0
+
+                        if radius > 0 then
+                            mount_copy.lateral = (mount_copy.lateral or 0) + anchorX * radius
+                            mount_copy.forward = (mount_copy.forward or 0) + anchorY * radius
+                        end
+
+                        mount_copy.anchor = nil
+                    end
+
+                    instantiate_context.mount = mount_copy
+                end
+            end
             loader.instantiate("weapons", weapon_id, instantiate_context)
         end
     end
@@ -334,6 +404,8 @@ function ship_factory.instantiate(blueprint, context)
     else
         error("Ship instantiation requires a physicsWorld in context", 2)
     end
+
+    entity.mountRadius = compute_drawable_radius(entity.drawable)
 
     instantiate_weapons(entity, blueprint, context)
 

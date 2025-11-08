@@ -125,24 +125,20 @@ local function generate_stars(count, bounds, sizeRange, alphaRange, colorVariati
     local alphaSpan = math.max(maxAlpha - minAlpha, 0)
 
     for _ = 1, count do
-        local temp = 0.3 + love.math.random() * 0.7 -- Star temperature (cooler to hotter)
+        local temp = 0.3 + love.math.random() * 0.7
         local hue = love.math.random() * (colorVariation or 0.1)
         local size = minSize + love.math.random() * sizeSpan
         
-        -- Realistic star colors based on temperature
         local r, g, b
         if temp < 0.4 then
-            -- Red dwarf
             r = 1.0
             g = 0.4 + temp * 0.8
             b = 0.1 + temp * 0.3
         elseif temp < 0.6 then
-            -- Orange/Yellow
             r = 1.0
             g = 0.8 + temp * 0.4
             b = 0.3 + temp * 0.5
         else
-            -- White/Blue
             r = 0.8 + temp * 0.4
             g = 0.9 + temp * 0.2
             b = 1.0
@@ -187,7 +183,7 @@ function Starfield.initialize(state)
 
     state.starLayers = Starfield.generateLayers(state.worldBounds)
     state.nebulaSeed = love.math.random() * 1000
-    state.nebulaIntensity = 0.3 -- Reduced to make stars more visible
+    state.nebulaIntensity = 0.3
     state.starfieldTime = 0
 end
 
@@ -198,7 +194,7 @@ function Starfield.refresh(state)
 
     state.starLayers = Starfield.generateLayers(state.worldBounds)
     state.nebulaSeed = love.math.random() * 1000
-    state.nebulaIntensity = 0.3 -- Reduced to make stars more visible
+    state.nebulaIntensity = 0.3
 end
 
 function Starfield.update(state, dt)
@@ -222,7 +218,6 @@ function Starfield.draw(state)
 
     love.graphics.push("all")
     
-    -- Draw enhanced procedural nebula background
     love.graphics.setShader(nebulaShader)
     nebulaShader:send("nebulaSeed", state.nebulaSeed or 0)
     nebulaShader:send("time", time)
@@ -230,8 +225,7 @@ function Starfield.draw(state)
     love.graphics.rectangle("fill", 0, 0, vw, vh)
     love.graphics.setShader()
     
-    -- Draw stars without shader (simple bright circles)
-    love.graphics.setBlendMode("add") -- Additive blending for star glow
+    love.graphics.setBlendMode("add")
     
     for i = 1, #layers do
         local layer = layers[i]
@@ -240,35 +234,33 @@ function Starfield.draw(state)
         local offsetY = camRelY * parallax
         local stars = layer.stars
 
-        local margin = constants.render.star_cull_margin
         for j = 1, #stars do
             local star = stars[j]
             local sx = star.x - offsetX
             local sy = star.y - offsetY
+            local radius = star.size * 0.5
+            local maxGlowRadius = radius * 2
 
-            if sx >= -margin and sx <= vw + margin and sy >= -margin and sy <= vh + margin then
-                local radius = star.size * 0.5
+            if sx >= -maxGlowRadius and sx <= vw + maxGlowRadius and 
+               sy >= -maxGlowRadius and sy <= vh + maxGlowRadius then
                 local twinkle = math.sin(time * star.twinkleSpeed + star.twinklePhase) * 0.15 + 0.85
                 local alpha = star.alpha * star.brightness * twinkle
                 
-                -- Draw main star
                 love.graphics.setColor(star.r, star.g, star.b, alpha)
                 love.graphics.circle("fill", sx, sy, radius)
                 
-                -- Add bright core for better visibility
                 love.graphics.setColor(1, 1, 1, alpha * 0.8)
                 love.graphics.circle("fill", sx, sy, radius * 0.3)
                 
-                -- Add glow for larger/brighter stars
                 if star.brightness > 0.6 then
                     love.graphics.setColor(star.r, star.g, star.b, alpha * 0.3)
-                    love.graphics.circle("fill", sx, sy, radius * 2)
+                    love.graphics.circle("fill", sx, sy, maxGlowRadius)
                 end
             end
         end
     end
     
-    love.graphics.setBlendMode("alpha") -- Reset blend mode
+    love.graphics.setBlendMode("alpha")
     love.graphics.pop()
 end
 

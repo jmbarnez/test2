@@ -43,11 +43,12 @@ return {
             glowColor = with_default(weapon_defaults.glow_color, { 1, 0.7, 0.9 }),
         },
         weaponMount = {
-            forward = weapon_defaults.forward,
-            inset = weapon_defaults.inset,
-            lateral = weapon_defaults.lateral,
-            vertical = weapon_defaults.vertical,
-            offset = weapon_defaults.offset,
+            forward = weapon_defaults.forward or 36,
+            inset = weapon_defaults.inset or 0,
+            lateral = weapon_defaults.lateral or 0,
+            vertical = weapon_defaults.vertical or 0,
+            offsetX = weapon_defaults.offset_x or 0,
+            offsetY = weapon_defaults.offset_y or 0,
         },
     },
 }

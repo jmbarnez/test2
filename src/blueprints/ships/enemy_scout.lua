@@ -122,7 +122,8 @@ return {
                     alwaysFire = false,
                 },
                 weaponMount = {
-                    forward = 1.2 * scale,
+                    anchor = { x = 0, y = 0.85 },
+                    inset = 6,
                 },
             },
         },

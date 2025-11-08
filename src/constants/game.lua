@@ -109,11 +109,13 @@ constants.render = {
         rim_strength = 0.4,                 -- Strength of rim-light accent
         rim_exponent = 2.2,                 -- Controls rim falloff curve
     },
-    color_grading = {
-        enabled = true,                    -- Toggle LUT-based color grading pass
-        intensity = 0.65,                  -- Blend factor between original and graded color (0-1)
-        size = 16,                         -- Dimension of the LUT cube (commonly 16, 32)
-        lut_path = "assets/luts/space_cinematic.png", -- Optional LUT texture (generated externally)
+    film_grain = {
+        enabled = true,              -- Toggle for the film grain post-effect
+        intensity = 0.08,            -- Overall strength of luminance grain (0-1)
+        color_amount = 0.035,        -- How much chroma noise leaks into RGB channels
+        luminance_boost = 0.6,       -- Scales grain in bright areas
+        grain_size = 1.6,            -- Larger = coarser noise pattern
+        speed = 1.1,                 -- Animation speed of the grain pattern
     },
 }
 

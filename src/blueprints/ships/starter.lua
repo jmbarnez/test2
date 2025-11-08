@@ -261,13 +261,13 @@ return {
         },
         stats = {
             mass = 3,
-            main_thrust = 1800,
-            reverse_thrust = 1200,
-            strafe_thrust = 1200,
+            main_thrust = 900,
+            reverse_thrust = 600,
+            strafe_thrust = 600,
             rotation_torque = 2800,
-            max_acceleration = 1200,
+            max_acceleration = 400,
             max_speed = 300,
-            linear_damping = 0.08,
+            linear_damping = 0.3,
             angular_damping = 0.08,
         },
         hull = {
@@ -301,6 +301,10 @@ return {
     weapons = {
         {
             id = "laser_basic",
+            mount = {
+                anchor = { x = 0, y = 0.85 },
+                inset = 4,
+            },
         },
     },
     physics = {

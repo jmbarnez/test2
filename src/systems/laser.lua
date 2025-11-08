@@ -182,25 +182,44 @@ return function(context)
                 return
             end
 
+            love.graphics.push("all")
+            love.graphics.setBlendMode("add")
+            
             for i = 1, #beams do
                 local beam = beams[i]
-                love.graphics.push("all")
-                love.graphics.setLineStyle("smooth")
+                local dx = beam.x2 - beam.x1
+                local dy = beam.y2 - beam.y1
+                local length = math.sqrt(dx * dx + dy * dy)
+                local angle = math.atan2(dy, dx)
                 
-                love.graphics.setColor(0.4, 0.7, 1, 0.3)
-                love.graphics.setLineWidth(3)
-                love.graphics.line(beam.x1, beam.y1, beam.x2, beam.y2)
-
-                love.graphics.setColor(0.6, 0.85, 1, 0.9)
-                love.graphics.setLineWidth(1.5)
-                love.graphics.line(beam.x1, beam.y1, beam.x2, beam.y2)
-
+                love.graphics.push()
+                love.graphics.translate(beam.x1, beam.y1)
+                love.graphics.rotate(angle)
+                
+                -- Outer glow
+                love.graphics.setColor(0.2, 0.4, 1, 0.1)
+                love.graphics.setLineWidth(8)
+                love.graphics.line(0, 0, length, 0)
+                
+                -- Middle beam
+                love.graphics.setColor(0.4, 0.7, 1, 0.6)
+                love.graphics.setLineWidth(4)
+                love.graphics.line(0, 0, length, 0)
+                
+                -- Inner core
+                love.graphics.setColor(0.8, 0.9, 1, 0.9)
+                love.graphics.setLineWidth(2)
+                love.graphics.line(0, 0, length, 0)
+                
+                -- Bright center
                 love.graphics.setColor(1, 1, 1, 1)
-                love.graphics.setLineWidth(0.5)
-                love.graphics.line(beam.x1, beam.y1, beam.x2, beam.y2)
+                love.graphics.setLineWidth(0.8)
+                love.graphics.line(0, 0, length, 0)
                 
                 love.graphics.pop()
             end
+            
+            love.graphics.pop()
         end,
     }
 end

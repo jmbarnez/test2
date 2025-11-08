@@ -14,7 +14,7 @@ local World = require("src.states.gameplay.world")
 local Entities = require("src.states.gameplay.entities")
 local Systems = require("src.states.gameplay.systems")
 local View = require("src.states.gameplay.view")
-local ColorGrading = require("src.rendering.color_grading")
+local FilmGrain = require("src.rendering.film_grain")
 
 local love = love
 
@@ -34,7 +34,7 @@ function gameplay:enter(_, config)
     World.loadSector(self, sectorId)
     World.initialize(self)
     View.initialize(self)
-    ColorGrading.initialize(self)
+    FilmGrain.initialize(self)
     Systems.initialize(self, Entities.damage)
     Entities.spawnPlayer(self)
     View.updateCamera(self)
@@ -45,7 +45,7 @@ function gameplay:leave()
     Systems.teardown(self)
     World.teardown(self)
     View.teardown(self)
-    ColorGrading.teardown(self)
+    FilmGrain.teardown(self)
     self.player = nil
 end
 
@@ -69,6 +69,7 @@ function gameplay:update(dt)
     Entities.updateHealthTimers(self.world, dt)
 
     View.updateCamera(self)
+    FilmGrain.update(self, dt)
 end
 
 function gameplay:draw()
@@ -77,25 +78,22 @@ function gameplay:draw()
     end
 
     local clearColor = constants.render.clear_color
-    local usingCanvas = ColorGrading.beginFrame(self, clearColor)
-    if not usingCanvas then
-        love.graphics.clear(clearColor[1], clearColor[2], clearColor[3])
+    local function renderScene()
+        View.drawBackground(self)
+
+        local cam = self.camera
+        love.graphics.push("all")
+        love.graphics.translate(-cam.x, -cam.y)
+        self.world:draw()
+        love.graphics.pop()
     end
 
-    View.drawBackground(self)
-
-    local cam = self.camera
-    love.graphics.push("all")
-    love.graphics.translate(-cam.x, -cam.y)
-    self.world:draw()
-    love.graphics.pop()
-
-    ColorGrading.finish(self, clearColor)
+    FilmGrain.draw(self, renderScene, clearColor)
 end
 
 function gameplay:resize(w, h)
     View.resize(self, w, h)
-    ColorGrading.resize(self, w, h)
+    FilmGrain.resize(self, w, h)
 end
 
 function gameplay:updateCamera()
