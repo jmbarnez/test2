@@ -8,6 +8,7 @@
 local tiny = require("libs.tiny")
 local ship_renderer = require("src.renderers.ship")
 local asteroid_renderer = require("src.renderers.asteroid")
+local projectile_renderer = require("src.renderers.projectile")
 
 return function(context)
     return tiny.system {
@@ -17,6 +18,8 @@ return function(context)
                 ship_renderer.draw(entity, context)
             elseif entity.drawable.type == "asteroid" then
                 asteroid_renderer.draw(entity)
+            elseif entity.drawable.type == "projectile" then
+                projectile_renderer.draw(entity)
             end
         end,
         draw = function() end,

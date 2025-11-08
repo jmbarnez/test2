@@ -31,10 +31,13 @@ end
 
 local function resolve_color(palette, spec, fallback)
     local fallback_color = normalise_color(fallback)
-    if type(spec) == "table" then
+    if type(spec) == "table" and #spec >= 3 then
         return normalise_color(spec, fallback_color)
-    elseif type(spec) == "string" and palette then
-        return normalise_color(palette[spec], fallback_color)
+    elseif type(spec) == "string" and palette and palette[spec] then
+        local color = palette[spec]
+        if type(color) == "table" and #color >= 3 then
+            return normalise_color(color, fallback_color)
+        end
     end
 
     return fallback_color
@@ -178,6 +181,27 @@ local function draw_ellipse_part(part, palette, defaults)
     love.graphics.pop()
 end
 
+local function ensure_palette(drawable, entity)
+    if not drawable.colors or not next(drawable.colors) then
+        drawable.colors = {
+            hull = { 0.2, 0.3, 0.5, 1 },
+            outline = { 0.1, 0.15, 0.3, 1 },
+            cockpit = { 0.15, 0.25, 0.45, 1 },
+            wing = { 0.25, 0.35, 0.55, 1 },
+            accent = { 0.5, 0.3, 0.8, 1 },
+            core = { 0.7, 0.5, 1, 0.95 },
+            engine = { 0.8, 0.4, 0.6, 1 },
+            spike = { 0.3, 0.4, 0.7, 1 },
+            fin = { 0.35, 0.45, 0.65, 1 },
+            default = { 0.2, 0.3, 0.5, 1 },
+        }
+    end
+    
+    if not drawable.colors.default then
+        drawable.colors.default = drawable.colors.hull or { 0.2, 0.3, 0.5, 1 }
+    end
+end
+
 local function draw_ship_generic(entity, context)
     local drawable = entity.drawable
     local parts = drawable and drawable.parts
@@ -185,16 +209,11 @@ local function draw_ship_generic(entity, context)
         return false
     end
 
-    local palette = drawable.colors or {}
-    local default_fill, default_stroke
+    ensure_palette(drawable, entity)
+    local palette = drawable.colors
     
-    if entity.player then
-        default_fill = normalise_color({ 1, 1, 1, 1 })
-        default_stroke = normalise_color({ 0.8, 0.8, 0.8, 1 })
-    else
-        default_fill = normalise_color(palette.default or palette.hull or drawable.hullColor or { 0.2, 0.2, 0.25, 1 })
-        default_stroke = normalise_color(palette.outline or palette.trim or drawable.trimColor or { 1, 1, 1, 1 })
-    end
+    local default_fill = normalise_color(palette.hull or { 0.2, 0.3, 0.5, 1 })
+    local default_stroke = normalise_color(palette.outline or { 0.1, 0.15, 0.3, 1 })
     
     local defaults = {
         fill = default_fill,

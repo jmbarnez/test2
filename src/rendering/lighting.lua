@@ -47,8 +47,13 @@ vec4 effect(vec4 color, Image tex, vec2 texture_coords, vec2 screen_coords) {
 
     vec3 ambientTerm = ambientColor * ambientStrength * entityAmbientScale;
     vec3 diffuseTerm = diffuseColor * (diff * diffuseStrength * entityDiffuseScale);
-    vec3 specularTerm = specularColor * (spec * specularStrength * entitySpecularScale * base.a);
-    vec3 rimTerm = specularColor * (rim * rimStrength * entitySpecularScale * base.a);
+
+    float specFactor = spec * specularStrength * entitySpecularScale * base.a;
+    float rimFactor = rim * rimStrength * entitySpecularScale * base.a;
+
+    vec3 highlightBase = mix(base.rgb, specularColor, 0.35);
+    vec3 specularTerm = highlightBase * specFactor;
+    vec3 rimTerm = highlightBase * rimFactor;
 
     vec3 lit = base.rgb * (ambientTerm + diffuseTerm) + specularTerm + rimTerm;
     return vec4(clamp(lit, 0.0, 1.0), base.a);

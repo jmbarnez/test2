@@ -218,6 +218,28 @@ local function instantiate_weapons(entity, blueprint, context)
     entity.weapons = {}
     local override_by_id = context and context.weaponOverrides or nil
 
+    local function resolve_mount_anchor(mount_data)
+        if not mount_data then
+            return mount_data
+        end
+
+        local anchor = mount_data.anchor
+        if not anchor then
+            return mount_data
+        end
+
+        local radius = entity.mountRadius or 0
+        if radius > 0 then
+            local anchorX = anchor.x or 0
+            local anchorY = anchor.y or 0
+            mount_data.lateral = (mount_data.lateral or 0) + anchorX * radius
+            mount_data.forward = (mount_data.forward or 0) + anchorY * radius
+        end
+
+        mount_data.anchor = nil
+        return mount_data
+    end
+
     for index = 1, #weapon_defs do
         local definition = weapon_defs[index]
         local def_type = type(definition)
@@ -257,19 +279,7 @@ local function instantiate_weapons(entity, blueprint, context)
                 local mount = instantiate_context.mount
                 if mount then
                     local mount_copy = deep_copy(mount)
-                    local anchor = mount_copy.anchor
-                    if anchor then
-                        local radius = entity.mountRadius or 0
-                        local anchorX = anchor.x or 0
-                        local anchorY = anchor.y or 0
-
-                        if radius > 0 then
-                            mount_copy.lateral = (mount_copy.lateral or 0) + anchorX * radius
-                            mount_copy.forward = (mount_copy.forward or 0) + anchorY * radius
-                        end
-
-                        mount_copy.anchor = nil
-                    end
+                    resolve_mount_anchor(mount_copy)
 
                     instantiate_context.mount = mount_copy
                 end

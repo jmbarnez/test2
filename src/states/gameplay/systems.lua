@@ -7,7 +7,8 @@ local createPlayerControlSystem = require("src.systems.player_control")
 local createAsteroidSpawner = require("src.systems.asteroid_spawner")
 local createEnemySpawner = require("src.systems.enemy_spawner")
 local createEnemyAISystem = require("src.systems.enemy_ai")
-local createLaserSystem = require("src.systems.laser")
+local createWeaponSystem = require("src.systems.weapon_fire")
+local createProjectileSystem = require("src.systems.projectile")
 local createHudSystem = require("src.systems.hud")
 local createDestructionSystem = require("src.systems.destruction")
 
@@ -28,7 +29,8 @@ function Systems.initialize(state, damageCallback)
     tiny.deactivate(state.movementSystem)
 
     state.renderSystem = state.world:addSystem(createRenderSystem(state))
-    state.laserSystem = state.world:addSystem(createLaserSystem(state))
+    state.weaponSystem = state.world:addSystem(createWeaponSystem(state))
+    state.projectileSystem = state.world:addSystem(createProjectileSystem(state))
     state.enemyAISystem = state.world:addSystem(createEnemyAISystem(state))
     state.hudSystem = state.world:addSystem(createHudSystem(state))
     state.destructionSystem = state.world:addSystem(createDestructionSystem(state))
@@ -40,7 +42,8 @@ function Systems.teardown(state)
     state.enemySpawnerSystem = nil
     state.movementSystem = nil
     state.renderSystem = nil
-    state.laserSystem = nil
+    state.weaponSystem = nil
+    state.projectileSystem = nil
     state.enemyAISystem = nil
     state.hudSystem = nil
     state.damageEntity = nil

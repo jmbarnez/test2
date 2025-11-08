@@ -1,6 +1,6 @@
 local constants = require("src.constants.game")
 
-local weapon_defaults = (constants.weapons and constants.weapons.laser) or {}
+local weapon_defaults = (constants.weapons and constants.weapons.cannon) or {}
 
 local function clone_array(values)
     if type(values) ~= "table" then
@@ -27,24 +27,25 @@ end
 
 return {
     category = "weapons",
-    id = "laser_basic",
-    name = "Basic Laser Cannon",
+    id = "cannon",
+    name = "Plasma Cannon",
     assign = "weapon",
     components = {
         weapon = {
-            fireMode = "hitscan",
-            width = weapon_defaults.width or 3,
-            fadeDuration = weapon_defaults.fade_time or 0.08,
-            fade = 0,
+            fireMode = "projectile",
+            projectileSpeed = weapon_defaults.projectile_speed or 450,
+            damage = weapon_defaults.damage or 45,
+            fireRate = weapon_defaults.fire_rate or 0.5,
+            projectileLifetime = weapon_defaults.projectile_lifetime or 2.0,
+            projectileSize = weapon_defaults.projectile_size or 6,
             firing = false,
-            maxRange = weapon_defaults.max_range or 600,
-            damagePerSecond = weapon_defaults.damage_per_second or 32,
-            offset = weapon_defaults.offset or 30,
-            color = with_default(weapon_defaults.color, { 1, 0.3, 0.6 }),
-            glowColor = with_default(weapon_defaults.glow_color, { 1, 0.7, 0.9 }),
+            cooldown = 0,
+            offset = weapon_defaults.offset or 32,
+            color = with_default(weapon_defaults.color, { 0.2, 0.8, 1.0 }),
+            glowColor = with_default(weapon_defaults.glow_color, { 0.5, 0.9, 1.0 }),
         },
         weaponMount = {
-            forward = weapon_defaults.forward or 36,
+            forward = weapon_defaults.forward or 38,
             inset = weapon_defaults.inset or 0,
             lateral = weapon_defaults.lateral or 0,
             vertical = weapon_defaults.vertical or 0,

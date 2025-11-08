@@ -1,141 +1,140 @@
 local math = math
 local constants = require("src.constants.game")
 
-local scale = 12
+local scale = 14
 
--- Main hull - compact symmetrical drone design
+-- Main hull - sleek interceptor design
 local hull_points = {
-    0, -1.0 * scale,
-    0.5 * scale, -0.8 * scale,
-    0.8 * scale, -0.3 * scale,
-    0.8 * scale, 0.3 * scale,
-    0.5 * scale, 0.8 * scale,
-    0, 1.0 * scale,
-    -0.5 * scale, 0.8 * scale,
-    -0.8 * scale, 0.3 * scale,
-    -0.8 * scale, -0.3 * scale,
-    -0.5 * scale, -0.8 * scale,
-}
-
--- Energy core chamber
-local core_points = {
-    0, -0.5 * scale,
-    0.3 * scale, -0.3 * scale,
-    0.5 * scale, 0,
-    0.3 * scale, 0.5 * scale,
-    0, 0.6 * scale,
-    -0.3 * scale, 0.5 * scale,
-    -0.5 * scale, 0,
-    -0.3 * scale, -0.3 * scale,
-}
-
--- Inner energy ring
-local energy_ring = {
-    0, -0.3 * scale,
-    0.2 * scale, -0.2 * scale,
-    0.3 * scale, 0,
-    0.2 * scale, 0.3 * scale,
-    0, 0.4 * scale,
-    -0.2 * scale, 0.3 * scale,
-    -0.3 * scale, 0,
-    -0.2 * scale, -0.2 * scale,
-}
-
--- Wing extensions with angular design
-local wing_left = {
-    -0.8 * scale, -0.3 * scale,
-    -1.2 * scale, -0.2 * scale,
-    -1.3 * scale, 0.1 * scale,
-    -1.1 * scale, 0.4 * scale,
-    -0.8 * scale, 0.3 * scale,
-}
-
-local wing_right = {
-    0.8 * scale, -0.3 * scale,
-    1.2 * scale, -0.2 * scale,
-    1.3 * scale, 0.1 * scale,
-    1.1 * scale, 0.4 * scale,
-    0.8 * scale, 0.3 * scale,
-}
-
--- Wing accent panels
-local wing_accent_left = {
-    -0.9 * scale, -0.1 * scale,
-    -1.1 * scale, 0,
-    -1.0 * scale, 0.2 * scale,
-    -0.8 * scale, 0.1 * scale,
-}
-
-local wing_accent_right = {
-    0.9 * scale, -0.1 * scale,
-    1.1 * scale, 0,
-    1.0 * scale, 0.2 * scale,
-    0.8 * scale, 0.1 * scale,
-}
-
--- Advanced sensor array
-local sensor_array = {
-    0, -1.0 * scale,
-    0.15 * scale, -1.1 * scale,
-    0.2 * scale, -1.3 * scale,
     0, -1.4 * scale,
-    -0.2 * scale, -1.3 * scale,
-    -0.15 * scale, -1.1 * scale,
+    0.3 * scale, -1.2 * scale,
+    0.6 * scale, -0.8 * scale,
+    0.7 * scale, -0.2 * scale,
+    0.4 * scale, 0.6 * scale,
+    0.2 * scale, 1.2 * scale,
+    0, 1.3 * scale,
+    -0.2 * scale, 1.2 * scale,
+    -0.4 * scale, 0.6 * scale,
+    -0.7 * scale, -0.2 * scale,
+    -0.6 * scale, -0.8 * scale,
+    -0.3 * scale, -1.2 * scale,
 }
 
--- Rear engine nacelles
-local engine_left = {
-    -0.3 * scale, 0.7 * scale,
-    -0.4 * scale, 0.8 * scale,
-    -0.4 * scale, 1.0 * scale,
-    -0.2 * scale, 0.9 * scale,
+-- Cockpit section
+local cockpit_points = {
+    0, -1.0 * scale,
+    0.25 * scale, -0.8 * scale,
+    0.35 * scale, -0.4 * scale,
+    0.25 * scale, 0.1 * scale,
+    0, 0.2 * scale,
+    -0.25 * scale, 0.1 * scale,
+    -0.35 * scale, -0.4 * scale,
+    -0.25 * scale, -0.8 * scale,
 }
 
-local engine_right = {
-    0.3 * scale, 0.7 * scale,
-    0.4 * scale, 0.8 * scale,
-    0.4 * scale, 1.0 * scale,
-    0.2 * scale, 0.9 * scale,
+-- Power core
+local power_core = {
+    0, -0.2 * scale,
+    0.2 * scale, -0.1 * scale,
+    0.25 * scale, 0.3 * scale,
+    0, 0.4 * scale,
+    -0.25 * scale, 0.3 * scale,
+    -0.2 * scale, -0.1 * scale,
 }
 
--- Front blade details
-local blade_left = {
-    -0.2 * scale, -0.8 * scale,
-    -0.3 * scale, -0.9 * scale,
-    -0.25 * scale, -1.1 * scale,
-    -0.15 * scale, -0.9 * scale,
+-- Delta wing left
+local delta_left = {
+    -0.4 * scale, -0.1 * scale,
+    -1.0 * scale, 0.2 * scale,
+    -1.2 * scale, 0.6 * scale,
+    -0.8 * scale, 0.8 * scale,
+    -0.3 * scale, 0.4 * scale,
 }
 
-local blade_right = {
-    0.2 * scale, -0.8 * scale,
-    0.3 * scale, -0.9 * scale,
-    0.25 * scale, -1.1 * scale,
-    0.15 * scale, -0.9 * scale,
+-- Delta wing right
+local delta_right = {
+    0.4 * scale, -0.1 * scale,
+    1.0 * scale, 0.2 * scale,
+    1.2 * scale, 0.6 * scale,
+    0.8 * scale, 0.8 * scale,
+    0.3 * scale, 0.4 * scale,
+}
+
+-- Wing tips
+local wingtip_left = {
+    -1.0 * scale, 0.3 * scale,
+    -1.3 * scale, 0.4 * scale,
+    -1.2 * scale, 0.7 * scale,
+    -0.9 * scale, 0.6 * scale,
+}
+
+local wingtip_right = {
+    1.0 * scale, 0.3 * scale,
+    1.3 * scale, 0.4 * scale,
+    1.2 * scale, 0.7 * scale,
+    0.9 * scale, 0.6 * scale,
+}
+
+-- Engine pods
+local engine_pod_left = {
+    -0.2 * scale, 0.8 * scale,
+    -0.3 * scale, 1.0 * scale,
+    -0.25 * scale, 1.4 * scale,
+    -0.15 * scale, 1.2 * scale,
+}
+
+local engine_pod_right = {
+    0.2 * scale, 0.8 * scale,
+    0.3 * scale, 1.0 * scale,
+    0.25 * scale, 1.4 * scale,
+    0.15 * scale, 1.2 * scale,
+}
+
+-- Nose spike
+local nose_spike = {
+    0, -1.4 * scale,
+    0.1 * scale, -1.6 * scale,
+    0, -1.8 * scale,
+    -0.1 * scale, -1.6 * scale,
+}
+
+-- Stabilizer fins
+local fin_left = {
+    -0.5 * scale, -0.6 * scale,
+    -0.7 * scale, -0.7 * scale,
+    -0.6 * scale, -0.9 * scale,
+    -0.4 * scale, -0.8 * scale,
+}
+
+local fin_right = {
+    0.5 * scale, -0.6 * scale,
+    0.7 * scale, -0.7 * scale,
+    0.6 * scale, -0.9 * scale,
+    0.4 * scale, -0.8 * scale,
 }
 
 local physics_polygon = {
-    0, -0.9 * scale,
-    0.6 * scale, -0.6 * scale,
-    0.7 * scale, -0.2 * scale,
-    0.7 * scale, 0.2 * scale,
-    0.4 * scale, 0.7 * scale,
-    0, 0.8 * scale,
-    -0.4 * scale, 0.7 * scale,
-    -0.7 * scale, 0.2 * scale,
-    -0.7 * scale, -0.2 * scale,
-    -0.6 * scale, -0.6 * scale,
+    0, -1.2 * scale,
+    0.5 * scale, -0.7 * scale,
+    0.6 * scale, -0.1 * scale,
+    0.9 * scale, 0.4 * scale,
+    0.3 * scale, 0.9 * scale,
+    0, 1.1 * scale,
+    -0.3 * scale, 0.9 * scale,
+    -0.9 * scale, 0.4 * scale,
+    -0.6 * scale, -0.1 * scale,
+    -0.5 * scale, -0.7 * scale,
 }
 
 return {
     category = "ships",
     id = "starter",
-    name = "Nebula Interceptor",
+    name = "Vortex Striker",
     spawn = {
         strategy = "world_center",
         rotation = 0,
     },
     components = {
-        type = "starter_drone",
+        type = "striker_fighter",
         player = true,
         position = { x = 0, y = 0 },
         velocity = { x = 0, y = 0 },
@@ -143,22 +142,23 @@ return {
         drawable = {
             type = "ship",
             hull = hull_points,
-            core = core_points,
-            wing_left = wing_left,
-            wing_right = wing_right,
-            sensor_array = sensor_array,
-            hullColor = { 0.15, 0.2, 0.45 },
-            wingColor = { 0.2, 0.25, 0.5 },
-            trimColor = { 0.5, 0.3, 0.8 },
+            cockpit = cockpit_points,
+            delta_left = delta_left,
+            delta_right = delta_right,
+            nose_spike = nose_spike,
+            hullColor = { 0.2, 0.3, 0.5 },
+            wingColor = { 0.25, 0.35, 0.55 },
+            trimColor = { 0.6, 0.4, 0.9 },
             colors = {
-                hull = { 0.15, 0.2, 0.45, 1 },
-                outline = { 0.08, 0.1, 0.25, 1 },
-                plating = { 0.25, 0.3, 0.55, 1 },
-                accent = { 0.4, 0.25, 0.7, 1 },
-                energy = { 0.6, 0.4, 0.95, 0.9 },
-                glow = { 0.7, 0.5, 1, 0.8 },
-                engine = { 0.5, 0.3, 0.8, 1 },
-                blade = { 0.3, 0.35, 0.65, 1 },
+                hull = { 0.2, 0.3, 0.5, 1 },
+                outline = { 0.1, 0.15, 0.3, 1 },
+                cockpit = { 0.15, 0.25, 0.45, 1 },
+                wing = { 0.25, 0.35, 0.55, 1 },
+                accent = { 0.5, 0.3, 0.8, 1 },
+                core = { 0.7, 0.5, 1, 0.95 },
+                engine = { 0.8, 0.4, 0.6, 1 },
+                spike = { 0.3, 0.4, 0.7, 1 },
+                fin = { 0.35, 0.45, 0.65, 1 },
             },
             parts = {
                 {
@@ -170,109 +170,109 @@ return {
                     strokeWidth = 2.5,
                 },
                 {
-                    name = "wing_left",
+                    name = "delta_left",
                     type = "polygon",
-                    points = wing_left,
-                    fill = "plating",
+                    points = delta_left,
+                    fill = "wing",
                     stroke = "outline",
                     strokeWidth = 2,
                 },
                 {
-                    name = "wing_right",
+                    name = "delta_right",
                     type = "polygon",
-                    points = wing_right,
-                    fill = "plating",
+                    points = delta_right,
+                    fill = "wing",
                     stroke = "outline",
                     strokeWidth = 2,
                 },
                 {
-                    name = "wing_accent_left",
+                    name = "wingtip_left",
                     type = "polygon",
-                    points = wing_accent_left,
+                    points = wingtip_left,
                     fill = "accent",
-                    stroke = "glow",
-                    strokeWidth = 1,
+                    stroke = "core",
+                    strokeWidth = 1.5,
                 },
                 {
-                    name = "wing_accent_right",
+                    name = "wingtip_right",
                     type = "polygon",
-                    points = wing_accent_right,
+                    points = wingtip_right,
                     fill = "accent",
-                    stroke = "glow",
-                    strokeWidth = 1,
+                    stroke = "core",
+                    strokeWidth = 1.5,
                 },
                 {
-                    name = "core",
+                    name = "cockpit",
                     type = "polygon",
-                    points = core_points,
-                    fill = "accent",
-                    stroke = "glow",
+                    points = cockpit_points,
+                    fill = "cockpit",
+                    stroke = "core",
+                    strokeWidth = 1.5,
+                },
+                {
+                    name = "power_core",
+                    type = "polygon",
+                    points = power_core,
+                    fill = "core",
+                    stroke = "core",
                     strokeWidth = 2,
                 },
                 {
-                    name = "energy_ring",
+                    name = "nose_spike",
                     type = "polygon",
-                    points = energy_ring,
-                    fill = "energy",
-                    stroke = "glow",
-                    strokeWidth = 1.5,
-                },
-                {
-                    name = "sensor_array",
-                    type = "polygon",
-                    points = sensor_array,
-                    fill = "accent",
-                    stroke = "glow",
-                    strokeWidth = 1.5,
-                },
-                {
-                    name = "blade_left",
-                    type = "polygon",
-                    points = blade_left,
-                    fill = "blade",
-                    stroke = "glow",
+                    points = nose_spike,
+                    fill = "spike",
+                    stroke = "core",
                     strokeWidth = 1,
                 },
                 {
-                    name = "blade_right",
+                    name = "fin_left",
                     type = "polygon",
-                    points = blade_right,
-                    fill = "blade",
-                    stroke = "glow",
+                    points = fin_left,
+                    fill = "fin",
+                    stroke = "outline",
                     strokeWidth = 1,
                 },
                 {
-                    name = "engine_left",
+                    name = "fin_right",
                     type = "polygon",
-                    points = engine_left,
+                    points = fin_right,
+                    fill = "fin",
+                    stroke = "outline",
+                    strokeWidth = 1,
+                },
+                {
+                    name = "engine_pod_left",
+                    type = "polygon",
+                    points = engine_pod_left,
                     fill = "engine",
-                    stroke = "glow",
+                    stroke = "core",
                     strokeWidth = 1.5,
                 },
                 {
-                    name = "engine_right",
+                    name = "engine_pod_right",
                     type = "polygon",
-                    points = engine_right,
+                    points = engine_pod_right,
                     fill = "engine",
-                    stroke = "glow",
+                    stroke = "core",
                     strokeWidth = 1.5,
                 },
             },
         },
         stats = {
-            mass = 3,
-            main_thrust = 900,
-            reverse_thrust = 600,
-            strafe_thrust = 600,
-            rotation_torque = 2800,
-            max_acceleration = 400,
-            max_speed = 300,
-            linear_damping = 0.3,
-            angular_damping = 0.08,
+            mass = 2.5,
+            main_thrust = 1100,
+            reverse_thrust = 700,
+            strafe_thrust = 750,
+            rotation_torque = 3200,
+            max_acceleration = 450,
+            max_speed = 350,
+            linear_damping = 0.25,
+            angular_damping = 0.06,
         },
         hull = {
-            max = 120,
-            current = 120,
+            max = 100,
+            current = 100,
             regen = 0,
         },
         colliders = {
@@ -282,19 +282,19 @@ return {
                 points = physics_polygon,
             },
             {
-                name = "wing_left",
+                name = "delta_left",
                 type = "polygon",
-                points = wing_left,
+                points = delta_left,
             },
             {
-                name = "wing_right",
+                name = "delta_right",
                 type = "polygon",
-                points = wing_right,
+                points = delta_right,
             },
             {
-                name = "sensor",
+                name = "nose",
                 type = "polygon",
-                points = sensor_array,
+                points = nose_spike,
             },
         },
     },
@@ -302,8 +302,8 @@ return {
         {
             id = "laser_basic",
             mount = {
-                anchor = { x = 0, y = 0.85 },
-                inset = 4,
+                anchor = { x = 0, y = 1.1 },
+                inset = 6,
             },
         },
     },
@@ -313,8 +313,8 @@ return {
             fixedRotation = false,
         },
         fixture = {
-            friction = 0.25,
-            restitution = 0.1,
+            friction = 0.2,
+            restitution = 0.15,
         },
     },
 }

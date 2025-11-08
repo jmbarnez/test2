@@ -20,4 +20,6 @@ function love.conf(t)
     local modules = loveConf.modules
     t.modules.joystick = modules.joystick
     t.modules.physics = modules.physics
+    
+    t.console = true
 end

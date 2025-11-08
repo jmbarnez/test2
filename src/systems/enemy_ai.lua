@@ -126,10 +126,10 @@ return function(context)
             end
 
             if not (target and target.position) then
-                if entity.laser then
-                    entity.laser.firing = false
-                    entity.laser.targetX = nil
-                    entity.laser.targetY = nil
+                if entity.weapon then
+                    entity.weapon.firing = false
+                    entity.weapon.targetX = nil
+                    entity.weapon.targetY = nil
                 end
                 return
             end
@@ -155,10 +155,10 @@ return function(context)
             local dropRange = disengageRange or detectionRange
             if dropRange and dropRange > 0 and distance > dropRange then
                 entity.currentTarget = nil
-                if entity.laser then
-                    entity.laser.firing = false
-                    entity.laser.targetX = nil
-                    entity.laser.targetY = nil
+                if entity.weapon then
+                    entity.weapon.firing = false
+                    entity.weapon.targetX = nil
+                    entity.weapon.targetY = nil
                 end
                 return
             end
@@ -208,15 +208,15 @@ return function(context)
             newVX, newVY = clamp_vector(newVX, newVY, maxSpeed)
             body:setLinearVelocity(newVX, newVY)
 
-            if entity.laser then
-                local laser = entity.laser
-                local maxRange = laser.maxRange or stats.max_range or 600
+            if entity.weapon then
+                local weapon = entity.weapon
+                local maxRange = weapon.maxRange or stats.max_range or 600
                 local engagementRange = ai.engagementRange or maxRange
                 local canFire = distance <= engagementRange
 
-                laser.firing = canFire
-                laser.targetX = canFire and tx or nil
-                laser.targetY = canFire and ty or nil
+                weapon.firing = canFire
+                weapon.targetX = canFire and tx or nil
+                weapon.targetY = canFire and ty or nil
             end
         end,
     }
