@@ -32,10 +32,15 @@ return {
     assign = "weapon",
     icon = {
         kind = "weapon",
-        shape = "beam",
         color = { 0.6, 0.8, 1.0 },
         accent = { 0.35, 0.7, 1.0 },
         detail = { 0.85, 0.95, 1.0 },
+        layers = {
+            { shape = "rounded_rect", width = 0.7, height = 0.32, color = { 0.12, 0.18, 0.3 }, alpha = 0.8, radius = 0.1 },
+            { shape = "rounded_rect", width = 0.62, height = 0.22, color = { 0.28, 0.48, 0.9 }, alpha = 0.95, radius = 0.08 },
+            { shape = "beam", width = 0.2, length = 0.9, color = { 0.6, 0.85, 1.0 }, alpha = 0.85 },
+            { shape = "beam", width = 0.08, length = 1.0, color = { 1.0, 1.0, 1.0 }, alpha = 0.6 },
+        },
     },
     components = {
         weapon = {

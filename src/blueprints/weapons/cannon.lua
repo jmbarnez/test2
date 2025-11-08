@@ -32,10 +32,18 @@ return {
     assign = "weapon",
     icon = {
         kind = "weapon",
-        shape = "projectile",
         color = { 1.0, 0.92, 0.12 },
-        accent = { 1.0, 0.7, 0.2 },
-        detail = { 1.0, 0.98, 0.65 },
+        accent = { 1.0, 0.68, 0.2 },
+        detail = { 1.0, 0.98, 0.7 },
+        layers = {
+            { shape = "circle", radius = 0.46, color = { 1.0, 0.72, 0.08 }, alpha = 0.45 },
+            { shape = "ring", radius = 0.46, thickness = 0.08, color = { 1.0, 0.82, 0.25 }, alpha = 0.9 },
+            { shape = "circle", radius = 0.33, color = { 1.0, 0.92, 0.2 }, alpha = 0.95 },
+            { shape = "circle", radius = 0.18, color = { 1.0, 0.98, 0.75 }, alpha = 1.0 },
+            { shape = "rectangle", width = 0.18, height = 0.58, color = { 1.0, 0.88, 0.3 }, alpha = 0.85 },
+            { shape = "rectangle", width = 0.12, height = 0.68, color = { 1.0, 1.0, 0.75 }, alpha = 0.6, rotation = 0.785 },
+            { shape = "rectangle", width = 0.12, height = 0.68, color = { 1.0, 1.0, 0.75 }, alpha = 0.6, rotation = -0.785 }
+        },
     },
     components = {
         weapon = {

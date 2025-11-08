@@ -246,6 +246,60 @@ local function sanitize_positive_number(value)
     return n
 end
 
+local function instantiate_initial_item(descriptor)
+    if type(descriptor) ~= "table" then
+        if type(descriptor) == "string" then
+            local itemInstance = Items.instantiate(descriptor)
+            if itemInstance then
+                return itemInstance
+            end
+        end
+        return descriptor
+    end
+
+    if descriptor.id and descriptor.type then
+        local clone = deep_copy(descriptor)
+        clone.quantity = sanitize_positive_number(clone.quantity or 1)
+        clone.volume = sanitize_positive_number(clone.volume or 1)
+        return clone
+    end
+
+    local weaponId = descriptor.weapon or descriptor.weaponId
+    if weaponId then
+        local overrides = {}
+        if descriptor.quantity then
+            overrides.quantity = sanitize_positive_number(descriptor.quantity)
+        end
+        if descriptor.installed ~= nil then
+            overrides.installed = descriptor.installed
+        end
+        if descriptor.slot then
+            overrides.slot = descriptor.slot
+        end
+        if descriptor.mount then
+            overrides.mount = deep_copy(descriptor.mount)
+        end
+        if descriptor.overrides then
+            overrides.overrides = deep_copy(descriptor.overrides)
+        end
+        if descriptor.name then
+            overrides.name = descriptor.name
+        end
+
+        local instance = Items.createWeaponItem(weaponId, overrides)
+        if instance then
+            instance.quantity = sanitize_positive_number(instance.quantity or descriptor.quantity or 1)
+            instance.volume = sanitize_positive_number(descriptor.volume or instance.volume or 1)
+            return instance
+        end
+    end
+
+    local fallback = deep_copy(descriptor)
+    fallback.quantity = sanitize_positive_number(fallback.quantity or 1)
+    fallback.volume = sanitize_positive_number(fallback.volume or 1)
+    return fallback
+end
+
 local function cargo_recalculate(self)
     if type(self) ~= "table" then
         return 0
@@ -345,6 +399,7 @@ local function cargo_try_add(self, descriptor, quantity)
     self.used = sanitize_positive_number(self.used) + deltaVolume
     self.capacity = sanitize_positive_number(self.capacity)
     self.available = math.max(0, self.capacity - self.used)
+    self.dirty = true
     return true
 end
 
@@ -377,6 +432,7 @@ local function cargo_try_remove(self, itemId, quantity)
             self.used = math.max(0, sanitize_positive_number(self.used) - freedVolume)
             self.capacity = sanitize_positive_number(self.capacity)
             self.available = math.max(0, self.capacity - self.used)
+            self.dirty = true
             return true
         end
     end
@@ -392,20 +448,25 @@ local function initialize_cargo(cargo)
     cargo.capacity = sanitize_positive_number(cargo.capacity or cargo.volumeCapacity or cargo.volumeLimit)
     cargo.items = type(cargo.items) == "table" and cargo.items or {}
 
-    if type(cargo.refresh) ~= "function" then
-        cargo.refresh = cargo_recalculate
-    end
-    if type(cargo.canFit) ~= "function" then
-        cargo.canFit = cargo_can_fit
-    end
-    if type(cargo.tryAddItem) ~= "function" then
-        cargo.tryAddItem = cargo_try_add
-    end
-    if type(cargo.tryRemoveItem) ~= "function" then
-        cargo.tryRemoveItem = cargo_try_remove
+    if #cargo.items > 0 then
+        local normalized = {}
+        for index = 1, #cargo.items do
+            local resolved = instantiate_initial_item(cargo.items[index])
+            if resolved then
+                normalized[#normalized + 1] = resolved
+            end
+        end
+        cargo.items = normalized
     end
 
+    cargo.refresh = cargo.refresh or cargo_recalculate
+    cargo.canFit = cargo.canFit or cargo_can_fit
+    cargo.tryAddItem = cargo.tryAddItem or cargo_try_add
+    cargo.tryRemoveItem = cargo.tryRemoveItem or cargo_try_remove
+
     cargo.refresh(cargo)
+    cargo.dirty = false
+    cargo.autoRefresh = cargo.autoRefresh ~= false
     return cargo
 end
 
