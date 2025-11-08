@@ -19,6 +19,12 @@ function tiny.system(def)
     return def
 end
 
+function tiny.processingSystem(def)
+    def = tiny.system(def)
+    assert(type(def.process) == "function", "processingSystem requires a process function")
+    return def
+end
+
 function tiny.requireAll(...)
     local keys = { ... }
     return function(entity)

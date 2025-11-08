@@ -4,6 +4,7 @@ local constants = require("src.constants.game")
 ---@diagnostic disable-next-line: undefined-global
 local love = love
 local math = math
+local unpack = table.unpack or unpack
 
 local asteroid_factory = {}
 
@@ -80,6 +81,27 @@ local function build_polygon(radius, sides, scale_range)
     end
 
     return vertices
+end
+
+local function create_polygon_shapes(vertices)
+    assert(type(vertices) == "table" and #vertices >= 6 and (#vertices % 2 == 0), "Polygon collider requires vertex list")
+
+    local vertex_count = #vertices / 2
+    if vertex_count <= 8 then
+        return { love.physics.newPolygonShape(unpack(vertices)) }
+    end
+
+    local shapes = {}
+    local base_x, base_y = vertices[1], vertices[2]
+    for i = 3, vertex_count do
+        shapes[#shapes + 1] = love.physics.newPolygonShape(
+            base_x, base_y,
+            vertices[(i - 1) * 2 - 1], vertices[(i - 1) * 2],
+            vertices[i * 2 - 1], vertices[i * 2]
+        )
+    end
+
+    return shapes
 end
 
 local function resolve_position(context, entity)
@@ -213,23 +235,36 @@ function asteroid_factory.instantiate(blueprint, context)
     apply_body_settings(body, body_config)
 
     local polygon = drawable.shape
-    local shape = love.physics.newPolygonShape(polygon)
-    local density = fixture_config.density or config.density or 1
-    local fixture = love.physics.newFixture(body, shape, density)
+    local shapes = create_polygon_shapes(polygon)
+    local shape_count = #shapes
+    local base_density = fixture_config.density or config.density or 1
+    local density_per_shape = base_density
+    if shape_count > 1 then
+        density_per_shape = base_density / shape_count
+    end
 
-    apply_fixture_settings(fixture, fixture_config, {
+    local fixture_defaults = {
         friction = config.friction or asteroid_constants.friction or 0.85,
         restitution = config.restitution or asteroid_constants.restitution or 0.05,
-    })
+    }
 
-    fixture:setUserData({
-        type = "asteroid",
-        entity = entity,
-    })
+    local fixtures = {}
+    for index = 1, shape_count do
+        local fixture = love.physics.newFixture(body, shapes[index], density_per_shape)
+        apply_fixture_settings(fixture, fixture_config, fixture_defaults)
+        fixture:setUserData({
+            type = "asteroid",
+            entity = entity,
+            collider = index,
+        })
+        fixtures[index] = fixture
+    end
 
     entity.body = body
-    entity.shape = shape
-    entity.fixture = fixture
+    entity.shape = shapes[1]
+    entity.fixture = fixtures[1]
+    entity.shapes = shapes
+    entity.fixtures = fixtures
     entity.colliders = nil
     entity.collider = nil
 

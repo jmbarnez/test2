@@ -1,7 +1,5 @@
 local constants = require("src.constants.game")
 
-local weapon_defaults = (constants.weapons and constants.weapons.laser_turret) or {}
-
 local function clone_array(values)
     if type(values) ~= "table" then
         return values
@@ -32,35 +30,35 @@ return {
     assign = "weapon",
     icon = {
         kind = "weapon",
-        color = { 1.0, 0.45, 0.3 },
-        accent = { 1.0, 0.68, 0.5 },
-        detail = { 1.0, 0.88, 0.75 },
+        color = { 0.3, 1.0, 0.45 },
+        accent = { 0.5, 1.0, 0.68 },
+        detail = { 0.75, 1.0, 0.88 },
         layers = {
-            { shape = "rounded_rect", width = 0.75, height = 0.32, color = { 0.25, 0.07, 0.05 }, alpha = 0.8, radius = 0.12 },
-            { shape = "rounded_rect", width = 0.68, height = 0.24, color = { 1.0, 0.45, 0.3 }, alpha = 0.95, radius = 0.1 },
-            { shape = "rounded_rect", width = 0.6, height = 0.16, color = { 1.0, 0.78, 0.6 }, alpha = 0.85, radius = 0.08 },
-            { shape = "triangle", direction = "up", width = 0.22, height = 0.26, offsetY = -0.18, color = { 1.0, 0.9, 0.85 }, alpha = 0.9 },
-            { shape = "circle", radius = 0.12, color = { 1.0, 0.7, 0.55 }, alpha = 1.0, offsetY = 0.12 },
-            { shape = "beam", width = 0.32, length = 0.8, color = { 1.0, 0.58, 0.6 }, alpha = 0.7, offsetY = -0.36 },
+            { shape = "rounded_rect", width = 0.75, height = 0.32, color = { 0.05, 0.25, 0.07 }, alpha = 0.8, radius = 0.12 },
+            { shape = "rounded_rect", width = 0.68, height = 0.24, color = { 0.3, 1.0, 0.45 }, alpha = 0.95, radius = 0.1 },
+            { shape = "rounded_rect", width = 0.6, height = 0.16, color = { 0.6, 1.0, 0.78 }, alpha = 0.85, radius = 0.08 },
+            { shape = "triangle", direction = "up", width = 0.22, height = 0.26, offsetY = -0.18, color = { 0.85, 1.0, 0.9 }, alpha = 0.9 },
+            { shape = "circle", radius = 0.12, color = { 0.55, 1.0, 0.7 }, alpha = 1.0, offsetY = 0.12 },
+            { shape = "beam", width = 0.32, length = 0.8, color = { 0.6, 1.0, 0.58 }, alpha = 0.7, offsetY = -0.36 },
         },
     },
     components = {
         weapon = {
             fireMode = "projectile",
-            projectileSpeed = weapon_defaults.projectile_speed or 840,
-            damage = weapon_defaults.damage or 22,
-            fireRate = weapon_defaults.fire_rate or 0.32,
-            projectileLifetime = weapon_defaults.projectile_lifetime or 1.2,
+            projectileSpeed = 840,
+            damage = 22,
+            fireRate = 0.32,
+            projectileLifetime = 5.0,
             projectileSize = 3,
             firing = false,
             cooldown = 0,
-            offset = weapon_defaults.offset or 26,
-            color = with_default(weapon_defaults.color, { 1, 0.45, 0.3 }),
-            glowColor = with_default(weapon_defaults.glow_color, { 1, 0.8, 0.6 }),
+            offset = 26,
+            color = { 0.3, 1.0, 0.45 },
+            glowColor = { 0.6, 1.0, 0.8 },
             projectileBlueprint = {
                 projectile = {
-                    lifetime = weapon_defaults.projectile_lifetime or 1.2,
-                    damage = weapon_defaults.damage or 22,
+                    lifetime = 5.0,
+                    damage = 22,
                 },
                 drawable = {
                     type = "projectile",
@@ -68,10 +66,10 @@ return {
                     shape = "beam",
                     width = 3.0,
                     length = 34,
-                    color = { 1.0, 0.38, 0.85 },
-                    glowColor = { 1.0, 0.7, 0.95 },
-                    coreColor = { 1.0, 0.55, 0.95 },
-                    highlightColor = { 1.0, 0.9, 1.0 },
+                    color = { 0.2, 1.0, 0.3 },
+                    glowColor = { 0.5, 1.0, 0.7 },
+                    coreColor = { 0.4, 1.0, 0.6 },
+                    highlightColor = { 0.8, 1.0, 0.9 },
                     outerAlpha = 0.35,
                     innerAlpha = 0.7,
                     coreAlpha = 1.0,
@@ -84,12 +82,12 @@ return {
             },
         },
         weaponMount = {
-            forward = weapon_defaults.forward or 28,
-            inset = weapon_defaults.inset or 0,
-            lateral = weapon_defaults.lateral or 0,
-            vertical = weapon_defaults.vertical or 0,
-            offsetX = weapon_defaults.offset_x or 0,
-            offsetY = weapon_defaults.offset_y or 0,
+            forward = 28,
+            inset = 0,
+            lateral = 0,
+            vertical = 0,
+            offsetX = 0,
+            offsetY = 0,
         },
     },
 }
