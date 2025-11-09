@@ -42,10 +42,6 @@ local function looks_like_spawn_config(value)
 end
 
 function Entities.spawnPlayer(state, shipIdOrConfig, overrides)
-    if not (state and state.world) then
-        return nil
-    end
-
     local config
 
     if type(shipIdOrConfig) == "table" and overrides == nil and looks_like_spawn_config(shipIdOrConfig) then
@@ -76,8 +72,7 @@ function Entities.spawnPlayer(state, shipIdOrConfig, overrides)
     local shipEntity = state.world:add(playerShip)
 
     local playerId = config.playerId or "player"
-    local displayName = config.displayName
-    PlayerManager.attachShip(state, shipEntity, levelData, playerId, displayName)
+    PlayerManager.attachShip(state, shipEntity, levelData, playerId)
 
     return shipEntity
 end
@@ -126,6 +121,48 @@ function Entities.destroyWorldEntities(world)
     end
 
     world:clear()
+end
+
+function Entities.clearNonLocalEntities(state)
+    if not (state and state.world) then
+        return
+    end
+
+    local world = state.world
+    local localShip = PlayerManager.getCurrentShip(state)
+
+    local toRemove = {}
+    local entities = world.entities or {}
+    for i = 1, #entities do
+        local entity = entities[i]
+        if entity and entity ~= localShip then
+            toRemove[#toRemove + 1] = entity
+        end
+    end
+
+    for i = 1, #toRemove do
+        local entity = toRemove[i]
+        if entity.body and not entity.body:isDestroyed() then
+            entity.body:destroy()
+        end
+        world:remove(entity)
+    end
+
+    if state.entitiesById then
+        for id, entity in pairs(state.entitiesById) do
+            if entity ~= localShip then
+                state.entitiesById[id] = nil
+            end
+        end
+    end
+
+    if state.players then
+        for playerId, entity in pairs(state.players) do
+            if entity ~= localShip then
+                state.players[playerId] = nil
+            end
+        end
+    end
 end
 
 return Entities

@@ -3,6 +3,7 @@ local Snapshot = require("src.network.snapshot")
 local Intent = require("src.input.intent")
 local Entities = require("src.states.gameplay.entities")
 local PlayerManager = require("src.player.manager")
+local UIStateManager = require("src.ui.state_manager")
 local constants = require("src.constants.game")
 local json = require("libs.json")
 
@@ -11,11 +12,64 @@ local love = love
 local Server = {}
 Server.__index = Server
 
+local function sanitize_for_json(value, seen)
+    local valueType = type(value)
+    if valueType ~= "table" then
+        return value
+    end
+
+    seen = seen or {}
+    if seen[value] then
+        return seen[value]
+    end
+
+    local numericKeys = {}
+    local hasNonNumeric = false
+    for key in pairs(value) do
+        if type(key) == "number" and key > 0 and math.floor(key) == key then
+            numericKeys[#numericKeys + 1] = key
+        else
+            hasNonNumeric = true
+        end
+    end
+
+    table.sort(numericKeys)
+
+    local isSequential = not hasNonNumeric and #numericKeys > 0
+    if isSequential then
+        for index = 1, #numericKeys do
+            if numericKeys[index] ~= index then
+                isSequential = false
+                break
+            end
+        end
+    end
+
+    local sanitized = {}
+    seen[value] = sanitized
+
+    if isSequential then
+        for index = 1, #numericKeys do
+            sanitized[index] = sanitize_for_json(value[index], seen)
+        end
+    else
+        for key, nested in pairs(value) do
+            sanitized[tostring(key)] = sanitize_for_json(nested, seen)
+        end
+    end
+
+    return sanitized
+end
+
 local function encode_message(message)
-    local ok, result = pcall(json.encode, message)
+    local sanitized = sanitize_for_json(message)
+    local ok, result = pcall(json.encode, sanitized)
     if ok then
         return result
+    else
+        print("[NETWORK] Failed to encode message:", result)
     end
+    return nil
 end
 
 local function decode_message(data)
@@ -23,6 +77,7 @@ local function decode_message(data)
     if ok then
         return decoded
     end
+    return nil
 end
 
 function Server.new(config)
@@ -39,9 +94,12 @@ function Server.new(config)
         peerPlayers = {},
         playerSeq = 0,
         usedPlayerIds = {},
-        snapshotInterval = config.snapshotInterval or 0.1,
+        snapshotInterval = config.snapshotInterval or (1.0 / (constants.network.snapshot_rate or 10)),
         snapshotTimer = 0,
+        onPlayerJoined = config.onPlayerJoined,
     }, Server)
+
+    state.netTick = state.netTick or 0
 
     self.transport = Transport.createServer({
         host = host,
@@ -61,7 +119,6 @@ function Server.new(config)
         end,
     })
 
-    -- Ensure host player has a proper ID if they already exist
     self:initializeHostPlayer()
     
     return self
@@ -76,10 +133,8 @@ function Server:initializeHostPlayer()
     local existingId = currentShip.playerId
     local needsNewId = not existingId or existingId == "player"
 
-    local hostPlayerId = existingId
-    if needsNewId then
-        hostPlayerId = self:generateUniquePlayerId()
-    else
+    local hostPlayerId = needsNewId and self:generateUniquePlayerId() or existingId
+    if not needsNewId then
         self.usedPlayerIds[hostPlayerId] = true
     end
 
@@ -96,6 +151,7 @@ function Server:shutdown()
     end
     self.peers = {}
     self.peerPlayers = {}
+    self.usedPlayerIds = {}
 end
 
 function Server:generateUniquePlayerId()
@@ -111,12 +167,13 @@ end
 
 function Server:onConnect(peer)
     local playerId = self:generateUniquePlayerId()
-    self.peers[peer:index()] = peer
-    self.peerPlayers[peer:index()] = playerId
+    local peerIndex = peer:index()
+    
+    self.peers[peerIndex] = peer
+    self.peerPlayers[peerIndex] = playerId
 
     self:spawnPlayerForPeer(peer, playerId)
 
-    -- Send the client their assigned player ID
     local playerAssignedPayload = encode_message({ 
         type = "player_assigned", 
         playerId = playerId 
@@ -125,7 +182,6 @@ function Server:onConnect(peer)
         self.transport:send(peer, playerAssignedPayload, 0, true)
     end
 
-    -- Send full snapshot to new player so they can see all existing players
     local snapshot = Snapshot.capture(self.state)
     if snapshot then
         local payload = encode_message({ type = "snapshot", payload = snapshot })
@@ -134,46 +190,52 @@ function Server:onConnect(peer)
         end
     end
     
-    -- Broadcast updated snapshot to all players so they can see the new player
     self:broadcastSnapshot()
 end
 
 function Server:onDisconnect(peer, _code)
     local index = peer:index()
     local playerId = self.peerPlayers[index]
+    
     self.peers[index] = nil
     self.peerPlayers[index] = nil
 
-    if playerId then
-        -- Mark player ID as available for reuse
-        self.usedPlayerIds[playerId] = nil
-        
-        if self.state and self.state.players then
-            local entity = self.state.players[playerId]
-            if entity then
-                if self.state.world then
-                    self.state.world:remove(entity)
-                end
-                if entity.body and not entity.body:isDestroyed() then
-                    entity.body:destroy()
-                end
-                self.state.players[playerId] = nil
-            end
-        end
-        
-        -- Broadcast updated snapshot to all remaining players
-        self:broadcastSnapshot()
+    if not playerId then
+        return
     end
+
+    self.usedPlayerIds[playerId] = nil
+    
+    if self.state and self.state.players then
+        local entity = self.state.players[playerId]
+        if entity then
+            if self.state.world then
+                self.state.world:remove(entity)
+            end
+            if entity.body and not entity.body:isDestroyed() then
+                entity.body:destroy()
+            end
+            self.state.players[playerId] = nil
+        end
+    end
+    
+    self:broadcastSnapshot()
 end
 
 function Server:onReceive(peer, data, _channel)
     local message = decode_message(data)
-    if type(message) ~= "table" then
+    if type(message) ~= "table" or not message.type then
         return
     end
 
     if message.type == "intent" and message.playerId and message.payload then
         self:applyIntent(message.playerId, message.payload)
+    elseif message.type == "chat" and message.payload then
+        local text = message.payload.text
+        if type(text) == "string" and text ~= "" then
+            local playerId = self.peerPlayers[peer:index()] or message.playerId
+            self:handleChatMessage(playerId, text)
+        end
     end
 end
 
@@ -202,8 +264,6 @@ end
 function Server:spawnPlayerForPeer(peer, playerId)
     self.state.players = self.state.players or {}
 
-    -- Always spawn a new player entity for connecting clients
-    -- The host player is already initialized and doesn't connect as a client
     local entity = Entities.spawnPlayer(self.state, { playerId = playerId })
     if entity then
         self.state.players[playerId] = entity
@@ -216,11 +276,40 @@ function Server:spawnPlayerForPeer(peer, playerId)
     end
 end
 
+function Server:handleChatMessage(playerId, text)
+    if type(text) ~= "string" then
+        return
+    end
+
+    local trimmed = text:gsub("^%s+", ""):gsub("%s+$", "")
+    if trimmed == "" then
+        return
+    end
+
+    local resolvedId = playerId or self.state.localPlayerId or "server"
+    UIStateManager.addChatMessage(self.state, resolvedId, trimmed)
+
+    local payload = encode_message({
+        type = "chat",
+        playerId = resolvedId,
+        payload = {
+            text = trimmed,
+        },
+    })
+
+    if payload then
+        self.transport:broadcast(payload, 0, true)
+    end
+end
+
 function Server:broadcastSnapshot()
     local snapshot = Snapshot.capture(self.state)
     if not snapshot then
         return
     end
+
+    self.state.netTick = (self.state.netTick or 0) + 1
+    snapshot.tick = self.state.netTick
 
     local payload = encode_message({ type = "snapshot", payload = snapshot })
     if not payload then
@@ -237,11 +326,17 @@ function Server:update(dt)
         return
     end
 
-    self.transport:update(0)
+    self.transport:update(dt)
+
+    -- Add a small delay before starting snapshots to let spawners run
+    self.startupTimer = (self.startupTimer or 0) + dt
+    if self.startupTimer < 1.0 then  -- Wait 1 second before starting snapshots
+        return
+    end
 
     self.snapshotTimer = self.snapshotTimer + dt
     if self.snapshotTimer >= self.snapshotInterval then
-        self.snapshotTimer = self.snapshotTimer - self.snapshotInterval
+        self.snapshotTimer = 0
         self:broadcastSnapshot()
     end
 end

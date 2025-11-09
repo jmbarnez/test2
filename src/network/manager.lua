@@ -1,7 +1,9 @@
 local Transport = require("src.network.transport")
 local Snapshot = require("src.network.snapshot")
 local PlayerManager = require("src.player.manager")
+local UIStateManager = require("src.ui.state_manager")
 local Intent = require("src.input.intent")
+local Prediction = require("src.network.prediction")
 local json = require("libs.json")
 
 local love = love
@@ -31,11 +33,12 @@ end
 
 function NetworkManager.new(config)
     config = config or {}
+    local constants = require("src.constants.game")
 
     local self = setmetatable({
         state = assert(config.state, "NetworkManager requires a gameplay state reference"),
-        snapshotInterval = config.snapshotInterval or 0.1,
-        intentInterval = config.intentInterval or 0.05,
+        snapshotInterval = config.snapshotInterval or (1.0 / (constants.network.snapshot_rate or 10)),
+        intentInterval = config.intentInterval or (1.0 / (constants.network.intent_rate or 20)),
         snapshotTimer = 0,
         intentTimer = 0,
         connected = false,
@@ -49,6 +52,7 @@ function NetworkManager.new(config)
         channels = config.channels or 2,
         onConnect = function(peer)
             self.connected = true
+            Prediction.initialize(self.state)
             if config.onConnect then
                 config.onConnect(peer)
             end
@@ -85,7 +89,7 @@ function NetworkManager:connect()
 end
 
 function NetworkManager:disconnect(code)
-    if self.client then
+    if self.client and self.client.peer then
         self.client:disconnect(code)
     end
     self.connected = false
@@ -93,6 +97,10 @@ end
 
 function NetworkManager:shutdown()
     self:disconnect()
+    if self.client and self.client.host then
+        pcall(function() self.client.host:destroy() end)
+    end
+    self.client = nil
 end
 
 function NetworkManager:handleMessage(data, _channel)
@@ -109,10 +117,24 @@ function NetworkManager:handleMessage(data, _channel)
             localShip.playerId = message.playerId
             PlayerManager.attachShip(self.state, localShip, nil, message.playerId)
         end
+        Intent.ensure(self.state, message.playerId)
     elseif message.type == "snapshot" and message.payload then
+        -- Server reconciliation for local player
+        if message.payload.players and self.state.localPlayerId then
+            local serverPlayerData = message.payload.players[self.state.localPlayerId]
+            if serverPlayerData then
+                Prediction.reconcile(self.state, serverPlayerData, message.payload.tick or 0)
+            end
+        end
+        
         Snapshot.apply(self.state, message.payload)
     elseif message.type == "intent" and message.playerId and message.payload then
         self:applyRemoteIntent(message.playerId, message.payload)
+    elseif message.type == "chat" and message.payload then
+        local text = message.payload.text
+        if type(text) == "string" and text ~= "" then
+            UIStateManager.addChatMessage(self.state, message.playerId or "server", text)
+        end
     end
 end
 
@@ -139,7 +161,7 @@ function NetworkManager:applyRemoteIntent(playerId, payload)
 end
 
 function NetworkManager:sendSnapshot()
-    if not self.connected then
+    if not self.connected or not self.client then
         return
     end
 
@@ -159,7 +181,7 @@ function NetworkManager:sendSnapshot()
 end
 
 function NetworkManager:sendLocalIntent()
-    if not self.connected or not self.state.localPlayerId then
+    if not self.connected or not self.client or not self.state.localPlayerId then
         return
     end
 
@@ -168,6 +190,10 @@ function NetworkManager:sendLocalIntent()
     if not intent then
         return
     end
+
+    -- Record input for client-side prediction
+    Prediction.recordInput(self.state, intent)
+    Prediction.recordState(self.state)
 
     local payload = encode_message({
         type = "intent",
@@ -210,6 +236,33 @@ function NetworkManager:update(dt)
     if self.snapshotTimer >= self.snapshotInterval then
         self.snapshotTimer = self.snapshotTimer - self.snapshotInterval
         self:sendSnapshot()
+    end
+end
+
+function NetworkManager:sendChatMessage(text)
+    if type(text) ~= "string" then
+        return
+    end
+
+    local trimmed = text:gsub("^%s+", ""):gsub("%s+$", "")
+    if trimmed == "" then
+        return
+    end
+
+    if self.connected and self.client and self.client.peer then
+        local clipped = trimmed:sub(1, 200)
+        local payload = encode_message({
+            type = "chat",
+            payload = {
+                text = clipped,
+            },
+        })
+
+        if payload then
+            self.client:send(payload, 0, true)
+        end
+    else
+        UIStateManager.addChatMessage(self.state, self.state and self.state.localPlayerId or "local", trimmed)
     end
 end
 

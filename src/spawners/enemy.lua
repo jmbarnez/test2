@@ -162,7 +162,9 @@ return function(context)
         update = function(self, dt)
             if not spawned then
                 spawned = true
+                print("[ENEMY SPAWNER] Starting enemy spawn")
                 spawn_once(self.world)
+                print("[ENEMY SPAWNER] Enemy spawn completed")
             end
         end,
     }

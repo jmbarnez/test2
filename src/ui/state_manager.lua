@@ -25,14 +25,61 @@ local function createMultiplayerUIState()
         visible = false,
         dragging = false,
         inputActive = false,
-        activeInput = nil,
         addressInput = "",
-        nameInput = "",
         status = "",
         _hostRequested = false,
         _joinRequested = false,
         _was_mouse_down = false,
     }
+end
+
+local function createChatUIState()
+    return {
+        visible = true,
+        inputActive = false,
+        inputBuffer = "",
+        messages = {},
+        playerColors = {},
+        maxVisible = 6,
+        maxHistory = 50,
+    }
+end
+
+local function hash_string(str)
+    local hash = 0
+    for i = 1, #str do
+        hash = (hash * 33 + str:byte(i)) % 4294967296
+    end
+    return hash
+end
+
+local function hsv_to_rgb(h, s, v)
+    local i = math.floor(h * 6)
+    local f = h * 6 - i
+    local p = v * (1 - s)
+    local q = v * (1 - f * s)
+    local t = v * (1 - (1 - f) * s)
+    i = i % 6
+    if i == 0 then return { v, t, p, 1 } end
+    if i == 1 then return { q, v, p, 1 } end
+    if i == 2 then return { p, v, t, 1 } end
+    if i == 3 then return { p, q, v, 1 } end
+    if i == 4 then return { t, p, v, 1 } end
+    return { v, p, q, 1 }
+end
+
+local function generatePlayerColor(playerId)
+    local key = tostring(playerId or "unknown")
+    local hash = hash_string(key)
+
+    local golden_ratio_conjugate = 0.61803398875
+    local hue = (hash / 4294967296 + golden_ratio_conjugate) % 1
+    local sat = 0.75 + ((hash % 97) / 96) * 0.2 -- 0.75 - 0.95
+    if sat > 1 then sat = 1 end
+    local value = 0.88 + ((hash % 53) / 52) * 0.12 -- 0.88 - 1
+    if value > 1 then value = 1 end
+
+    return hsv_to_rgb(hue, sat, value)
 end
 
 function UIStateManager.initialize(state)
@@ -44,6 +91,7 @@ function UIStateManager.initialize(state)
     state.cargoUI = createCargoUIState()
     state.deathUI = createDeathUIState()
     state.multiplayerUI = createMultiplayerUIState()
+    state.chatUI = createChatUIState()
     
     -- Initialize input state
     state.uiInput = {
@@ -63,8 +111,43 @@ function UIStateManager.cleanup(state)
     state.cargoUI = nil
     state.deathUI = nil
     state.multiplayerUI = nil
+    state.chatUI = nil
     state.uiInput = nil
     state.respawnRequested = nil
+end
+
+function UIStateManager.addChatMessage(state, playerId, text)
+    if not (state and state.chatUI) then
+        return
+    end
+
+    local chat = state.chatUI
+    chat.messages = chat.messages or {}
+    chat.playerColors = chat.playerColors or {}
+
+    local colorKey = tostring(playerId or "unknown")
+    local playerColor = chat.playerColors[colorKey]
+    if not playerColor then
+        playerColor = generatePlayerColor(playerId)
+        chat.playerColors[colorKey] = playerColor
+    end
+
+    local message = {
+        playerId = playerId,
+        text = text,
+        color = playerColor,
+    }
+
+    if love and love.timer and love.timer.getTime then
+        message.timestamp = love.timer.getTime()
+    end
+
+    chat.messages[#chat.messages + 1] = message
+
+    local maxHistory = chat.maxHistory or 50
+    if #chat.messages > maxHistory then
+        table.remove(chat.messages, 1)
+    end
 end
 
 function UIStateManager.showDeathUI(state)

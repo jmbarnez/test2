@@ -35,7 +35,7 @@ constants.window = {
     height = 900,                   -- Window height in pixels
     fullscreen = false,              -- Start in windowed mode
     resizable = false,                -- Allow window resizing
-    vsync = 1,                       -- Enable vertical sync (1 = on, 0 = off)
+    vsync = 0,                       -- Disable vsync (using manual 60 FPS limiting)
     msaa = 0,                        -- Multisample anti-aliasing samples (0 = disabled)
 }
 
@@ -84,6 +84,21 @@ constants.player = {
 constants.network = {
     host = "0.0.0.0",
     port = 25565,
+    snapshot_rate = 30,        -- Hz: snapshots per second (host -> clients)
+    intent_rate = 30,          -- Hz: intents per second (clients -> host)
+    
+    -- Client-side prediction settings
+    prediction_enabled = true,  -- Enable client-side prediction for local player
+    max_prediction_time = 0.5,  -- Max seconds to predict ahead
+    reconciliation_enabled = true, -- Enable server reconciliation
+    
+    -- Lag compensation
+    input_buffer_size = 10,     -- Number of input frames to buffer
+    jitter_buffer_ms = 100,     -- Milliseconds to buffer for smooth playback
+    
+    -- Rollback settings
+    max_rollback_frames = 30,   -- Max frames to rollback for reconciliation
+    position_tolerance = 5.0,   -- Pixels - reconcile if server differs by more than this
 }
 
 constants.ships = {

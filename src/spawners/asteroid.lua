@@ -36,6 +36,8 @@ return function(context)
         update = function(self, dt)
             if not spawned then
                 spawned = true
+                print(string.format("[ASTEROID SPAWNER] Spawning %d asteroids in bounds (%d,%d,%d,%d)", 
+                    asteroidCount, bounds.x, bounds.y, bounds.width, bounds.height))
                 
                 for i = 1, asteroidCount do
                     local radiusRange = asteroidConfig.radius or { min = 22, max = 64 }

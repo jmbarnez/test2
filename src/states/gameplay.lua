@@ -18,7 +18,9 @@ local Systems = require("src.states.gameplay.systems")
 local View = require("src.states.gameplay.view")
 local PlayerEngineTrail = require("src.effects.player_engine_trail")
 local Snapshot = require("src.network.snapshot")
+local Prediction = require("src.network.prediction")
 local MultiplayerWindow = require("src.ui.windows.multiplayer")
+local ChatWindow = require("src.ui.windows.chat")
 
 local love = love
 
@@ -33,6 +35,10 @@ local function resolveSectorId(config)
 end
 
 function gameplay:textinput(text)
+    if ChatWindow.textinput(self, text) then
+        return
+    end
+
     MultiplayerWindow.textinput(self, text)
 end
 
@@ -53,6 +59,9 @@ function gameplay:enter(_, config)
     World.initialize(self)
     View.initialize(self)
     Systems.initialize(self, Entities.damage)
+    
+    -- Initialize prediction system for multiplayer
+    Prediction.initialize(self)
     local player = Entities.spawnPlayer(self)
     if player then
         if self.engineTrail then
@@ -116,9 +125,26 @@ function gameplay:update(dt)
 
     self.world:update(dt)
 
+    -- Fixed timestep physics for deterministic multiplayer
+    -- Accumulate frame time and step physics in fixed increments
     local physicsWorld = self.physicsWorld
     if physicsWorld then
-        physicsWorld:update(dt)
+        local FIXED_DT = 1/60  -- 60Hz physics regardless of frame rate
+        local MAX_STEPS = 4    -- Prevent spiral of death
+        
+        self.physicsAccumulator = (self.physicsAccumulator or 0) + dt
+        
+        local steps = 0
+        while self.physicsAccumulator >= FIXED_DT and steps < MAX_STEPS do
+            physicsWorld:update(FIXED_DT)
+            self.physicsAccumulator = self.physicsAccumulator - FIXED_DT
+            steps = steps + 1
+        end
+        
+        -- Cap accumulator to prevent runaway accumulation
+        if self.physicsAccumulator > FIXED_DT * MAX_STEPS then
+            self.physicsAccumulator = 0
+        end
     end
 
     if self.engineTrail then
@@ -222,6 +248,10 @@ end
 
 function gameplay:keypressed(key)
     if MultiplayerWindow.keypressed(self, key) then
+        return
+    end
+
+    if ChatWindow.keypressed(self, key) then
         return
     end
 

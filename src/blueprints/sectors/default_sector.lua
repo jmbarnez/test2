@@ -6,7 +6,7 @@ return {
         count = { min = 30, max = 50 },
     },
     enemies = {
-        count = { min = 0, max = 0 },
+        count = { min = 15, max = 25 },
         ship_id = "enemy_scout",
         spawn_radius = 1500,
         spawn_safe_radius = 900,

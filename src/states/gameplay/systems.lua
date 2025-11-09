@@ -29,32 +29,14 @@ function Systems.initialize(state, damageCallback)
     }
 
     local constants = require("src.constants.game")
-    local defaultAddress = string.format(
-        "%s:%d",
-        (state.networkManager and state.networkManager.host) or constants.network.host,
-        (state.networkManager and state.networkManager.port) or constants.network.port
-    )
-    local defaultName = state.localPlayerName or "Player"
-
-    if not state.multiplayerUI then
-        state.multiplayerUI = {
-            visible = false,
-            status = "",
-            addressInput = defaultAddress,
-            nameInput = defaultName,
-            activeInput = nil,
-            inputActive = false,
-        }
-    else
-        if not state.multiplayerUI.addressInput or state.multiplayerUI.addressInput == "" then
-            state.multiplayerUI.addressInput = defaultAddress
-        end
-        if not state.multiplayerUI.nameInput or state.multiplayerUI.nameInput == "" then
-            state.multiplayerUI.nameInput = defaultName
-        end
-        state.multiplayerUI.activeInput = state.multiplayerUI.activeInput or nil
-        state.multiplayerUI.inputActive = state.multiplayerUI.inputActive or false
-    end
+    state.multiplayerUI = state.multiplayerUI or {
+        visible = false,
+        status = "",
+        addressInput = string.format("%s:%d", 
+            (state.networkManager and state.networkManager.host) or constants.network.host, 
+            (state.networkManager and state.networkManager.port) or constants.network.port
+        ),
+    }
 
     if damageCallback then
         state.damageEntity = damageCallback
@@ -72,8 +54,12 @@ function Systems.initialize(state, damageCallback)
         uiInput = state.uiInput,
         intentHolder = state,
     }))
-    state.spawnerSystem = state.world:addSystem(createAsteroidSpawner(state))
-    state.enemySpawnerSystem = state.world:addSystem(createEnemySpawner(state))
+    -- Add spawners on server or offline, but not on pure client
+    local isPureClient = state.networkManager and not state.networkServer
+    if not isPureClient then
+        state.spawnerSystem = state.world:addSystem(createAsteroidSpawner(state))
+        state.enemySpawnerSystem = state.world:addSystem(createEnemySpawner(state))
+    end
 
     state.movementSystem = state.world:addSystem(createMovementSystem())
 
@@ -81,7 +67,9 @@ function Systems.initialize(state, damageCallback)
     state.weaponSystem = state.world:addSystem(createWeaponSystem(state))
     state.shipSystem = state.world:addSystem(createShipSystem(state))
     state.projectileSystem = state.world:addSystem(createProjectileSystem(state))
-    state.enemyAISystem = state.world:addSystem(createEnemyAISystem(state))
+    if not isPureClient then
+        state.enemyAISystem = state.world:addSystem(createEnemyAISystem(state))
+    end
     state.hudSystem = state.world:addSystem(createHudSystem(state))
     state.uiSystem = state.world:addSystem(createUiSystem(state))
     state.destructionSystem = state.world:addSystem(createDestructionSystem(state))

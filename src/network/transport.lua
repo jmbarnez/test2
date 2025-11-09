@@ -51,6 +51,17 @@ local function wrap_callbacks(instance, config)
     instance.onTimeout = config.onTimeout
 end
 
+local function safe_callback(callback, ...)
+    if not callback then
+        return true
+    end
+    local success, err = pcall(callback, ...)
+    if not success then
+        debug_print("Callback error:", err)
+    end
+    return success
+end
+
 function Transport.createServer(config)
     config = config or {}
     local enet = load_enet()
@@ -78,7 +89,7 @@ function Transport.createServer(config)
 
     function server:broadcast(data, channel, reliable)
         local flags = reliable and "reliable" or "unreliable"
-        local ok, err = pcall(function() self.host:broadcast(channel or 0, data, flags) end)
+        local ok, err = pcall(function() self.host:broadcast(data, channel or 0, flags) end)
         if not ok then
             debug_print("Server broadcast error:", err)
             return false
@@ -110,38 +121,18 @@ function Transport.createServer(config)
         while event do
             if event.type == "connect" then
                 self.peers[event.peer:index()] = event.peer
-                if self.onConnect then
-                    local success, err = pcall(self.onConnect, event.peer)
-                    if not success then
-                        debug_print("Server onConnect callback error:", err)
-                    end
-                end
+                safe_callback(self.onConnect, event.peer)
             elseif event.type == "disconnect" then
                 self.peers[event.peer:index()] = nil
-                if self.onDisconnect then
-                    local success, err = pcall(self.onDisconnect, event.peer, event.data)
-                    if not success then
-                        debug_print("Server onDisconnect callback error:", err)
-                    end
-                end
+                safe_callback(self.onDisconnect, event.peer, event.data)
             elseif event.type == "receive" then
-                if self.onReceive then
-                    local success, err = pcall(self.onReceive, event.peer, event.data, event.channel)
-                    if not success then
-                        debug_print("Server onReceive callback error:", err)
-                    end
-                end
+                safe_callback(self.onReceive, event.peer, event.data, event.channel)
                 if event.packet then
                     event.packet:destroy()
                 end
             elseif event.type == "timeout" then
                 self.peers[event.peer:index()] = nil
-                if self.onTimeout then
-                    local success, err = pcall(self.onTimeout, event.peer)
-                    if not success then
-                        debug_print("Server onTimeout callback error:", err)
-                    end
-                end
+                safe_callback(self.onTimeout, event.peer)
             end
             
             ok, event = pcall(function() return self.host:service(0) end)
@@ -154,15 +145,10 @@ function Transport.createServer(config)
 
     function server:shutdown(code)
         for _, peer in pairs(self.peers) do
-            local ok, err = pcall(function() peer:disconnect_later(code or 0) end)
-            if not ok then
-                debug_print("Error disconnecting peer during shutdown:", err)
-            end
+            pcall(function() peer:disconnect_later(code or 0) end)
         end
-        local ok, err = pcall(function() self.host:flush() end)
-        if not ok then
-            debug_print("Error flushing host during shutdown:", err)
-        end
+        pcall(function() self.host:flush() end)
+        self.peers = {}
     end
 
     return server
@@ -191,10 +177,8 @@ function Transport.createClient(config)
 
     function client:connect()
         if self.peer then
-            local ok = pcall(function() self.peer:disconnect_now() end)
-            if not ok then
-                debug_print("Warning: Error disconnecting existing peer")
-            end
+            pcall(function() self.peer:disconnect_now() end)
+            self.peer = nil
         end
         
         local ok, result = pcall(function() return self.host:connect(self.address) end)
@@ -232,37 +216,17 @@ function Transport.createClient(config)
         
         while event do
             if event.type == "connect" then
-                if self.onConnect then
-                    local success, err = pcall(self.onConnect, event.peer)
-                    if not success then
-                        debug_print("Client onConnect callback error:", err)
-                    end
-                end
+                safe_callback(self.onConnect, event.peer)
             elseif event.type == "disconnect" then
-                if self.onDisconnect then
-                    local success, err = pcall(self.onDisconnect, event.peer, event.data)
-                    if not success then
-                        debug_print("Client onDisconnect callback error:", err)
-                    end
-                end
+                safe_callback(self.onDisconnect, event.peer, event.data)
                 self.peer = nil
             elseif event.type == "receive" then
-                if self.onReceive then
-                    local success, err = pcall(self.onReceive, event.data, event.channel)
-                    if not success then
-                        debug_print("Client onReceive callback error:", err)
-                    end
-                end
+                safe_callback(self.onReceive, event.data, event.channel)
                 if event.packet then
                     event.packet:destroy()
                 end
             elseif event.type == "timeout" then
-                if self.onTimeout then
-                    local success, err = pcall(self.onTimeout, event.peer)
-                    if not success then
-                        debug_print("Client onTimeout callback error:", err)
-                    end
-                end
+                safe_callback(self.onTimeout, event.peer)
                 self.peer = nil
             end
             
@@ -276,10 +240,7 @@ function Transport.createClient(config)
 
     function client:disconnect(code)
         if self.peer then
-            local ok, err = pcall(function() self.peer:disconnect(code or 0) end)
-            if not ok then
-                debug_print("Client disconnect error:", err)
-            end
+            pcall(function() self.peer:disconnect(code or 0) end)
             self.peer = nil
         end
     end
