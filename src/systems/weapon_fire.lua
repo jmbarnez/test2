@@ -2,6 +2,7 @@
 
 local tiny = require("libs.tiny")
 local constants = require("src.constants.game")
+local vector = require("src.util.vector")
 
 local DEFAULT_PROJECTILE_COLOR = { 0.2, 0.8, 1.0 }
 local DEFAULT_PROJECTILE_GLOW = { 0.5, 0.9, 1.0 }
@@ -224,20 +225,8 @@ return function(context)
                 return
             end
 
-            local mx, my = love.mouse.getPosition()
             local cam = context.camera
-            if cam then
-                local zoom = cam.zoom or 1
-                if zoom ~= 0 then
-                    mx = mx / zoom + cam.x
-                    my = my / zoom + cam.y
-                else
-                    mx = cam.x
-                    my = cam.y
-                end
-            end
-
-            local playerFiring = love.mouse.isDown(1)
+            local intents = context.intents or (context.intentHolder and context.intentHolder.playerIntents)
             local beams = self.active_beams
             for i = 1, #beams do
                 beams[i] = nil
@@ -261,9 +250,34 @@ return function(context)
                     local targetX, targetY
 
                     if entity.player then
-                        fire = playerFiring
-                        targetX = mx
-                        targetY = my
+                        local intent = intents and entity.playerId and intents[entity.playerId]
+                        if intent then
+                            fire = not not intent.firePrimary
+                            if intent.hasAim then
+                                targetX = intent.aimX
+                                targetY = intent.aimY
+                            end
+                        end
+
+                        if (not targetX or not targetY) and love.mouse then
+                            local mx, my = love.mouse.getPosition()
+                            if cam then
+                                local zoom = cam.zoom or 1
+                                if zoom ~= 0 then
+                                    mx = mx / zoom + cam.x
+                                    my = my / zoom + cam.y
+                                else
+                                    mx = cam.x
+                                    my = cam.y
+                                end
+                            end
+                            targetX = targetX or mx
+                            targetY = targetY or my
+                        end
+
+                        if not fire and love.mouse and love.mouse.isDown then
+                            fire = love.mouse.isDown(1)
+                        end
                     else
                         fire = weapon.firing or weapon.alwaysFire
                         targetX = weapon.targetX
@@ -280,13 +294,13 @@ return function(context)
                         dirY = forwardY
                     end
 
-                    local dirLen = math.sqrt(dirX * dirX + dirY * dirY)
-                    if dirLen < 1e-5 then
+                    local normDirX, normDirY, dirLen = vector.normalize(dirX, dirY)
+                    if dirLen <= vector.EPSILON then
                         dirX = forwardX
                         dirY = forwardY
                     else
-                        dirX = dirX / dirLen
-                        dirY = dirY / dirLen
+                        dirX = normDirX
+                        dirY = normDirY
                     end
 
                     local fireMode = weapon.fireMode or "hitscan"
@@ -354,7 +368,7 @@ return function(context)
                 local beam = beams[i]
                 local dx = beam.x2 - beam.x1
                 local dy = beam.y2 - beam.y1
-                local length = math.sqrt(dx * dx + dy * dy)
+                local length = vector.length(dx, dy)
                 local angle = math.atan2(dy, dx)
                 
                 love.graphics.push()

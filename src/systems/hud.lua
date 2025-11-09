@@ -1,5 +1,6 @@
 local tiny = require("libs.tiny")
 local theme = require("src.ui.theme")
+local vector = require("src.util.vector")
 ---@diagnostic disable-next-line: undefined-global
 local love = love
 
@@ -35,7 +36,7 @@ local function draw_player_health(player)
     return top_margin + bar_height + label_padding
 end
 
-local function draw_minimap(context)
+local function draw_minimap(context, player)
     local screenWidth = love.graphics.getWidth()
     local minimap_size = 120
     local margin = 20
@@ -52,7 +53,6 @@ local function draw_minimap(context)
     love.graphics.rectangle("line", x, y, minimap_size, minimap_size)
 
     local world = context.world
-    local player = context.player
     local bounds = context.worldBounds
 
     if not (world and player and bounds and player.position) then
@@ -91,18 +91,17 @@ local function draw_minimap(context)
     end
 end
 
-local function draw_speed_fps(context)
+local function draw_speed_fps(context, player)
     local screenWidth = love.graphics.getWidth()
     local minimap_size = 120
     local margin = 20
     local x = screenWidth - minimap_size - margin
     local y = margin + minimap_size + 10
 
-    local player = context.player
     local speed = 0
     if player and player.body then
         local vx, vy = player.body:getLinearVelocity()
-        speed = math.sqrt(vx * vx + vy * vy)
+        speed = vector.length(vx, vy)
     end
 
     local fps = love.timer.getFPS()
@@ -117,13 +116,19 @@ return function(context)
     return tiny.system {
         draw = function()
             local player = context.player
+            if not player then
+                local state = context.state or context
+                if state and type(state.getLocalPlayer) == "function" then
+                    player = state:getLocalPlayer()
+                end
+            end
 
             love.graphics.push("all")
             love.graphics.origin()
 
             draw_player_health(player)
-            draw_minimap(context)
-            draw_speed_fps(context)
+            draw_minimap(context, player)
+            draw_speed_fps(context, player)
 
             love.graphics.pop()
         end,

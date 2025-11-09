@@ -2,8 +2,9 @@
 
 local tiny = require("libs.tiny")
 local loader = require("src.blueprints.loader")
+local math_util = require("src.util.math")
 
-local TAU = math.pi * 2
+local TAU = math_util.TAU
 
 local function random_point_in_ring(bounds, radius, inner_override)
     local cx = bounds.x + bounds.width * 0.5
@@ -50,8 +51,31 @@ return function(context)
 
     local spawn_positions = {}
 
+    local function resolve_avoid_entity()
+        if context.player then
+            return context.player
+        end
+
+        local state = context.state
+        if state then
+            if state.player then
+                return state.player
+            end
+
+            if type(state.getLocalPlayer) == "function" then
+                return state:getLocalPlayer()
+            end
+        end
+
+        if type(context.getLocalPlayer) == "function" then
+            return context:getLocalPlayer()
+        end
+
+        return nil
+    end
+
     local function pick_spawn_point()
-        local avoid_entity = context.player or (context.state and context.state.player)
+        local avoid_entity = resolve_avoid_entity()
         local avoid_pos = avoid_entity and avoid_entity.position
         local safe_sq = safe_radius * safe_radius
         local spacing_sq = (enemyConfig.separation_radius or safe_radius * 0.8) ^ 2
@@ -119,6 +143,23 @@ return function(context)
 
             enemy.enemy = true
             enemy.faction = enemy.faction or "enemy"
+
+            if not enemy.level then
+                local configLevel = enemyConfig.level
+                if type(configLevel) == "table" then
+                    local levelCopy = {}
+                    for key, value in pairs(configLevel) do
+                        levelCopy[key] = value
+                    end
+                    enemy.level = levelCopy
+                elseif type(configLevel) == "number" then
+                    enemy.level = { current = configLevel }
+                else
+                    enemy.level = { current = 1 }
+                end
+            elseif enemy.level.current == nil then
+                enemy.level.current = 1
+            end
 
             enemy.spawnPosition = enemy.spawnPosition or { x = spawn_x, y = spawn_y }
             enemy.ai = enemy.ai or {}

@@ -1,5 +1,6 @@
 local loader = require("src.blueprints.loader")
 local constants = require("src.constants.game")
+local PlayerManager = require("src.player.manager")
 
 local Entities = {}
 
@@ -26,11 +27,54 @@ function Entities.createShip(context, shipId, overrides)
     return loader.instantiate("ships", shipId, instantiateContext)
 end
 
-function Entities.spawnPlayer(state, shipId, overrides)
-    local chosenShipId = shipId or STARTER_SHIP_ID
-    local player = Entities.createShip(state, chosenShipId, overrides)
-    state.player = state.world:add(player)
-    return state.player
+local function looks_like_spawn_config(value)
+    if type(value) ~= "table" then
+        return false
+    end
+
+    return value.playerId ~= nil
+        or value.shipId ~= nil
+        or value.ship ~= nil
+        or value.id ~= nil
+        or value.overrides ~= nil
+        or value.level ~= nil
+        or value.controlProfile ~= nil
+end
+
+function Entities.spawnPlayer(state, shipIdOrConfig, overrides)
+    local config
+
+    if type(shipIdOrConfig) == "table" and overrides == nil and looks_like_spawn_config(shipIdOrConfig) then
+        config = clone_overrides(shipIdOrConfig)
+    else
+        config = {
+            shipId = shipIdOrConfig,
+            overrides = overrides,
+        }
+    end
+
+    local chosenShipId = (config and config.shipId) or STARTER_SHIP_ID
+    local instantiateOverrides = config and config.overrides and clone_overrides(config.overrides) or nil
+
+    local levelData
+    if instantiateOverrides and instantiateOverrides.level then
+        levelData = clone_overrides(instantiateOverrides.level)
+        instantiateOverrides.level = nil
+    elseif config and config.level ~= nil then
+        if type(config.level) == "table" then
+            levelData = clone_overrides(config.level)
+        elseif type(config.level) == "number" then
+            levelData = { current = config.level }
+        end
+    end
+
+    local playerShip = Entities.createShip(state, chosenShipId, instantiateOverrides)
+    local shipEntity = state.world:add(playerShip)
+
+    local playerId = config.playerId or "player"
+    PlayerManager.attachShip(state, shipEntity, levelData, playerId)
+
+    return shipEntity
 end
 
 function Entities.damage(entity, amount)

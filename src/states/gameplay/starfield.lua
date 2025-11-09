@@ -1,6 +1,7 @@
 ---@diagnostic disable: undefined-global
 
 local constants = require("src.constants.game")
+local math_util = require("src.util.math")
 
 local love = love
 
@@ -10,7 +11,15 @@ local nebulaShader = love.graphics.newShader([[
     extern float nebulaSeed;
     extern float time;
     extern float intensity;
+    extern float hueShift;
+    extern float saturation;
     
+    vec3 hsv2rgb(vec3 c) {
+        vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+        vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+        return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+    }
+
     vec4 effect(vec4 color, Image tex, vec2 texture_coords, vec2 screen_coords) {
         vec2 uv = screen_coords / love_ScreenSize.xy;
         
@@ -82,23 +91,22 @@ local nebulaShader = love.graphics.newShader([[
         // Enhanced density calculation
         float density = combinedNoise * combinedFalloff * alpha * intensity;
         
-        // Enhanced color palette with more variation
-        float hue1 = density + paletteShift + sin(nebulaSeed * 8.91) * 0.3;
-        float hue2 = density * 1.5 + paletteShift + cos(nebulaSeed * 10.12) * 0.25;
+        // Dynamic color palette based on hueShift
+        float hue1 = density + paletteShift + hueShift + sin(nebulaSeed * 8.91) * 0.3;
+        float hue2 = density * 1.5 + paletteShift + hueShift + cos(nebulaSeed * 10.12) * 0.25;
         
         vec3 deepSpace = vec3(0.01, 0.005, 0.08);
-        vec3 purple = vec3(0.5 + sin(nebulaSeed) * 0.2, 0.08, 0.7 + cos(nebulaSeed) * 0.15);
-        vec3 blue = vec3(0.05, 0.35 + sin(nebulaSeed * 2.0) * 0.2, 0.9);
-        vec3 cyan = vec3(0.1, 0.8, 0.9);
-        vec3 pink = vec3(0.9, 0.15, 0.6 + sin(nebulaSeed * 3.0) * 0.2);
-        vec3 orange = vec3(1.0, 0.4, 0.1);
+        vec3 color1 = hsv2rgb(vec3(mod(hueShift, 1.0), saturation * 0.8, 0.4));
+        vec3 color2 = hsv2rgb(vec3(mod(hueShift + 0.2, 1.0), saturation, 0.7));
+        vec3 color3 = hsv2rgb(vec3(mod(hueShift + 0.4, 1.0), saturation * 0.9, 0.9));
+        vec3 color4 = hsv2rgb(vec3(mod(hueShift + 0.6, 1.0), saturation * 0.6, 0.8));
         
         // Multi-step color mixing
-        vec3 color1 = mix(deepSpace, purple, sin(hue1 * 6.28) * 0.5 + 0.5);
-        vec3 color2 = mix(color1, blue, cos(hue1 * 4.5) * 0.4 + 0.4);
-        vec3 color3 = mix(color2, cyan, sin(hue2 * 3.2) * 0.3 + 0.3);
-        vec3 color4 = mix(color3, pink, smoothstep(0.6, 0.9, density));
-        vec3 finalColor = mix(color4, orange, smoothstep(0.85, 1.0, density));
+        vec3 mixedColor1 = mix(deepSpace, color1, sin(hue1 * 6.28) * 0.5 + 0.5);
+        vec3 mixedColor2 = mix(mixedColor1, color2, cos(hue1 * 4.5) * 0.4 + 0.4);
+        vec3 mixedColor3 = mix(mixedColor2, color3, sin(hue2 * 3.2) * 0.3 + 0.3);
+        vec3 mixedColor4 = mix(mixedColor3, color4, smoothstep(0.6, 0.9, density));
+        vec3 finalColor = mix(mixedColor4, vec3(1.0, 0.9, 0.8), smoothstep(0.85, 1.0, density));
         
         // Enhanced exposure with subtle variation
         finalColor *= exposure * (1.0 + sin(hue1 * 2.0) * 0.1);
@@ -152,7 +160,7 @@ local function generate_stars(count, bounds, sizeRange, alphaRange, colorVariati
             r = math.min(1, r + hue),
             g = math.min(1, g + hue * 0.5),
             b = math.min(1, b + hue * 0.8),
-            twinklePhase = love.math.random() * math.pi * 2,
+            twinklePhase = love.math.random() * math_util.TAU,
             twinkleSpeed = 0.3 + love.math.random() * 1.0,
             brightness = 0.7 + love.math.random() * 0.6,
         }
@@ -181,10 +189,14 @@ function Starfield.initialize(state)
         return
     end
 
-    state.starLayers = Starfield.generateLayers(state.worldBounds)
+    local bounds = state.worldBounds
+
+    state.starLayers = Starfield.generateLayers(bounds)
     state.nebulaSeed = love.math.random() * 1000
     state.nebulaIntensity = 0.3
     state.starfieldTime = 0
+    state.nebulaHueShift = love.math.random()
+    state.nebulaSaturation = 0.7 + love.math.random() * 0.3
 end
 
 function Starfield.refresh(state)
@@ -192,9 +204,13 @@ function Starfield.refresh(state)
         return
     end
 
-    state.starLayers = Starfield.generateLayers(state.worldBounds)
+    local bounds = state.worldBounds
+
+    state.starLayers = Starfield.generateLayers(bounds)
     state.nebulaSeed = love.math.random() * 1000
     state.nebulaIntensity = 0.3
+    state.nebulaHueShift = love.math.random()
+    state.nebulaSaturation = 0.7 + love.math.random() * 0.3
 end
 
 function Starfield.update(state, dt)
@@ -222,11 +238,13 @@ function Starfield.draw(state)
     nebulaShader:send("nebulaSeed", state.nebulaSeed or 0)
     nebulaShader:send("time", time)
     nebulaShader:send("intensity", state.nebulaIntensity or 0.3)
+    nebulaShader:send("hueShift", state.nebulaHueShift or 0)
+    nebulaShader:send("saturation", state.nebulaSaturation or 0.8)
     love.graphics.rectangle("fill", 0, 0, vw, vh)
     love.graphics.setShader()
     
     love.graphics.setBlendMode("add")
-    
+
     for i = 1, #layers do
         local layer = layers[i]
         local parallax = layer.parallax or 1
@@ -259,7 +277,7 @@ function Starfield.draw(state)
             end
         end
     end
-    
+
     love.graphics.setBlendMode("alpha")
     love.graphics.pop()
 end

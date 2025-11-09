@@ -1,5 +1,6 @@
 local loader = require("src.blueprints.loader")
 local Items = require("src.items.registry")
+local vector = require("src.util.vector")
 
 local runtime = {}
 
@@ -249,9 +250,9 @@ local function compute_polygon_radius(points)
     end
 
     for i = 1, #points, 2 do
-        local x = points[i]
-        local y = points[i + 1]
-        local radius = math.sqrt((x or 0) * (x or 0) + (y or 0) * (y or 0))
+        local x = points[i] or 0
+        local y = points[i + 1] or 0
+        local radius = vector.length(x, y)
         if radius > maxRadius then
             maxRadius = radius
         end
@@ -507,6 +508,202 @@ function runtime.update(entity, dt)
     decrement_health_timer(entity, dt)
 end
 
+local function serialize_weapon_state(weapon)
+    if type(weapon) ~= "table" then
+        return nil
+    end
+
+    local state = {
+        id = weapon.id or (weapon.blueprint and weapon.blueprint.id),
+        assign = weapon.assign,
+        firing = not not weapon.firing,
+        alwaysFire = not not weapon.alwaysFire,
+        cooldown = weapon.cooldown,
+        beamTimer = weapon.beamTimer,
+        maxRange = weapon.maxRange,
+        targetX = weapon.targetX,
+        targetY = weapon.targetY,
+    }
+
+    if weapon.mount then
+        state.mount = deep_copy(weapon.mount)
+    elseif weapon.weaponMount then
+        state.mount = deep_copy(weapon.weaponMount)
+    end
+
+    return state
+end
+
+local function apply_weapon_state(weapon, snapshot)
+    if type(weapon) ~= "table" or type(snapshot) ~= "table" then
+        return
+    end
+
+    weapon.firing = not not snapshot.firing
+    weapon.alwaysFire = not not snapshot.alwaysFire
+    weapon.cooldown = snapshot.cooldown or 0
+    weapon.beamTimer = snapshot.beamTimer
+    weapon.maxRange = snapshot.maxRange or weapon.maxRange
+    weapon.targetX = snapshot.targetX
+    weapon.targetY = snapshot.targetY
+
+    if snapshot.mount then
+        weapon.weaponMount = deep_copy(snapshot.mount)
+    end
+end
+
+function runtime.serialize(entity)
+    if type(entity) ~= "table" then
+        return nil
+    end
+
+    local body = entity.body
+    local vx, vy = 0, 0
+    local angularVelocity
+    if body and not body:isDestroyed() then
+        vx, vy = body:getLinearVelocity()
+        angularVelocity = body:getAngularVelocity()
+    end
+
+    local weapons
+    if type(entity.weapons) == "table" and #entity.weapons > 0 then
+        weapons = {}
+        for i = 1, #entity.weapons do
+            local weaponState = serialize_weapon_state(entity.weapons[i])
+            if weaponState then
+                weapons[#weapons + 1] = weaponState
+            end
+        end
+    end
+
+    local snapshot = {
+        entityId = entity.id or entity.entityId,
+        playerId = entity.playerId,
+        faction = entity.faction,
+        blueprint = entity.blueprint and {
+            category = entity.blueprint.category,
+            id = entity.blueprint.id,
+        } or nil,
+        position = {
+            x = entity.position and entity.position.x or (body and body:getX()) or 0,
+            y = entity.position and entity.position.y or (body and body:getY()) or 0,
+        },
+        rotation = entity.rotation or (body and body:getAngle()) or 0,
+        velocity = { x = vx, y = vy },
+        angularVelocity = angularVelocity,
+        health = entity.health and {
+            current = entity.health.current,
+            max = entity.health.max,
+        } or nil,
+        level = entity.level and deep_copy(entity.level) or nil,
+        thrust = {
+            isThrusting = not not entity.isThrusting,
+            current = entity.currentThrust or 0,
+            max = entity.maxThrust or (entity.stats and entity.stats.main_thrust),
+        },
+        weapons = weapons,
+        stats = entity.stats and deep_copy(entity.stats) or nil,
+        cargo = entity.cargo and {
+            used = entity.cargo.used,
+            capacity = entity.cargo.capacity,
+        } or nil,
+    }
+
+    return snapshot
+end
+
+function runtime.applySnapshot(entity, snapshot)
+    if type(entity) ~= "table" or type(snapshot) ~= "table" then
+        return entity
+    end
+
+    local body = entity.body
+
+    if snapshot.playerId then
+        entity.playerId = snapshot.playerId
+    end
+    if snapshot.faction then
+        entity.faction = snapshot.faction
+    end
+
+    if snapshot.position then
+        entity.position = entity.position or {}
+        entity.position.x = snapshot.position.x or entity.position.x or 0
+        entity.position.y = snapshot.position.y or entity.position.y or 0
+        if body and not body:isDestroyed() then
+            body:setPosition(entity.position.x, entity.position.y)
+        end
+    end
+
+    if snapshot.rotation ~= nil then
+        entity.rotation = snapshot.rotation
+        if body and not body:isDestroyed() then
+            body:setAngle(snapshot.rotation)
+        end
+    end
+
+    if snapshot.velocity and body and not body:isDestroyed() then
+        body:setLinearVelocity(snapshot.velocity.x or 0, snapshot.velocity.y or 0)
+    end
+
+    if snapshot.angularVelocity and body and not body:isDestroyed() then
+        body:setAngularVelocity(snapshot.angularVelocity)
+    end
+
+    if snapshot.health then
+        entity.health = entity.health or {}
+        entity.health.current = snapshot.health.current or entity.health.current
+        entity.health.max = snapshot.health.max or entity.health.max
+    end
+
+    if snapshot.level then
+        entity.level = deep_copy(snapshot.level)
+    end
+
+    if snapshot.stats then
+        entity.stats = entity.stats or {}
+        for key, value in pairs(snapshot.stats) do
+            entity.stats[key] = value
+        end
+    end
+
+    if snapshot.thrust then
+        entity.isThrusting = not not snapshot.thrust.isThrusting
+        entity.currentThrust = snapshot.thrust.current or entity.currentThrust
+        entity.maxThrust = snapshot.thrust.max or entity.maxThrust
+    end
+
+    if snapshot.weapons and type(entity.weapons) == "table" then
+        for index = 1, #snapshot.weapons do
+            local weaponSnapshot = snapshot.weapons[index]
+            local weapon = entity.weapons[index]
+            if not weapon and weaponSnapshot.id then
+                -- Attempt to find by weapon id
+                for w = 1, #entity.weapons do
+                    local candidate = entity.weapons[w]
+                    local candidateId = candidate and (candidate.id or (candidate.blueprint and candidate.blueprint.id))
+                    if candidateId == weaponSnapshot.id then
+                        weapon = candidate
+                        break
+                    end
+                end
+            end
+
+            if weapon then
+                apply_weapon_state(weapon, weaponSnapshot)
+            end
+        end
+    end
+
+    if snapshot.cargo and entity.cargo then
+        entity.cargo.capacity = snapshot.cargo.capacity or entity.cargo.capacity
+        entity.cargo.used = snapshot.cargo.used or entity.cargo.used
+        entity.cargo.available = math.max(0, (entity.cargo.capacity or 0) - (entity.cargo.used or 0))
+    end
+
+    return entity
+end
+
 runtime.sanitize_positive_number = sanitize_positive_number
 runtime.instantiate_initial_item = instantiate_initial_item
 runtime.cargo_recalculate = cargo_recalculate
@@ -514,5 +711,7 @@ runtime.cargo_can_fit = cargo_can_fit
 runtime.cargo_try_add = cargo_try_add
 runtime.cargo_try_remove = cargo_try_remove
 runtime.populate_weapon_inventory = populate_weapon_inventory
+runtime.serialize = runtime.serialize
+runtime.applySnapshot = runtime.applySnapshot
 
 return runtime

@@ -1,5 +1,6 @@
 local loader = require("src.blueprints.loader")
 local constants = require("src.constants.game")
+local math_util = require("src.util.math")
 
 ---@diagnostic disable-next-line: undefined-global
 local love = love
@@ -70,7 +71,7 @@ end
 
 local function build_polygon(radius, sides, scale_range)
     local vertices = {}
-    local step = (math.pi * 2) / sides
+    local step = math_util.TAU / sides
 
     for i = 0, sides - 1 do
         local angle = i * step
@@ -172,7 +173,7 @@ function asteroid_factory.instantiate(blueprint, context)
     entity.position = entity.position or { x = 0, y = 0 }
     resolve_position(context, entity)
 
-    entity.rotation = context.rotation or entity.rotation or love.math.random() * math.pi * 2
+    entity.rotation = context.rotation or entity.rotation or love.math.random() * math_util.TAU
     entity.velocity = entity.velocity or { x = 0, y = 0 }
 
     local radius = random_range(config.radius or asteroid_constants.radius, 40)

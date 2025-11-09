@@ -1,8 +1,10 @@
 ---@diagnostic disable: undefined-global, deprecated
 
 local tiny = require("libs.tiny")
+local math_util = require("src.util.math")
+local vector = require("src.util.vector")
 
-local TAU = math.pi * 2
+local TAU = math_util.TAU
 
 local function has_tag(entity, tag)
     if not entity or not tag then
@@ -62,15 +64,7 @@ local function ensure_ai_state(entity)
     return state
 end
 
-local function clamp_angle(angle)
-    angle = angle % TAU
-    if angle > math.pi then
-        angle = angle - TAU
-    elseif angle < -math.pi then
-        angle = angle + TAU
-    end
-    return angle
-end
+local clamp_angle = math_util.clamp_angle
 
 local function is_target_valid(target)
     if not target then
@@ -83,22 +77,10 @@ local function is_target_valid(target)
     return not dead
 end
 
-local function normalize_vector(x, y)
-    local len = math.sqrt(x * x + y * y)
-    if len < 1e-5 then
-        return 0, 0, 1e-5
-    end
-    return x / len, y / len, len
-end
-
-local function clamp_vector(vx, vy, maxMagnitude)
-    local magSq = vx * vx + vy * vy
-    local maxSq = maxMagnitude * maxMagnitude
-    if magSq > maxSq then
-        local scale = math.sqrt(maxSq / magSq)
-        return vx * scale, vy * scale
-    end
-    return vx, vy
+local normalize_vector = vector.normalize
+local clamp_vector = function(x, y, max)
+    local clampX, clampY = vector.clamp(x, y, max)
+    return clampX, clampY
 end
 
 local function ensure_home(ai, entity)
@@ -125,6 +107,29 @@ local function choose_wander_point(home, radius)
     local angle = love.math.random() * TAU
     local dist = love.math.random() * radius
     return home.x + math.cos(angle) * dist, home.y + math.sin(angle) * dist
+end
+
+local PlayerManager = require("src.player.manager")
+
+local function get_local_player(context)
+    if not context then
+        return nil
+    end
+
+    if context.player then
+        return context.player
+    end
+
+    if type(context.getLocalPlayer) == "function" then
+        return context:getLocalPlayer()
+    end
+
+    local state = context.state
+    if state then
+        return PlayerManager.getCurrentShip(state)
+    end
+
+    return nil
 end
 
 local function handle_wander(entity, body, ai, stats, dt)
@@ -203,7 +208,7 @@ local function handle_wander(entity, body, ai, stats, dt)
 
     local currentVX, currentVY = body:getLinearVelocity()
     local diffX, diffY = desiredVX - currentVX, desiredVY - currentVY
-    local diffLen = math.sqrt(diffX * diffX + diffY * diffY)
+    local diffLen = vector.length(diffX, diffY)
 
     if diffLen > 0 then
         local maxDelta = maxAccel * dt
@@ -248,7 +253,7 @@ return function(context)
             local target = entity.currentTarget
 
             if not is_target_valid(target) then
-                local preferred = context.player
+                local preferred = get_local_player(context)
                 target = find_target(self.world, ai.targetTag or "player", preferred, entity.position, detectionRange)
                 entity.currentTarget = target
             end
@@ -324,7 +329,7 @@ return function(context)
 
             local currentVX, currentVY = body:getLinearVelocity()
             local diffX, diffY = desiredVX - currentVX, desiredVY - currentVY
-            local diffLen = math.sqrt(diffX * diffX + diffY * diffY)
+            local diffLen = vector.length(diffX, diffY)
 
             if diffLen > 0 then
                 local maxDelta = maxAccel * dt

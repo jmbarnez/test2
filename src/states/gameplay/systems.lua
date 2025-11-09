@@ -1,6 +1,8 @@
 ---@diagnostic disable: undefined-global
 
 local tiny = require("libs.tiny")
+local Intent = require("src.input.intent")
+local createLocalInputSystem = require("src.systems.input_local")
 local createMovementSystem = require("src.systems.movement")
 local createRenderSystem = require("src.systems.render")
 local createPlayerControlSystem = require("src.systems.player_control")
@@ -19,19 +21,34 @@ local Systems = {}
 function Systems.initialize(state, damageCallback)
     state.world = tiny.world()
 
+    Intent.ensureContainer(state)
+
     state.uiInput = {
         mouseCaptured = false,
         keyboardCaptured = false,
+    }
+
+    state.multiplayerUI = state.multiplayerUI or {
+        visible = false,
+        status = "",
+        addressInput = string.format("%s:%d", (state.networkManager and state.networkManager.host) or "127.0.0.1", (state.networkManager and state.networkManager.port) or 22122),
     }
 
     if damageCallback then
         state.damageEntity = damageCallback
     end
 
+    state.inputSystem = state.world:addSystem(createLocalInputSystem({
+        state = state,
+        camera = state.camera,
+        uiInput = state.uiInput,
+    }))
+
     state.controlSystem = state.world:addSystem(createPlayerControlSystem({
         camera = state.camera,
         engineTrail = state.engineTrail,
         uiInput = state.uiInput,
+        intentHolder = state,
     }))
     state.spawnerSystem = state.world:addSystem(createAsteroidSpawner(state))
     state.enemySpawnerSystem = state.world:addSystem(createEnemySpawner(state))

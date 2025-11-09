@@ -2,6 +2,7 @@
 
 local constants = require("src.constants.game")
 local Lighting = require("src.rendering.lighting")
+local vector = require("src.util.vector")
 
 local ship_renderer = {}
 local ship_bar_defaults = constants.ships and constants.ships.health_bar or {}
@@ -67,14 +68,19 @@ end
 
 local function compute_polygon_radius(points)
     local maxRadius = 0
+    if type(points) ~= "table" then
+        return maxRadius
+    end
+
     for i = 1, #points, 2 do
-        local x = points[i]
-        local y = points[i + 1]
-        local radius = math.sqrt(x * x + y * y)
+        local x = points[i] or 0
+        local y = points[i + 1] or 0
+        local radius = vector.length(x, y)
         if radius > maxRadius then
             maxRadius = radius
         end
     end
+
     return maxRadius
 end
 

@@ -1,6 +1,7 @@
 ---@diagnostic disable: undefined-global
 
 local constants = require("src.constants.game")
+local vector = require("src.util.vector")
 
 local Lighting = {}
 
@@ -64,8 +65,8 @@ local function normalize_vec3(vec)
     local x = vec and vec[1] or 0
     local y = vec and vec[2] or 0
     local z = vec and vec[3] or 1
-    local length = math.sqrt(x * x + y * y + z * z)
-    if length <= 1e-5 then
+    local length = vector.length(x, y, z)
+    if length <= vector.EPSILON then
         return { 0, 0, 1 }
     end
     return { x / length, y / length, z / length }

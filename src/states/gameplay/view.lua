@@ -26,8 +26,15 @@ function View.initialize(state)
     Starfield.initialize(state)
 end
 
+local PlayerManager = require("src.player.manager")
+
+local function get_local_player(state)
+    return PlayerManager.getCurrentShip(state)
+end
+
 function View.updateCamera(state)
-    if not (state.player and state.camera and state.viewport and state.worldBounds) then
+    local player = get_local_player(state)
+    if not (player and state.camera and state.viewport and state.worldBounds) then
         return
     end
 
@@ -36,8 +43,8 @@ function View.updateCamera(state)
     cam.width = state.viewport.width / zoom
     cam.height = state.viewport.height / zoom
 
-    local px = state.player.position.x
-    local py = state.player.position.y
+    local px = player.position.x
+    local py = player.position.y
     cam.x = px - cam.width * 0.5
     cam.y = py - cam.height * 0.5
 

@@ -1,4 +1,5 @@
 -- Player Engine Trail Effect Module
+local math_util = require("src.util.math")
 local PlayerEngineTrail = {}
 PlayerEngineTrail.__index = PlayerEngineTrail
 
@@ -46,7 +47,7 @@ local function createParticleSystem()
     ps:setSpin(-1.2, 1.2, 0.25)
     ps:setSpread(math.rad(28))
     ps:setRelativeRotation(true)
-    ps:setRotation(0, math.pi * 2)
+    ps:setRotation(0, math_util.TAU)
     ps:setRadialAcceleration(-10, 10)
     ps:setTangentialAcceleration(-20, 20)
     ps:setEmissionRate(0)

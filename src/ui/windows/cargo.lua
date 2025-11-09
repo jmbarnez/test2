@@ -24,6 +24,62 @@ local function set_color(color)
     end
 end
 
+local function draw_icon_layer(icon, layer, size)
+    love.graphics.push()
+    
+    local color = layer.color or icon.detail or icon.color or icon.accent
+    set_color(color)
+    
+    local offsetX = (layer.offsetX or 0) * size
+    local offsetY = (layer.offsetY or 0) * size
+    love.graphics.translate(offsetX, offsetY)
+    
+    if layer.rotation then
+        love.graphics.rotate(layer.rotation)
+    end
+    
+    local shape = layer.shape or "circle"
+    local halfSize = size * 0.5
+    
+    if shape == "circle" then
+        local radius = (layer.radius or 0.5) * halfSize
+        love.graphics.circle("fill", 0, 0, radius)
+    elseif shape == "ring" then
+        local radius = (layer.radius or 0.5) * halfSize
+        local thickness = (layer.thickness or 0.1) * halfSize
+        love.graphics.setLineWidth(thickness)
+        love.graphics.circle("line", 0, 0, radius)
+    elseif shape == "rectangle" then
+        local width = (layer.width or 0.6) * size
+        local height = (layer.height or 0.2) * size
+        love.graphics.rectangle("fill", -width * 0.5, -height * 0.5, width, height)
+    elseif shape == "rounded_rect" then
+        local width = (layer.width or 0.6) * size
+        local height = (layer.height or 0.2) * size
+        local radius = (layer.radius or 0.1) * size
+        love.graphics.rectangle("fill", -width * 0.5, -height * 0.5, width, height, radius, radius)
+    elseif shape == "triangle" then
+        local width = (layer.width or 0.5) * size
+        local height = (layer.height or 0.5) * size
+        local direction = layer.direction or "up"
+        local halfWidth = width * 0.5
+        if direction == "up" then
+            love.graphics.polygon("fill", 0, -height * 0.5, halfWidth, height * 0.5, -halfWidth, height * 0.5)
+        else
+            love.graphics.polygon("fill", 0, height * 0.5, halfWidth, -height * 0.5, -halfWidth, -height * 0.5)
+        end
+    elseif shape == "beam" then
+        local width = (layer.width or 0.2) * size
+        local length = (layer.length or 0.8) * size
+        love.graphics.rectangle("fill", -length * 0.5, -width * 0.5, length, width)
+    else
+        local radius = (layer.radius or 0.4) * halfSize
+        love.graphics.circle("fill", 0, 0, radius)
+    end
+    
+    love.graphics.pop()
+end
+
 local function draw_item_icon(icon, x, y, size)
     if type(icon) ~= "table" then
         return false
@@ -44,59 +100,7 @@ local function draw_item_icon(icon, x, y, size)
     for i = 1, #layers do
         local layer = layers[i]
         if type(layer) == "table" then
-            local color = layer.color or icon.detail or icon.color or icon.accent
-            local halfSize = size * 0.5
-
-            love.graphics.push()
-            set_color(color)
-
-            local offsetX = (layer.offsetX or 0) * size
-            local offsetY = (layer.offsetY or 0) * size
-            love.graphics.translate(offsetX, offsetY)
-
-            if layer.rotation then
-                love.graphics.rotate(layer.rotation)
-            end
-
-            local shape = layer.shape or "circle"
-
-            if shape == "circle" then
-                local radius = (layer.radius or 0.5) * halfSize
-                love.graphics.circle("fill", 0, 0, radius)
-            elseif shape == "ring" then
-                local radius = (layer.radius or 0.5) * halfSize
-                local thickness = (layer.thickness or 0.1) * halfSize
-                love.graphics.setLineWidth(thickness)
-                love.graphics.circle("line", 0, 0, radius)
-            elseif shape == "rectangle" then
-                local width = (layer.width or 0.6) * size
-                local height = (layer.height or 0.2) * size
-                love.graphics.rectangle("fill", -width * 0.5, -height * 0.5, width, height)
-            elseif shape == "rounded_rect" then
-                local width = (layer.width or 0.6) * size
-                local height = (layer.height or 0.2) * size
-                local radius = (layer.radius or 0.1) * size
-                love.graphics.rectangle("fill", -width * 0.5, -height * 0.5, width, height, radius, radius)
-            elseif shape == "triangle" then
-                local width = (layer.width or 0.5) * size
-                local height = (layer.height or 0.5) * size
-                local direction = layer.direction or "up"
-                local halfWidth = width * 0.5
-                if direction == "up" then
-                    love.graphics.polygon("fill", 0, -height * 0.5, halfWidth, height * 0.5, -halfWidth, height * 0.5)
-                else
-                    love.graphics.polygon("fill", 0, height * 0.5, halfWidth, -height * 0.5, -halfWidth, -height * 0.5)
-                end
-            elseif shape == "beam" then
-                local width = (layer.width or 0.2) * size
-                local length = (layer.length or 0.8) * size
-                love.graphics.rectangle("fill", -length * 0.5, -width * 0.5, length, width)
-            else
-                local radius = (layer.radius or 0.4) * halfSize
-                love.graphics.circle("fill", 0, 0, radius)
-            end
-
-            love.graphics.pop()
+            draw_icon_layer(icon, layer, size)
         end
     end
 
@@ -152,6 +156,86 @@ local function get_dimensions()
     }
 end
 
+local function calculate_grid_layout(contentWidth, contentHeight)
+    local slotSize = theme_spacing.slot_size
+    local slotPadding = theme_spacing.slot_padding
+    local labelHeight = 32
+    local slotWithLabelHeight = slotSize + labelHeight + 4
+    
+    local slotsPerRow = math.max(1, math.floor((contentWidth + slotPadding) / (slotSize + slotPadding)))
+    local slotsPerColumn = math.max(1, math.floor((contentHeight + slotPadding) / (slotWithLabelHeight + slotPadding)))
+    local totalVisibleSlots = slotsPerRow * slotsPerColumn
+    
+    return slotsPerRow, slotsPerColumn, totalVisibleSlots, slotSize, slotWithLabelHeight
+end
+
+local function draw_slot_background(slotX, slotY, slotSize, isHovered, isSelected)
+    if isHovered then
+        set_color(window_colors.row_hover or { 1, 1, 1, 0.1 })
+        love.graphics.rectangle("fill", slotX, slotY, slotSize, slotSize, 3, 3)
+    end
+    
+    if isHovered or isSelected then
+        set_color(window_colors.slot_border or { 0.08, 0.08, 0.12, 0.5 })
+        love.graphics.setLineWidth(1)
+        love.graphics.rectangle("line", slotX + 0.5, slotY + 0.5, slotSize - 1, slotSize - 1, 3, 3)
+    end
+end
+
+local function draw_item_in_slot(item, slotX, slotY, slotSize, fonts)
+    local iconSize = slotSize - 10
+    local iconX = slotX + 5
+    local iconY = slotY + 5
+
+    -- Draw icon
+    local iconDrawn = false
+    if item.icon then
+        iconDrawn = draw_item_icon(item.icon, iconX, iconY, iconSize)
+    end
+
+    if not iconDrawn then
+        set_color(window_colors.accent)
+        local placeholderRadius = iconSize * 0.25
+        love.graphics.setLineWidth(1.25)
+        love.graphics.circle("line", iconX + iconSize * 0.5, iconY + iconSize * 0.5, placeholderRadius)
+    end
+
+    -- Draw item name with text wrapping
+    local itemName = item.name or "Unknown Item"
+    local font = fonts.small or fonts.body
+    love.graphics.setFont(font)
+    set_color(window_colors.text)
+    
+    local textLines = wrap_text(itemName, font, slotSize - 4)
+    local lineHeight = font:getHeight()
+    local textStartY = slotY + slotSize + 2
+    
+    for j, line in ipairs(textLines) do
+        local textWidth = font:getWidth(line)
+        local textX = slotX + (slotSize - textWidth) * 0.5
+        local textY = textStartY + (j - 1) * lineHeight
+        love.graphics.print(line, textX, textY)
+    end
+end
+
+local function create_item_tooltip(item)
+    if not item then return end
+    
+    local tooltip_body = {}
+    if item.quantity then
+        tooltip_body[#tooltip_body + 1] = string.format("Quantity: %s", item.quantity)
+    end
+    if item.volume then
+        tooltip_body[#tooltip_body + 1] = string.format("Volume: %s", item.volume)
+    end
+
+    tooltip.request({
+        heading = item.name or "Unknown Item",
+        body = tooltip_body,
+        description = item.description,
+    })
+end
+
 function cargo_window.draw(context)
     local state = context.cargoUI
     if not state then
@@ -165,6 +249,12 @@ function cargo_window.draw(context)
     end
 
     local player = context.player
+    if not player then
+        local stateContext = context.state or context
+        if stateContext and type(stateContext.getLocalPlayer) == "function" then
+            player = stateContext:getLocalPlayer()
+        end
+    end
     local cargo = player and player.cargo
     if cargo and cargo.refresh then
         cargo:refresh()
@@ -176,13 +266,10 @@ function cargo_window.draw(context)
     love.graphics.origin()
 
     local fonts = theme.get_fonts()
-
     local dims = get_dimensions()
     local padding = theme_spacing.window_padding
     local topBarHeight = window_metrics.top_bar_height
     local bottomBarHeight = window_metrics.bottom_bar_height
-    local slotSize = theme_spacing.slot_size
-    local slotPadding = theme_spacing.slot_padding
 
     local mouse_x, mouse_y = love.mouse.getPosition()
     local is_mouse_down = love.mouse.isDown(1)
@@ -212,28 +299,23 @@ function cargo_window.draw(context)
     local window_y = state.y or dims.y
     local window_width = state.width or dims.width
     local window_height = state.height or dims.height
-    local mouseInsideWindow = mouse_x and mouse_y and mouse_x >= window_x and mouse_x <= window_x + window_width and mouse_y >= window_y and mouse_y <= window_y + window_height
+    local mouseInsideWindow = mouse_x and mouse_y and 
+        mouse_x >= window_x and mouse_x <= window_x + window_width and 
+        mouse_y >= window_y and mouse_y <= window_y + window_height
 
     if uiInput and state.visible then
-        uiInput.keyboardCaptured = true
         if mouseInsideWindow or state.dragging or frame.dragging then
             uiInput.mouseCaptured = true
         end
     end
 
     local content = frame.content
-    local contentX = content.x
-    local contentY = content.y
+    local slotsPerRow, slotsPerColumn, totalVisibleSlots, slotSize, slotWithLabelHeight = 
+        calculate_grid_layout(content.width, content.height)
 
-    local labelHeight = 32
-    local slotWithLabelHeight = slotSize + labelHeight + 4
-    local slotsPerRow = math.max(1, math.floor((content.width + slotPadding) / (slotSize + slotPadding)))
-    local gridHeight = content.height
-    local slotsPerColumn = math.max(1, math.floor((gridHeight + slotPadding) / (slotWithLabelHeight + slotPadding)))
-    local totalVisibleSlots = slotsPerRow * slotsPerColumn
-
-    local gridStartY = contentY
-    local gridStartX = contentX
+    local slotPadding = theme_spacing.slot_padding
+    local gridStartY = content.y
+    local gridStartX = content.x
 
     local hoveredItem
     local hoveredSlotIndex
@@ -246,81 +328,25 @@ function cargo_window.draw(context)
         local slotY = gridStartY + row * (slotWithLabelHeight + slotPadding)
 
         local item = items[slotNumber]
-        local isMouseOver = mouse_x >= slotX and mouse_x <= slotX + slotSize and mouse_y >= slotY and mouse_y <= slotY + slotSize
+        local isMouseOver = mouse_x >= slotX and mouse_x <= slotX + slotSize and 
+                           mouse_y >= slotY and mouse_y <= slotY + slotSize
 
         if isMouseOver then
             hoveredItem = item
             hoveredSlotIndex = slotIndex
-
-            if item then
-                local tooltip_body = {}
-                if item.quantity then
-                    tooltip_body[#tooltip_body + 1] = string.format("Quantity: %s", item.quantity)
-                end
-                if item.volume then
-                    tooltip_body[#tooltip_body + 1] = string.format("Volume: %s", item.volume)
-                end
-
-                tooltip.request({
-                    heading = item.name or "Unknown Item",
-                    body = tooltip_body,
-                    description = item.description,
-                })
-            end
+            create_item_tooltip(item)
         end
 
-        if isMouseOver then
-            set_color(window_colors.row_hover or { 1, 1, 1, 0.1 })
-            love.graphics.rectangle("fill", slotX, slotY, slotSize, slotSize, 3, 3)
-
-            set_color(window_colors.slot_border or { 0.08, 0.08, 0.12, 0.5 })
-            love.graphics.setLineWidth(1)
-            love.graphics.rectangle("line", slotX + 0.5, slotY + 0.5, slotSize - 1, slotSize - 1, 3, 3)
-        elseif state._hovered_slot == slotIndex then
-            set_color(window_colors.slot_border or { 0.08, 0.08, 0.12, 0.5 })
-            love.graphics.setLineWidth(1)
-            love.graphics.rectangle("line", slotX + 0.5, slotY + 0.5, slotSize - 1, slotSize - 1, 3, 3)
-        end
+        local isSelected = state._hovered_slot == slotIndex
+        draw_slot_background(slotX, slotY, slotSize, isMouseOver, isSelected)
 
         if item then
-            local iconSize = slotSize - 10
-            local iconX = slotX + 5
-            local iconY = slotY + 5
-
-            local iconDrawn = false
-            if item.icon then
-                iconDrawn = draw_item_icon(item.icon, iconX, iconY, iconSize)
-            end
-
-            if not iconDrawn then
-                set_color(window_colors.accent)
-                local placeholderRadius = iconSize * 0.25
-                love.graphics.setLineWidth(1.25)
-                love.graphics.circle("line", iconX + iconSize * 0.5, iconY + iconSize * 0.5, placeholderRadius)
-            end
-
-            -- Draw item name with text wrapping
-            local itemName = item.name or "Unknown Item"
-            local font = fonts.small or fonts.body
-            love.graphics.setFont(font)
-            set_color(window_colors.text)
-            
-            local textLines = wrap_text(itemName, font, slotSize - 4)
-            local lineHeight = font:getHeight()
-            local textStartY = slotY + slotSize + 2
-            
-            for j, line in ipairs(textLines) do
-                local textWidth = font:getWidth(line)
-                local textX = slotX + (slotSize - textWidth) * 0.5
-                local textY = textStartY + (j - 1) * lineHeight
-                love.graphics.print(line, textX, textY)
-            end
+            draw_item_in_slot(item, slotX, slotY, slotSize, fonts)
         end
     end
 
     state._hovered_slot = hoveredSlotIndex
     state._hovered_item = hoveredItem
-
     state._was_mouse_down = is_mouse_down
 
     if frame.close_clicked then

@@ -6,23 +6,7 @@
 
 ---@diagnostic disable: undefined-global, deprecated
 local tiny = require("libs.tiny")
-
-local control_keys = {
-    move_up = { "w", "up" },
-    move_down = { "s", "down" },
-    move_left = { "a", "left" },
-    move_right = { "d", "right" },
-}
-
-local function key_down(keys)
-    for i = 1, #keys do
-        if love.keyboard.isDown(keys[i]) then
-            return true
-        end
-    end
-    return false
-end
-
+local vector = require("src.util.vector")
 return function(context)
     context = context or {}
     local engineTrail = context.engineTrail
@@ -35,35 +19,36 @@ return function(context)
                 return
             end
 
-            if uiInput and (uiInput.keyboardCaptured or uiInput.mouseCaptured) then
-                entity.isThrusting = false
-                entity.currentThrust = 0
-                if engineTrail then
-                    engineTrail:setActive(false)
-                end
-                return
-            end
+            local intents = context.intents or (context.intentHolder and context.intentHolder.playerIntents)
+            local intent = intents and entity.playerId and intents[entity.playerId]
 
-            local mx, my = love.mouse.getPosition()
-            local cam = context.camera
-            if cam then
+            local aimX, aimY
+            if intent and intent.hasAim then
+                aimX = intent.aimX
+                aimY = intent.aimY
+            elseif context.camera and love.mouse then
+                local mx, my = love.mouse.getPosition()
+                local cam = context.camera
                 local zoom = cam.zoom or 1
                 if zoom ~= 0 then
-                    mx = mx / zoom + cam.x
-                    my = my / zoom + cam.y
+                    aimX = mx / zoom + cam.x
+                    aimY = my / zoom + cam.y
                 else
-                    mx = cam.x
-                    my = cam.y
+                    aimX = cam.x
+                    aimY = cam.y
                 end
             end
-            local to_mouse_x = mx - entity.position.x
-            local to_mouse_y = my - entity.position.y
 
-            if to_mouse_x ~= 0 or to_mouse_y ~= 0 then
-                local desired_angle = math.atan2(to_mouse_y, to_mouse_x) + math.pi * 0.5
-                body:setAngularVelocity(0)
-                body:setAngle(desired_angle)
-                entity.rotation = desired_angle
+            if aimX and aimY then
+                local to_mouse_x = aimX - entity.position.x
+                local to_mouse_y = aimY - entity.position.y
+
+                if to_mouse_x ~= 0 or to_mouse_y ~= 0 then
+                    local desired_angle = math.atan2(to_mouse_y, to_mouse_x) + math.pi * 0.5
+                    body:setAngularVelocity(0)
+                    body:setAngle(desired_angle)
+                    entity.rotation = desired_angle
+                end
             end
 
             local stats = entity.stats or {}
@@ -73,42 +58,28 @@ return function(context)
             local max_accel = stats.max_acceleration
 
             local move_x, move_y = 0, 0
-            if key_down(control_keys.move_left) then
-                move_x = move_x - 1
-            end
-            if key_down(control_keys.move_right) then
-                move_x = move_x + 1
-            end
-            if key_down(control_keys.move_up) then
-                move_y = move_y - 1
-            end
-            if key_down(control_keys.move_down) then
-                move_y = move_y + 1
+            if intent then
+                move_x = intent.moveX * (intent.moveMagnitude or 0)
+                move_y = intent.moveY * (intent.moveMagnitude or 0)
             end
 
             local applyingThrust = move_x ~= 0 or move_y ~= 0
             entity.isThrusting = applyingThrust
 
             if applyingThrust then
-                local len = math.sqrt(move_x * move_x + move_y * move_y)
-                move_x = move_x / len
-                move_y = move_y / len
+                local moveDirX, moveDirY = vector.normalize(move_x, move_y)
+                move_x, move_y = moveDirX, moveDirY
 
                 local force_x = move_x * thrust
                 local force_y = move_y * thrust
 
                 if max_accel and max_accel > 0 and mass > 0 then
                     local max_force = max_accel * mass
-                    local force_mag_sq = force_x * force_x + force_y * force_y
-                    if force_mag_sq > max_force * max_force then
-                        local scale = max_force / math.sqrt(force_mag_sq)
-                        force_x = force_x * scale
-                        force_y = force_y * scale
-                    end
+                    force_x, force_y = vector.clamp(force_x, force_y, max_force)
                 end
 
                 body:applyForce(force_x, force_y)
-                entity.currentThrust = math.sqrt(force_x * force_x + force_y * force_y)
+                entity.currentThrust = vector.length(force_x, force_y)
                 if entity.stats and entity.stats.main_thrust then
                     entity.maxThrust = entity.stats.main_thrust
                 end
@@ -122,11 +93,9 @@ return function(context)
 
             if max_speed and max_speed > 0 then
                 local vx, vy = body:getLinearVelocity()
-                local speed_sq = vx * vx + vy * vy
-                local max_sq = max_speed * max_speed
-                if speed_sq > max_sq then
-                    local scale = max_speed / math.sqrt(speed_sq)
-                    body:setLinearVelocity(vx * scale, vy * scale)
+                local clampedVX, clampedVY = vector.clamp(vx, vy, max_speed)
+                if clampedVX ~= vx or clampedVY ~= vy then
+                    body:setLinearVelocity(clampedVX, clampedVY)
                 end
             end
         end,

@@ -81,6 +81,11 @@ constants.player = {
     starter_ship_id = "starter",     -- Blueprint ID for the player's starting ship
 }
 
+constants.network = {
+    host = "127.0.0.1",
+    port = 25565,
+}
+
 constants.ships = {
     health_bar = {
         width = 56,
@@ -143,23 +148,57 @@ constants.stars = {
         -- Far background layer (slowest parallax)
         {
             parallax = 0.003,        -- Parallax multiplier (lower = slower, farther away)
-            count = 260,             -- Number of stars in this layer
+            count = 780,             -- Number of stars in this layer
             size_range = { 0.7, 1.4 }, -- Min/max star size for this layer
             alpha_range = { 0.45, 0.7 }, -- Min/max opacity for this layer
         },
         -- Middle layer (moderate parallax)
         {
             parallax = 0.018,        -- Medium parallax speed
-            count = 220,             -- Star count for middle layer
+            count = 660,             -- Star count for middle layer
             size_range = { 1.0, 2.0 }, -- Slightly larger stars
             alpha_range = { 0.6, 0.85 }, -- More visible than background
         },
         -- Foreground layer (fastest parallax)
         {
             parallax = 0.055,        -- Fastest parallax (closest to camera)
-            count = 200,             -- Foreground star count
+            count = 600,             -- Foreground star count
             size_range = { 1.4, 2.8 }, -- Largest stars for depth effect
             alpha_range = { 0.75, 1.0 }, -- Most visible/brightest stars
+        },
+    },
+    background_props = {
+        planets = {
+            count = 3,
+            parallax = 0.001,
+            radius_range = { 140, 280 },
+            color_palette = {
+                { 0.24, 0.42, 0.86 },
+                { 0.82, 0.31, 0.46 },
+                { 0.38, 0.78, 0.68 },
+                { 0.88, 0.67, 0.28 },
+                { 0.58, 0.36, 0.84 },
+            },
+            brightness_range = { 0.35, 0.75 },
+            highlight_strength = { 0.15, 0.35 },
+            ring_probability = 0.55,
+            ring_thickness = { 6, 14 },
+            ring_scale = { 1.4, 1.9 },
+            ring_alpha = { 0.15, 0.3 },
+        },
+        comets = {
+            parallax = 0.005,
+            spawn_interval = { 12, 28 },
+            spawn_margin = 400,
+            speed_range = { 90, 160 },
+            drift_range = { -24, 24 },
+            radius_range = { 10, 18 },
+            brightness_range = { 0.6, 1.0 },
+            tail_length = 26,
+            tail_segment_spacing = 18,
+            tail_fade = 0.06,
+            head_color = { 1.0, 0.95, 0.8 },
+            tail_color = { 0.6, 0.8, 1.0 },
         },
     },
 }
