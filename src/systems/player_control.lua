@@ -25,6 +25,7 @@ end
 
 return function(context)
     context = context or {}
+    local engineTrail = context.engineTrail
     return tiny.system {
         filter = tiny.requireAll("player", "body"),
         process = function(_, entity, dt)
@@ -75,7 +76,10 @@ return function(context)
                 move_y = move_y + 1
             end
 
-            if move_x ~= 0 or move_y ~= 0 then
+            local applyingThrust = move_x ~= 0 or move_y ~= 0
+            entity.isThrusting = applyingThrust
+
+            if applyingThrust then
                 local len = math.sqrt(move_x * move_x + move_y * move_y)
                 move_x = move_x / len
                 move_y = move_y / len
@@ -94,6 +98,16 @@ return function(context)
                 end
 
                 body:applyForce(force_x, force_y)
+                entity.currentThrust = math.sqrt(force_x * force_x + force_y * force_y)
+                if entity.stats and entity.stats.main_thrust then
+                    entity.maxThrust = entity.stats.main_thrust
+                end
+            else
+                entity.currentThrust = 0
+            end
+
+            if engineTrail then
+                engineTrail:setActive(applyingThrust)
             end
 
             if max_speed and max_speed > 0 then

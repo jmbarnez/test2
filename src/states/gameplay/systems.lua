@@ -23,7 +23,10 @@ function Systems.initialize(state, damageCallback)
         state.damageEntity = damageCallback
     end
 
-    state.controlSystem = state.world:addSystem(createPlayerControlSystem(state))
+    state.controlSystem = state.world:addSystem(createPlayerControlSystem({
+        camera = state.camera,
+        engineTrail = state.engineTrail,
+    }))
     state.spawnerSystem = state.world:addSystem(createAsteroidSpawner(state))
     state.enemySpawnerSystem = state.world:addSystem(createEnemySpawner(state))
 

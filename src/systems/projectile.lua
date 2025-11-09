@@ -1,10 +1,62 @@
 local tiny = require("libs.tiny")
 local love = love
 
+local function clamp01(value)
+    if value < 0 then
+        return 0
+    elseif value > 1 then
+        return 1
+    end
+    return value
+end
+
+local function scale_color(base, factor, alpha)
+    base = base or { 1, 0.8, 0.3 }
+    return {
+        clamp01((base[1] or 1) * factor),
+        clamp01((base[2] or 1) * factor),
+        clamp01((base[3] or 1) * factor),
+        alpha,
+    }
+end
+
+local function build_impact_colors(drawable)
+    local base = drawable and (drawable.highlightColor or drawable.coreColor or drawable.color)
+    return {
+        scale_color(base, 1.5, 1.0),
+        scale_color(base, 1.25, 0.9),
+        scale_color(base, 1.0, 0.7),
+        scale_color(base, 0.8, 0.5),
+        scale_color(base, 0.6, 0.3),
+        scale_color(base, 0.4, 0.1),
+    }
+end
+
+local function create_projectile_shape(drawable, size)
+    local shape = drawable.shape or drawable.form or "orb"
+    
+    if shape == "beam" or shape == "rectangle" then
+        local width = drawable.width or size
+        local length = drawable.length or drawable.beamLength
+        if not length then
+            local lengthScale = drawable.lengthScale or 7
+            length = width * lengthScale
+        end
+        return love.physics.newRectangleShape(length, width)
+    elseif shape == "polygon" and drawable.vertices then
+        return love.physics.newPolygonShape(unpack(drawable.vertices))
+    else
+        -- Default to circle for orb and other shapes
+        local radius = (drawable.radius or size) * 0.5
+        return love.physics.newCircleShape(radius)
+    end
+end
+
 return function(context)
     context = context or {}
     local physicsWorld = context.physicsWorld
     local damageEntity = context.damageEntity
+    local particleSystem = context.particleSystem
     
     return tiny.system {
         filter = tiny.requireAll("projectile", "position"),
@@ -66,6 +118,34 @@ return function(context)
             
             -- Don't hit boundaries
             if targetData.type == "boundary" then
+                -- Create enhanced impact particles at boundary collision
+                if particleSystem and projectile.position then
+                    local colors = build_impact_colors(projectile.drawable)
+                    local vx, vy = 0, 0
+                    if projectile.velocity then
+                        vx, vy = projectile.velocity.x, projectile.velocity.y
+                    end
+                    
+                    particleSystem:createImpactEffect(
+                        projectile.position.x,
+                        projectile.position.y,
+                        "boundary",
+                        {
+                            colors = colors,
+                            particleCount = 25,
+                            speed = { min = 80, max = 200 },
+                            spread = math.pi,
+                            size = { min = 2, max = 8 },
+                            lifetime = { min = 0.3, max = 1.2 },
+                            fadeTime = 0.8,
+                            sparkCount = 15,
+                            sparkSpeed = { min = 120, max = 300 },
+                            sparkLifetime = { min = 0.2, max = 0.6 },
+                            velocityInherit = 0.3,
+                            initialVelocity = { x = vx, y = vy }
+                        }
+                    )
+                end
                 projectile.pendingDestroy = true
                 return
             end
@@ -90,12 +170,63 @@ return function(context)
                 end
             end
             
+            -- Create enhanced impact particles on hit
+            if particleSystem and projectile.position then
+                local effectType = shouldDamage and "damage" or "hit"
+                local colors = build_impact_colors(projectile.drawable)
+                local vx, vy = 0, 0
+                if projectile.velocity then
+                    vx, vy = projectile.velocity.x, projectile.velocity.y
+                end
+                
+                local particleCount = shouldDamage and 35 or 20
+                local sparkCount = shouldDamage and 20 or 12
+                
+                particleSystem:createImpactEffect(
+                    projectile.position.x,
+                    projectile.position.y,
+                    effectType,
+                    {
+                        colors = colors,
+                        particleCount = particleCount,
+                        speed = { min = 60, max = 180 },
+                        spread = math.pi * 1.2,
+                        size = { min = 1.5, max = 6 },
+                        lifetime = { min = 0.4, max = 1.5 },
+                        fadeTime = 0.9,
+                        sparkCount = sparkCount,
+                        sparkSpeed = { min = 100, max = 250 },
+                        sparkLifetime = { min = 0.15, max = 0.5 },
+                        burstIntensity = shouldDamage and 1.5 or 1.0,
+                        velocityInherit = 0.4,
+                        initialVelocity = { x = vx, y = vy },
+                        glowRadius = shouldDamage and 15 or 10,
+                        shockwaveSize = shouldDamage and 25 or 18
+                    }
+                )
+            end
+            
             -- Destroy projectile on hit
             projectile.pendingDestroy = true
         end,
         
         onAdd = function(self, entity)
             self.projectiles[entity] = true
+            
+            -- Create appropriate physics shape based on drawable configuration
+            if entity.body and entity.drawable then
+                local size = entity.drawable.size or 6
+                local shape = create_projectile_shape(entity.drawable, size)
+                local fixture = love.physics.newFixture(entity.body, shape)
+                
+                fixture:setUserData({
+                    type = "projectile",
+                    entity = entity,
+                })
+                
+                entity.shape = shape
+                entity.fixture = fixture
+            end
         end,
         
         update = function(self, dt)

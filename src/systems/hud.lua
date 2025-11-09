@@ -1,6 +1,9 @@
 local tiny = require("libs.tiny")
+local theme = require("src.ui.theme")
 ---@diagnostic disable-next-line: undefined-global
 local love = love
+
+local hud_colors = theme.colors.hud
 
 local function draw_player_health(player)
     local top_margin = 20
@@ -19,13 +22,13 @@ local function draw_player_health(player)
     local pct = math.max(0, math.min(1, current / max_value))
 
     -- Black border
-    love.graphics.setColor(0, 0, 0, 1)
+    love.graphics.setColor(hud_colors.health_border)
     love.graphics.setLineWidth(2)
     love.graphics.rectangle("line", x, top_margin, bar_width, bar_height)
 
     -- Health fill
     if pct > 0 then
-        love.graphics.setColor(0.2, 0.8, 0.4, 0.95)
+        love.graphics.setColor(hud_colors.health_fill)
         love.graphics.rectangle("fill", x + 1, top_margin + 1, (bar_width - 2) * pct, bar_height - 2)
     end
 
@@ -40,11 +43,11 @@ local function draw_minimap(context)
     local y = margin
 
     -- Minimap background
-    love.graphics.setColor(0, 0, 0, 0.7)
+    love.graphics.setColor(hud_colors.minimap_background)
     love.graphics.rectangle("fill", x, y, minimap_size, minimap_size)
     
     -- Minimap border
-    love.graphics.setColor(0.3, 0.3, 0.3, 1)
+    love.graphics.setColor(hud_colors.minimap_border)
     love.graphics.setLineWidth(1)
     love.graphics.rectangle("line", x, y, minimap_size, minimap_size)
 
@@ -61,7 +64,7 @@ local function draw_minimap(context)
     local scale = (minimap_size * 0.8) / math.max(bounds.width, bounds.height)
 
     -- Draw player first (larger dot)
-    love.graphics.setColor(0, 1, 0, 1)
+    love.graphics.setColor(hud_colors.minimap_player)
     love.graphics.circle("fill", centerX, centerY, 3)
 
     -- Draw other entities relative to player
@@ -77,10 +80,10 @@ local function draw_minimap(context)
             -- Only draw if within minimap bounds
             if mapX >= x and mapX <= x + minimap_size and mapY >= y and mapY <= y + minimap_size then
                 if entity.blueprint and entity.blueprint.category == "asteroids" then
-                    love.graphics.setColor(0.6, 0.5, 0.4, 0.8)
+                    love.graphics.setColor(hud_colors.minimap_asteroid)
                     love.graphics.circle("fill", mapX, mapY, 1.5)
                 elseif entity.blueprint and entity.blueprint.category == "ships" then
-                    love.graphics.setColor(1, 0.3, 0.3, 1)
+                    love.graphics.setColor(hud_colors.minimap_ship)
                     love.graphics.circle("fill", mapX, mapY, 2)
                 end
             end
@@ -104,7 +107,7 @@ local function draw_speed_fps(context)
 
     local fps = love.timer.getFPS()
 
-    love.graphics.setColor(1, 1, 1, 0.9)
+    love.graphics.setColor(hud_colors.diagnostics)
     love.graphics.setFont(love.graphics.getFont())
     love.graphics.print(string.format("Speed: %.1f", speed), x, y)
     love.graphics.print(string.format("FPS: %d", fps), x, y + 15)

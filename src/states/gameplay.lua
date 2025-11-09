@@ -15,6 +15,7 @@ local Entities = require("src.states.gameplay.entities")
 local Systems = require("src.states.gameplay.systems")
 local View = require("src.states.gameplay.view")
 local FilmGrain = require("src.rendering.film_grain")
+local PlayerEngineTrail = require("src.effects.player_engine_trail")
 
 local love = love
 
@@ -33,12 +34,17 @@ function gameplay:enter(_, config)
 
     self.cargoUI = { visible = false }
 
+    self.engineTrail = PlayerEngineTrail.new()
+
     World.loadSector(self, sectorId)
     World.initialize(self)
     View.initialize(self)
     FilmGrain.initialize(self)
     Systems.initialize(self, Entities.damage)
-    Entities.spawnPlayer(self)
+    local player = Entities.spawnPlayer(self)
+    if self.engineTrail and player then
+        self.engineTrail:attachPlayer(player)
+    end
     View.updateCamera(self)
 end
 
@@ -48,6 +54,10 @@ function gameplay:leave()
     World.teardown(self)
     View.teardown(self)
     FilmGrain.teardown(self)
+    if self.engineTrail then
+        self.engineTrail:clear()
+        self.engineTrail = nil
+    end
     self.player = nil
     self.cargoUI = nil
 end
@@ -62,6 +72,10 @@ function gameplay:update(dt)
     local physicsWorld = self.physicsWorld
     if physicsWorld then
         physicsWorld:update(dt)
+    end
+
+    if self.engineTrail then
+        self.engineTrail:update(dt)
     end
 
     local movementSystem = self.movementSystem
@@ -89,6 +103,9 @@ function gameplay:draw()
         local zoom = cam.zoom or 1
         love.graphics.scale(zoom, zoom)
         love.graphics.translate(-cam.x, -cam.y)
+        if self.engineTrail then
+            self.engineTrail:draw()
+        end
         self.world:draw()
         love.graphics.pop()
     end

@@ -41,7 +41,7 @@ constants.window = {
 
 -- View configuration (camera defaults)
 constants.view = {
-    default_zoom = 0.5,              -- Default camera zoom (2x magnification)
+    default_zoom = 1.0,              -- Default camera zoom (native scale)
 }
 
 -- ============================================================================
