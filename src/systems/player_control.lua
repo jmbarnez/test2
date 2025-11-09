@@ -26,11 +26,21 @@ end
 return function(context)
     context = context or {}
     local engineTrail = context.engineTrail
+    local uiInput = context.uiInput
     return tiny.system {
         filter = tiny.requireAll("player", "body"),
         process = function(_, entity, dt)
             local body = entity.body
             if not body or body:isDestroyed() then
+                return
+            end
+
+            if uiInput and (uiInput.keyboardCaptured or uiInput.mouseCaptured) then
+                entity.isThrusting = false
+                entity.currentThrust = 0
+                if engineTrail then
+                    engineTrail:setActive(false)
+                end
                 return
             end
 

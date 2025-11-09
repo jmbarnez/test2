@@ -203,7 +203,7 @@ return {
     },
     weapons = {
         {
-            id = "laser_turret",
+            id = "cannon",
             mount = {
                 anchor = { x = 0, y = 0.72 },
                 inset = 4,

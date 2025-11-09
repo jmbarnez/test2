@@ -30,6 +30,10 @@ function window.draw_frame(options)
     local show_close = options.show_close ~= false
     local state = options.state
     local input = options.input or {}
+    local mouse_x = input.x
+    local mouse_y = input.y
+    local just_pressed = input.just_pressed
+    local is_down = input.is_down
 
     local padding = options.padding or spacing.window_padding
     local corner_radius = options.corner_radius or spacing.window_corner_radius
@@ -77,13 +81,9 @@ function window.draw_frame(options)
     }
 
     local close_clicked = false
+    local close_hovered = false
 
     if state then
-        local mouse_x = input.x
-        local mouse_y = input.y
-        local just_pressed = input.just_pressed
-        local is_down = input.is_down
-
         if just_pressed and mouse_x and mouse_y then
             if close_button_rect and mouse_x >= close_button_rect.x and mouse_x <= close_button_rect.x + close_button_rect.width and mouse_y >= close_button_rect.y and mouse_y <= close_button_rect.y + close_button_rect.height then
                 close_clicked = true
@@ -142,6 +142,10 @@ function window.draw_frame(options)
         close_button_rect.y = y + (top_bar_height - close_button_rect.size) * 0.5
     end
 
+    if close_button_rect and mouse_x and mouse_y then
+        close_hovered = mouse_x >= close_button_rect.x and mouse_x <= close_button_rect.x + close_button_rect.width and mouse_y >= close_button_rect.y and mouse_y <= close_button_rect.y + close_button_rect.height
+    end
+
     -- Outer glow
     set_color(colors.glow)
     love.graphics.rectangle(
@@ -196,7 +200,7 @@ function window.draw_frame(options)
 
     -- Close button
     if show_close then
-        set_color(colors.close_button)
+        set_color(close_hovered and colors.close_button_hover or colors.close_button)
         love.graphics.setLineWidth(1.5)
         love.graphics.line(close_button_rect.x, close_button_rect.y, close_button_rect.x + close_button_rect.size, close_button_rect.y + close_button_rect.size)
         love.graphics.line(close_button_rect.x, close_button_rect.y + close_button_rect.size, close_button_rect.x + close_button_rect.size, close_button_rect.y)
@@ -217,6 +221,7 @@ function window.draw_frame(options)
         close_button = close_button_rect,
         top_bar = top_bar_rect,
         close_clicked = close_clicked,
+        close_hovered = close_hovered,
         dragging = state and state.dragging or false,
     }
 end

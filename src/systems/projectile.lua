@@ -1,37 +1,6 @@
 local tiny = require("libs.tiny")
 local love = love
 
-local function clamp01(value)
-    if value < 0 then
-        return 0
-    elseif value > 1 then
-        return 1
-    end
-    return value
-end
-
-local function scale_color(base, factor, alpha)
-    base = base or { 1, 0.8, 0.3 }
-    return {
-        clamp01((base[1] or 1) * factor),
-        clamp01((base[2] or 1) * factor),
-        clamp01((base[3] or 1) * factor),
-        alpha,
-    }
-end
-
-local function build_impact_colors(drawable)
-    local base = drawable and (drawable.highlightColor or drawable.coreColor or drawable.color)
-    return {
-        scale_color(base, 1.5, 1.0),
-        scale_color(base, 1.25, 0.9),
-        scale_color(base, 1.0, 0.7),
-        scale_color(base, 0.8, 0.5),
-        scale_color(base, 0.6, 0.3),
-        scale_color(base, 0.4, 0.1),
-    }
-end
-
 local function create_projectile_shape(drawable, size)
     local shape = drawable.shape or drawable.form or "orb"
     
@@ -52,6 +21,52 @@ local function create_projectile_shape(drawable, size)
     end
 end
 
+local function create_impact_particles(x, y, projectile, target)
+    local particles = {}
+    local numParticles = math.random(8, 16)
+    local baseColor = projectile.drawable and projectile.drawable.color or {0.2, 0.8, 1.0}
+    
+    -- Desaturate the base color for more muted particles
+    local desaturatedColor = {
+        baseColor[1] * 0.7,
+        baseColor[2] * 0.7,
+        baseColor[3] * 0.7
+    }
+    
+    -- Calculate impact direction based on projectile velocity
+    local impactAngle = 0
+    if projectile.velocity then
+        impactAngle = math.atan2(projectile.velocity.y, projectile.velocity.x)
+    end
+    
+    for i = 1, numParticles do
+        -- Create cone of particles spreading from impact direction
+        local spreadAngle = impactAngle + math.pi + (math.random() - 0.5) * math.pi * 0.8
+        local speed = math.random(80, 200)
+        local size = math.random(1, 4)
+        local lifetime = math.random(0.2, 0.6)
+        
+        particles[i] = {
+            x = x + math.random(-2, 2),
+            y = y + math.random(-2, 2),
+            vx = math.cos(spreadAngle) * speed,
+            vy = math.sin(spreadAngle) * speed,
+            size = size,
+            maxSize = size,
+            lifetime = lifetime,
+            maxLifetime = lifetime,
+            color = {
+                desaturatedColor[1],
+                desaturatedColor[2],
+                desaturatedColor[3],
+                0.8
+            }
+        }
+    end
+    
+    return particles
+end
+
 return function(context)
     context = context or {}
     local physicsWorld = context.physicsWorld
@@ -61,8 +76,8 @@ return function(context)
         filter = tiny.requireAll("projectile", "position"),
         
         init = function(self)
-            self.projectiles = {}
             self.processedCollisions = {}
+            self.impactParticles = {}
             
             -- Setup collision callbacks for projectiles
             if physicsWorld and not self.collisionSetup then
@@ -115,6 +130,21 @@ return function(context)
                 return
             end
             
+            -- Freeze projectile rotation and velocity on impact
+            if projectile.body and not projectile.body:isDestroyed() then
+                projectile.body:setLinearVelocity(0, 0)
+                projectile.body:setAngularVelocity(0)
+                -- Keep the rotation from just before impact
+                projectile.frozenRotation = projectile.rotation or projectile.body:getAngle()
+            end
+            
+            -- Create impact particles at collision point
+            local x, y = projectile.position.x, projectile.position.y
+            local particles = create_impact_particles(x, y, projectile, target)
+            for i = 1, #particles do
+                table.insert(self.impactParticles, particles[i])
+            end
+            
             -- Don't hit boundaries
             if targetData.type == "boundary" then
                 projectile.pendingDestroy = true
@@ -146,8 +176,6 @@ return function(context)
         end,
         
         onAdd = function(self, entity)
-            self.projectiles[entity] = true
-            
             -- Create appropriate physics shape based on drawable configuration
             if entity.body and entity.drawable then
                 local size = entity.drawable.size or 6
@@ -173,6 +201,27 @@ return function(context)
             if self.cleanupTimer > 1.0 then
                 self.processedCollisions = {}
                 self.cleanupTimer = 0
+            end
+            
+            -- Update impact particles
+            for i = #self.impactParticles, 1, -1 do
+                local particle = self.impactParticles[i]
+                particle.lifetime = particle.lifetime - dt
+                
+                if particle.lifetime <= 0 then
+                    table.remove(self.impactParticles, i)
+                else
+                    -- Update particle physics with gravity and friction
+                    particle.x = particle.x + particle.vx * dt
+                    particle.y = particle.y + particle.vy * dt
+                    particle.vx = particle.vx * 0.92  -- friction
+                    particle.vy = particle.vy * 0.92 + 50 * dt  -- slight gravity
+                    
+                    -- Fade out and shrink
+                    local lifeRatio = particle.lifetime / particle.maxLifetime
+                    particle.size = particle.maxSize * lifeRatio
+                    particle.color[4] = lifeRatio * 0.8
+                end
             end
             
             -- Update projectile lifetimes
@@ -205,17 +254,33 @@ return function(context)
                 entity.velocity.y = vy
             end
             
-            -- Sync rotation
-            entity.rotation = body:getAngle()
+            -- Use frozen rotation if available, otherwise sync with physics body
+            if entity.frozenRotation then
+                entity.rotation = entity.frozenRotation
+            else
+                entity.rotation = body:getAngle()
+            end
         end,
         
         onRemove = function(self, entity)
-            self.projectiles[entity] = nil
-            
             -- Clean up physics body
             if entity.body and not entity.body:isDestroyed() then
                 entity.body:destroy()
             end
+        end,
+        
+        draw = function(self)
+            -- Render impact particles with more saturated colors
+            love.graphics.push("all")
+            love.graphics.setBlendMode("add")
+            
+            for i = 1, #self.impactParticles do
+                local particle = self.impactParticles[i]
+                love.graphics.setColor(particle.color)
+                love.graphics.circle("fill", particle.x, particle.y, particle.size)
+            end
+            
+            love.graphics.pop()
         end,
     }
 end

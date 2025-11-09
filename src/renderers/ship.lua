@@ -224,9 +224,18 @@ local function draw_ship_generic(entity, context)
     }
 
     local radius = resolve_drawable_radius(drawable)
-    local lightingBound = Lighting.bindEntity(entity, context, radius, drawable.lighting)
 
     love.graphics.push("all")
+
+    local renderConfig = constants.render or {}
+    local lightingConfig = renderConfig.lighting or {}
+    local useLighting = lightingConfig.enabled and Lighting.isAvailable()
+
+    local lightingBound = false
+    if useLighting then
+        lightingBound = Lighting.bindEntity(entity, context, radius, drawable.lighting)
+    end
+
     love.graphics.translate(entity.position.x, entity.position.y)
     love.graphics.rotate(entity.rotation or 0)
 
@@ -254,11 +263,11 @@ local function draw_ship_generic(entity, context)
         end
     end
 
-    love.graphics.pop()
-
     if lightingBound then
         Lighting.unbind()
     end
+    
+    love.graphics.pop()
 
     return true
 end

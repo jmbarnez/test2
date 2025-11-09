@@ -19,6 +19,11 @@ local Systems = {}
 function Systems.initialize(state, damageCallback)
     state.world = tiny.world()
 
+    state.uiInput = {
+        mouseCaptured = false,
+        keyboardCaptured = false,
+    }
+
     if damageCallback then
         state.damageEntity = damageCallback
     end
@@ -26,6 +31,7 @@ function Systems.initialize(state, damageCallback)
     state.controlSystem = state.world:addSystem(createPlayerControlSystem({
         camera = state.camera,
         engineTrail = state.engineTrail,
+        uiInput = state.uiInput,
     }))
     state.spawnerSystem = state.world:addSystem(createAsteroidSpawner(state))
     state.enemySpawnerSystem = state.world:addSystem(createEnemySpawner(state))

@@ -1,60 +1,74 @@
-local love = love
-
+-- Player Engine Trail Effect Module
 local PlayerEngineTrail = {}
 PlayerEngineTrail.__index = PlayerEngineTrail
 
+-- Utility function to safely set a graphics canvas
+local function withCanvas(canvas, drawFunc)
+    love.graphics.push("all")
+    love.graphics.setCanvas(canvas)
+    love.graphics.clear(0, 0, 0, 0)
+    drawFunc()
+    love.graphics.setCanvas()
+    love.graphics.pop()
+end
+
+-- Create the particle system texture using a soft blue multi-circle gradient
+local function createTrailTexture()
+    local canvas = love.graphics.newCanvas(8, 8)
+    withCanvas(canvas, function()
+        local cx, cy = 4, 4
+        -- Draw concentric circles for a glow effect
+        love.graphics.setColor(0.4, 0.7, 1.0, 0.55)
+        love.graphics.circle("fill", cx, cy, 4)
+        love.graphics.setColor(0.5, 0.8, 1.0, 0.5)
+        love.graphics.circle("fill", cx, cy, 3)
+        love.graphics.setColor(0.6, 0.9, 1.0, 0.45)
+        love.graphics.circle("fill", cx, cy, 2)
+        love.graphics.setColor(0.7, 0.95, 1.0, 0.4)
+        love.graphics.circle("fill", cx, cy, 1)
+    end)
+    return canvas
+end
+
+-- Configure the engine trail particleSystem for bluey "jet" look
 local function createParticleSystem()
     if not (love and love.graphics and love.graphics.newParticleSystem) then
         return nil
     end
-
-    local texture = love.graphics.newCanvas(8, 8)
-    love.graphics.push("all")
-    love.graphics.setCanvas(texture)
-    love.graphics.clear(0, 0, 0, 0)
-    local function drawCircle(radius, r, g, b, a)
-        love.graphics.setColor(r, g, b, a or 1)
-        love.graphics.circle("fill", 4, 4, radius)
-    end
-    drawCircle(4, 0.4, 0.7, 1.0, 0.55)
-    drawCircle(3, 0.5, 0.8, 1.0, 0.5)
-    drawCircle(2, 0.6, 0.9, 1.0, 0.45)
-    drawCircle(1, 0.7, 0.95, 1.0, 0.4)
-    love.graphics.pop()
-    love.graphics.setCanvas()
-
-    local system = love.graphics.newParticleSystem(texture, 256)
-    system:setParticleLifetime(0.45, 0.85)
-    system:setSpeed(40, 85)
-    system:setLinearAcceleration(-15, -40, 15, 30)
-    system:setLinearDamping(0.3)
-    system:setSizes(0.9, 0.55, 0.1)
-    system:setSizeVariation(0.35)
-    system:setSpin(-1.2, 1.2, 0.25)
-    system:setSpread(math.rad(28))
-    system:setRelativeRotation(true)
-    system:setRotation(0, math.pi * 2)
-    system:setRadialAcceleration(-10, 10)
-    system:setTangentialAcceleration(-20, 20)
-    system:setEmissionRate(0)
-    system:setColors(
+    local texture = createTrailTexture()
+    local ps = love.graphics.newParticleSystem(texture, 256)
+    ps:setParticleLifetime(0.45, 0.85)
+    ps:setSpeed(40, 85)
+    ps:setLinearAcceleration(-15, -40, 15, 30)
+    ps:setLinearDamping(0.3)
+    ps:setSizes(0.9, 0.55, 0.1)
+    ps:setSizeVariation(0.35)
+    ps:setSpin(-1.2, 1.2, 0.25)
+    ps:setSpread(math.rad(28))
+    ps:setRelativeRotation(true)
+    ps:setRotation(0, math.pi * 2)
+    ps:setRadialAcceleration(-10, 10)
+    ps:setTangentialAcceleration(-20, 20)
+    ps:setEmissionRate(0)
+    ps:setColors(
         0.45, 0.75, 1.0, 0.78,
         0.25, 0.55, 1.0, 0.48,
         0.1, 0.32, 0.9, 0.24,
         0.05, 0.18, 0.6, 0
     )
-    system:start()
-    return system
+    ps:start()
+    return ps
 end
 
+-- Instantiate a new engine trail object
 function PlayerEngineTrail.new()
     local self = setmetatable({}, PlayerEngineTrail)
     self.system = createParticleSystem()
     self.active = false
     self.position = { x = 0, y = 0 }
-    self.direction = 0
-    self.thrustStrength = 0
-    self.player = nil
+    self.direction = 0              -- radians
+    self.thrustStrength = 0         -- 0..1
+    self.player = nil               -- reference to player entity
     return self
 end
 
@@ -63,11 +77,8 @@ function PlayerEngineTrail:attachPlayer(player)
 end
 
 function PlayerEngineTrail:setActive(active)
-    self.active = active and true or false
-    if not self.system then
-        return
-    end
-    if not self.active then
+    self.active = not not active
+    if self.system and not self.active then
         self.system:setEmissionRate(0)
     end
 end
@@ -79,16 +90,14 @@ function PlayerEngineTrail:clear()
     end
 end
 
+-- Align the particle system with the player's rear and read thrust state
 function PlayerEngineTrail:updateFromPlayer()
-    if not (self.player and self.system) then
-        return
-    end
+    if not (self.player and self.system) then return end
 
-    local position = self.player.position
-    local rotation = self.player.rotation or 0
+    local pos, rot = self.player.position, self.player.rotation or 0
+    self.direction = rot + math.pi
 
-    self.direction = rotation + math.pi
-
+    -- Calculate the position for the rear jet
     local anchor = self.player.engineTrailAnchor
     local offsetX, offsetY
     if anchor then
@@ -98,43 +107,32 @@ function PlayerEngineTrail:updateFromPlayer()
         offsetX = 0
         offsetY = self.player.thrusterOffset or 24
         if self.player.hullSize then
-            offsetY = (self.player.hullSize.y or offsetY)
+            offsetY = self.player.hullSize.y or offsetY
         end
     end
+    local sinR, cosR = math.sin(rot), math.cos(rot)
+    self.position.x = pos.x + cosR * offsetX - sinR * offsetY
+    self.position.y = pos.y + sinR * offsetX + cosR * offsetY
 
-    local sinR = math.sin(rotation)
-    local cosR = math.cos(rotation)
-    local rearX = position.x + cosR * offsetX - sinR * offsetY
-    local rearY = position.y + sinR * offsetX + cosR * offsetY
-
-    self.position = self.position or { x = 0, y = 0 }
-    self.position.x = rearX
-    self.position.y = rearY
-
+    -- Thrust strength
     local thrusting = self.player.isThrusting
-    local thrustForce = self.player.currentThrust or 0
-    local maxThrust = self.player.maxThrust or thrustForce
+    local thrust = self.player.currentThrust or 0
+    local maxThrust = self.player.maxThrust or thrust
     local strength = 0
-
     if thrusting then
-        if maxThrust and maxThrust > 0 then
-            strength = math.min(thrustForce / maxThrust, 1)
+        if maxThrust > 0 then
+            strength = math.min(thrust / maxThrust, 1)
         else
-            strength = thrustForce > 0 and 1 or 0.6
+            strength = thrust > 0 and 1 or 0.6
         end
     end
-
     self.thrustStrength = strength
 end
 
+-- Update the trail's emission and sync with player
 function PlayerEngineTrail:update(dt)
-    if not self.system then
-        return
-    end
-
-    if self.player then
-        self:updateFromPlayer()
-    end
+    if not self.system then return end
+    if self.player then self:updateFromPlayer() end
 
     local emissionRate = 0
     if self.active then
@@ -147,18 +145,15 @@ function PlayerEngineTrail:update(dt)
     self.system:update(dt)
 end
 
+-- Burst-emission (eg for boost/jump)
 function PlayerEngineTrail:emitBurst(count)
-    if not (self.system and count and count > 0) then
-        return
+    if self.system and count and count > 0 then
+        self.system:emit(count)
     end
-    self.system:emit(count)
 end
 
 function PlayerEngineTrail:draw()
-    if not self.system then
-        return
-    end
-
+    if not self.system then return end
     love.graphics.push("all")
     love.graphics.setBlendMode("add")
     love.graphics.draw(self.system)

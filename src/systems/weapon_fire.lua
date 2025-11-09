@@ -139,11 +139,79 @@ local function spawn_projectile(tinyWorld, physicsWorld, shooter, startX, startY
     return projectile
 end
 
+local function fire_hitscan(entity, startX, startY, dirX, dirY, weapon, physicsWorld, damageEntity, dt, beams)
+    local weaponConst = constants.weapons or {}
+    local beamConst = weaponConst[weapon.constantKey or "laser"] or {}
+    
+    local maxRange = weapon.maxRange or beamConst.max_range or 600
+    local endX = startX + dirX * maxRange
+    local endY = startY + dirY * maxRange
+
+    local hitInfo
+    if physicsWorld then
+        local closestFraction = 1
+        physicsWorld:rayCast(startX, startY, endX, endY, function(fixture, x, y, xn, yn, fraction)
+            if fixture:getBody() == entity.body then
+                return -1
+            end
+            local user = fixture:getUserData()
+            if type(user) == "table" and user.entity then
+                if fraction < closestFraction then
+                    closestFraction = fraction
+                    hitInfo = {
+                        entity = user.entity,
+                        x = x,
+                        y = y,
+                        collider = user.collider,
+                        fraction = fraction,
+                        type = user.type,
+                    }
+                end
+                return fraction
+            end
+            return -1
+        end)
+    end
+
+    if hitInfo then
+        endX = hitInfo.x
+        endY = hitInfo.y
+        local target = hitInfo.entity
+        local shouldDamage = true
+        if target then
+            if entity.faction and target.faction and entity.faction == target.faction then
+                shouldDamage = false
+            elseif entity.player and target.player then
+                shouldDamage = false
+            elseif entity.enemy and target.enemy then
+                shouldDamage = false
+            end
+        end
+
+        if shouldDamage and damageEntity and target then
+            local dps = weapon.damagePerSecond or beamConst.damage_per_second or 0
+            local damage = dps * dt
+            if damage > 0 then
+                damageEntity(target, damage)
+            end
+        end
+    end
+
+    local beamWidth = weapon.width or beamConst.width or 3
+
+    beams[#beams + 1] = {
+        x1 = startX,
+        y1 = startY,
+        x2 = endX,
+        y2 = endY,
+        width = beamWidth,
+    }
+end
+
 return function(context)
     context = context or {}
     local physicsWorld = context.physicsWorld
     local damageEntity = context.damageEntity
-    local weaponConst = constants.weapons or {}
 
     return tiny.system {
         filter = tiny.requireAll("weapon", "position"),
@@ -235,7 +303,6 @@ return function(context)
 
                     -- HITSCAN MODE (Laser beams)
                     elseif fireMode == "hitscan" then
-                        local beamConst = weaponConst[weapon.constantKey or "laser"] or {}
                         local usesBurst = weapon.fireRate ~= nil
                         local triggered = false
 
@@ -261,69 +328,7 @@ return function(context)
                         end
 
                         if beamActive then
-                            local maxRange = weapon.maxRange or beamConst.max_range or 600
-                            local endX = startX + dirX * maxRange
-                            local endY = startY + dirY * maxRange
-
-                            local hitInfo
-                            if physicsWorld then
-                                local closestFraction = 1
-                                physicsWorld:rayCast(startX, startY, endX, endY, function(fixture, x, y, xn, yn, fraction)
-                                    if fixture:getBody() == entity.body then
-                                        return -1
-                                    end
-                                    local user = fixture:getUserData()
-                                    if type(user) == "table" and user.entity then
-                                        if fraction < closestFraction then
-                                            closestFraction = fraction
-                                            hitInfo = {
-                                                entity = user.entity,
-                                                x = x,
-                                                y = y,
-                                                collider = user.collider,
-                                                fraction = fraction,
-                                                type = user.type,
-                                            }
-                                        end
-                                        return fraction
-                                    end
-                                    return -1
-                                end)
-                            end
-
-                            if hitInfo then
-                                endX = hitInfo.x
-                                endY = hitInfo.y
-                                local target = hitInfo.entity
-                                local shouldDamage = true
-                                if target then
-                                    if entity.faction and target.faction and entity.faction == target.faction then
-                                        shouldDamage = false
-                                    elseif entity.player and target.player then
-                                        shouldDamage = false
-                                    elseif entity.enemy and target.enemy then
-                                        shouldDamage = false
-                                    end
-                                end
-
-                                if shouldDamage and damageEntity and target then
-                                    local dps = weapon.damagePerSecond or beamConst.damage_per_second or 0
-                                    local damage = dps * dt
-                                    if damage > 0 then
-                                        damageEntity(target, damage)
-                                    end
-                                end
-                            end
-
-                            local beamWidth = weapon.width or beamConst.width or 3
-
-                            beams[#beams + 1] = {
-                                x1 = startX,
-                                y1 = startY,
-                                x2 = endX,
-                                y2 = endY,
-                                width = beamWidth,
-                            }
+                            fire_hitscan(entity, startX, startY, dirX, dirY, weapon, physicsWorld, damageEntity, dt, beams)
                         end
 
                         if usesBurst and weapon.beamTimer then
