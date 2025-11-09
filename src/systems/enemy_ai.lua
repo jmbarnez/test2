@@ -112,24 +112,7 @@ end
 local PlayerManager = require("src.player.manager")
 
 local function get_local_player(context)
-    if not context then
-        return nil
-    end
-
-    if context.player then
-        return context.player
-    end
-
-    if type(context.getLocalPlayer) == "function" then
-        return context:getLocalPlayer()
-    end
-
-    local state = context.state
-    if state then
-        return PlayerManager.getCurrentShip(state)
-    end
-
-    return nil
+    return PlayerManager.resolveLocalPlayer(context)
 end
 
 local function handle_wander(entity, body, ai, stats, dt)

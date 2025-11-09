@@ -3,6 +3,7 @@
 local tiny = require("libs.tiny")
 local loader = require("src.blueprints.loader")
 local math_util = require("src.util.math")
+local PlayerManager = require("src.player.manager")
 
 local TAU = math_util.TAU
 
@@ -41,7 +42,6 @@ return function(context)
     local defaultCount = enemyConfig.count or 8
     local count = choose_count(defaultCount)
     local ship_id = enemyConfig.ship_id or enemyConfig.shipId or enemyConfig.ship or enemyConfig.default_ship or "enemy_scout"
-    local spawnRadius = enemyConfig.spawn_radius or math.min(bounds.width, bounds.height) * 0.25
     local safe_radius = enemyConfig.safe_radius or enemyConfig.spawn_safe_radius or 600
 
     local instantiateContext = {
@@ -52,26 +52,7 @@ return function(context)
     local spawn_positions = {}
 
     local function resolve_avoid_entity()
-        if context.player then
-            return context.player
-        end
-
-        local state = context.state
-        if state then
-            if state.player then
-                return state.player
-            end
-
-            if type(state.getLocalPlayer) == "function" then
-                return state:getLocalPlayer()
-            end
-        end
-
-        if type(context.getLocalPlayer) == "function" then
-            return context:getLocalPlayer()
-        end
-
-        return nil
+        return PlayerManager.resolveLocalPlayer(context)
     end
 
     local function pick_spawn_point()
@@ -80,17 +61,10 @@ return function(context)
         local safe_sq = safe_radius * safe_radius
         local spacing_sq = (enemyConfig.separation_radius or safe_radius * 0.8) ^ 2
 
-        for attempt = 1, 24 do
-            local spawn_x, spawn_y
-
-            if spawnRadius and spawnRadius > 0 then
-                local inner_override = math.min(spawnRadius * 0.85, spawnRadius)
-                inner_override = math.max(inner_override, safe_radius * 0.75)
-                spawn_x, spawn_y = random_point_in_ring(bounds, spawnRadius, inner_override)
-            else
-                spawn_x = love.math.random(bounds.x, bounds.x + bounds.width)
-                spawn_y = love.math.random(bounds.y, bounds.y + bounds.height)
-            end
+        for attempt = 1, 50 do
+            -- Spawn across the entire world bounds
+            local spawn_x = love.math.random(bounds.x + safe_radius, bounds.x + bounds.width - safe_radius)
+            local spawn_y = love.math.random(bounds.y + safe_radius, bounds.y + bounds.height - safe_radius)
 
             local valid = true
 
@@ -119,11 +93,9 @@ return function(context)
             end
         end
 
-        if avoid_pos then
-            return avoid_pos.x + safe_radius, avoid_pos.y
-        end
-
-        return bounds.x + bounds.width * 0.5 + safe_radius, bounds.y + bounds.height * 0.5
+        -- Fallback: random position in world bounds
+        return love.math.random(bounds.x + safe_radius, bounds.x + bounds.width - safe_radius),
+               love.math.random(bounds.y + safe_radius, bounds.y + bounds.height - safe_radius)
     end
 
     local function spawn_once(world)
@@ -164,7 +136,7 @@ return function(context)
             enemy.spawnPosition = enemy.spawnPosition or { x = spawn_x, y = spawn_y }
             enemy.ai = enemy.ai or {}
             enemy.ai.home = enemy.ai.home or enemy.spawnPosition
-            local wanderRadius = enemyConfig.wander_radius or spawnRadius
+            local wanderRadius = enemyConfig.wander_radius or math.min(bounds.width, bounds.height) * 0.3
             if wanderRadius and wanderRadius > 0 then
                 enemy.ai.wanderRadius = enemy.ai.wanderRadius or wanderRadius
             end

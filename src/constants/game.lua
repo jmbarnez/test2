@@ -31,10 +31,10 @@ constants.love = {
 -- ============================================================================
 constants.window = {
     title = "Procedural Space",      -- Window title bar text
-    width = 1920,                    -- Window width in pixels
-    height = 1080,                   -- Window height in pixels
+    width = 1600,                    -- Window width in pixels
+    height = 900,                   -- Window height in pixels
     fullscreen = false,              -- Start in windowed mode
-    resizable = true,                -- Allow window resizing
+    resizable = false,                -- Allow window resizing
     vsync = 1,                       -- Enable vertical sync (1 = on, 0 = off)
     msaa = 0,                        -- Multisample anti-aliasing samples (0 = disabled)
 }
@@ -106,30 +106,6 @@ constants.render = {
     star_cull_margin = 4,            -- Extra pixels beyond viewport to render stars (prevents pop-in)
     fonts = {
         primary = "assets/fonts/Orbitron-Regular.ttf",
-    },
-    lighting = {
-        enabled = false,
-        -- Lighting shader defaults (tunable at runtime via Lighting.setConfig)
-        -- direction components are normalized automatically
-        -- *_strength parameters scale respective lighting terms per entity
-        direction = { -0.35, -0.55, 0.75 }, -- Directional light (roughly top-left)
-        ambient = { 0.32, 0.34, 0.42 },     -- Base ambient contribution
-        diffuse = { 0.85, 0.88, 0.95 },     -- Diffuse light color
-        specular = { 0.9, 0.9, 0.95 },      -- Specular highlight color
-        specular_power = 18,                -- Shininess factor
-        ambient_strength = 1.0,             -- Scalar multiplier for ambient term
-        diffuse_strength = 1.0,             -- Scalar multiplier for diffuse term
-        specular_strength = 0.65,           -- Scalar multiplier for specular term
-        rim_strength = 0.4,                 -- Strength of rim-light accent
-        rim_exponent = 2.2,                 -- Controls rim falloff curve
-    },
-    film_grain = {
-        enabled = true,              -- Toggle for the film grain post-effect
-        intensity = 0.08,            -- Overall strength of luminance grain (0-1)
-        color_amount = 0.035,        -- How much chroma noise leaks into RGB channels
-        luminance_boost = 0.6,       -- Scales grain in bright areas
-        grain_size = 1.6,            -- Larger = coarser noise pattern
-        speed = 1.1,                 -- Animation speed of the grain pattern
     },
 }
 

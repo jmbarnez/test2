@@ -20,13 +20,16 @@ return function(context)
             end
 
             local intents = context.intents or (context.intentHolder and context.intentHolder.playerIntents)
+            local intentHolder = context.intentHolder or context.state
+            local localPlayerId = intentHolder and intentHolder.localPlayerId
+
             local intent = intents and entity.playerId and intents[entity.playerId]
 
             local aimX, aimY
             if intent and intent.hasAim then
                 aimX = intent.aimX
                 aimY = intent.aimY
-            elseif context.camera and love.mouse then
+            elseif entity.playerId and localPlayerId and entity.playerId == localPlayerId and context.camera and love.mouse then
                 local mx, my = love.mouse.getPosition()
                 local cam = context.camera
                 local zoom = cam.zoom or 1

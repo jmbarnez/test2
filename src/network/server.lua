@@ -69,14 +69,25 @@ end
 
 function Server:initializeHostPlayer()
     local currentShip = PlayerManager.getCurrentShip(self.state)
-    if currentShip and not currentShip.playerId then
-        local hostPlayerId = self:generateUniquePlayerId()
-        currentShip.playerId = hostPlayerId
-        self.state.localPlayerId = hostPlayerId
-        self.state.players = self.state.players or {}
-        self.state.players[hostPlayerId] = currentShip
-        Intent.ensure(self.state, hostPlayerId)
+    if not currentShip then
+        return
     end
+
+    local existingId = currentShip.playerId
+    local needsNewId = not existingId or existingId == "player"
+
+    local hostPlayerId = existingId
+    if needsNewId then
+        hostPlayerId = self:generateUniquePlayerId()
+    else
+        self.usedPlayerIds[hostPlayerId] = true
+    end
+
+    currentShip.playerId = hostPlayerId
+    self.state.localPlayerId = hostPlayerId
+
+    PlayerManager.attachShip(self.state, currentShip, nil, hostPlayerId)
+    Intent.ensure(self.state, hostPlayerId)
 end
 
 function Server:shutdown()

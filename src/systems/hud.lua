@@ -1,6 +1,7 @@
 local tiny = require("libs.tiny")
 local theme = require("src.ui.theme")
 local vector = require("src.util.vector")
+local PlayerManager = require("src.player.manager")
 ---@diagnostic disable-next-line: undefined-global
 local love = love
 
@@ -118,13 +119,7 @@ end
 return function(context)
     return tiny.system {
         draw = function()
-            local player = context.player
-            if not player then
-                local state = context.state or context
-                if state and type(state.getLocalPlayer) == "function" then
-                    player = state:getLocalPlayer()
-                end
-            end
+            local player = PlayerManager.resolveLocalPlayer(context)
 
             love.graphics.push("all")
             love.graphics.origin()

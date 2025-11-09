@@ -6,6 +6,7 @@ local love = love
 local tooltip = {}
 
 local current_request = nil
+local MAX_APPEND_DEPTH = 8
 
 local function set_color(color)
     if type(color) == "table" then
@@ -95,25 +96,55 @@ function tooltip.draw(mouse_x, mouse_y, fonts)
 
     local entries = {}
 
-    local function append_wrapped(text, font, color)
-        if not text then
+    local function append_wrapped(text, font, color, visited, depth)
+        if not text or not font then
             return
         end
 
-        if type(text) == "table" then
+        visited = visited or {}
+        depth = (depth or 0) + 1
+        if depth > MAX_APPEND_DEPTH then
+            return
+        end
+
+        local text_type = type(text)
+        if text_type == "table" then
+            if visited[text] then
+                return
+            end
+            visited[text] = true
+
+            local had_entry = false
             for _, part in ipairs(text) do
-                append_wrapped(part, font, color)
+                had_entry = true
+                append_wrapped(part, font, color, visited, depth)
+            end
+
+            if not had_entry then
+                local fallback = text.text or text.label or text.name or text.description
+                if fallback then
+                    append_wrapped(fallback, font, color, visited, depth)
+                else
+                    append_wrapped(tostring(text), font, color, visited, depth)
+                end
             end
             return
         end
 
-        local wrapped = wrap_text(font, text, content_width_limit)
+        local str = tostring(text)
+        if str == "" then
+            return
+        end
+
+        local wrapped = wrap_text(font, str, content_width_limit)
         for _, line in ipairs(wrapped) do
-            entries[#entries + 1] = {
-                text = line,
-                font = font,
-                color = color,
-            }
+            if type(line) == "string" and line:match("%S") then
+                entries[#entries + 1] = {
+                    text = line,
+                    font = font,
+                    color = color,
+                }
+            end
         end
     end
 

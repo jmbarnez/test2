@@ -15,7 +15,7 @@ function love.load()
     love.window.setTitle(window.title)
     love.window.setMode(window.width, window.height, {
         resizable = window.resizable,
-        vsync = window.vsync,
+        vsync = window.vsync == 1,
         fullscreen = window.fullscreen,
         msaa = window.msaa,
     })
@@ -32,7 +32,7 @@ function love.load()
             state = gameplay,
             host = constants.network and constants.network.host,
             port = constants.network and constants.network.port,
-            autoConnect = true,
+            autoConnect = false,
             onConnect = function()
                 setMultiplayerStatus("Connected")
             end,
@@ -50,11 +50,3 @@ function love.load()
     end
 end
 
-function love.update(dt)
-    if gameplay and gameplay.networkManager then
-        gameplay.networkManager:update(dt)
-    end
-    if gameplay and gameplay.networkServer then
-        gameplay.networkServer:update(dt)
-    end
-end

@@ -2,6 +2,7 @@
 local theme = require("src.ui.theme")
 local window = require("src.ui.window")
 local tooltip = require("src.ui.tooltip")
+local PlayerManager = require("src.player.manager")
 ---@diagnostic disable-next-line: undefined-global
 local love = love
 
@@ -248,13 +249,7 @@ function cargo_window.draw(context)
         return
     end
 
-    local player = context.player
-    if not player then
-        local stateContext = context.state or context
-        if stateContext and type(stateContext.getLocalPlayer) == "function" then
-            player = stateContext:getLocalPlayer()
-        end
-    end
+    local player = PlayerManager.resolveLocalPlayer(context)
     local cargo = player and player.cargo
     if cargo and cargo.refresh then
         cargo:refresh()

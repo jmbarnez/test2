@@ -81,35 +81,50 @@ function PlayerManager.attachShip(state, shipEntity, levelData, playerId)
         return shipEntity
     end
 
-    local pilot = PlayerManager.applyLevel(state, levelData, playerId)
+    state.players = state.players or {}
 
-    shipEntity.player = true
-    shipEntity.level = nil
-    shipEntity.pilot = pilot
+    local resolvedPlayerId = playerId
+        or shipEntity.playerId
+        or state.localPlayerId
+        or "player"
 
+    shipEntity.playerId = resolvedPlayerId
 
-    if not playerId then
-        if shipEntity.playerId then
-            playerId = shipEntity.playerId
-        elseif pilot and pilot.playerId then
-            playerId = pilot.playerId
-        else
-            playerId = "player"
+    for id, entity in pairs(state.players) do
+        if entity == shipEntity and id ~= resolvedPlayerId then
+            state.players[id] = nil
         end
     end
+    state.players[resolvedPlayerId] = shipEntity
 
-    shipEntity.playerId = playerId
+    local existingLocalShip = PlayerManager.getCurrentShip(state)
+    local hasLocalId = state.localPlayerId ~= nil
+    local isLocalPlayer = (existingLocalShip == shipEntity)
+        or (hasLocalId and state.localPlayerId == resolvedPlayerId)
+        or (not hasLocalId and existingLocalShip == nil)
 
-    if pilot and playerId and not pilot.playerId then
-        pilot.playerId = playerId
+    shipEntity.player = true
+
+    if isLocalPlayer then
+        state.localPlayerId = resolvedPlayerId
+
+        local pilot = PlayerManager.applyLevel(state, levelData, resolvedPlayerId)
+        shipEntity.level = nil
+        shipEntity.pilot = pilot
+
+        if pilot then
+            pilot.playerId = resolvedPlayerId
+            pilot.currentShip = shipEntity
+        end
+
+        state.playerShip = shipEntity
+        state.player = shipEntity
+    else
+        shipEntity.pilot = nil
+        if levelData then
+            shipEntity.level = copy_table(levelData)
+        end
     end
-
-    if pilot then
-        pilot.currentShip = shipEntity
-    end
-
-    state.playerShip = shipEntity
-    state.player = shipEntity
 
     return shipEntity
 end
@@ -157,10 +172,125 @@ function PlayerManager.clearShip(state, shipEntity)
         if state.player == target then
             state.player = nil
         end
+        if state.players then
+            for id, entity in pairs(state.players) do
+                if entity == target then
+                    state.players[id] = nil
+                end
+            end
+        end
     else
         state.playerShip = nil
         state.player = nil
+        state.players = nil
     end
+end
+
+-- Consolidated player resolution methods
+
+function PlayerManager.getLocalPlayer(state)
+    if not state then
+        return nil
+    end
+
+    -- Primary: Use PlayerManager's current ship
+    local ship = PlayerManager.getCurrentShip(state)
+    if ship then
+        -- Ensure state.player is synchronized
+        state.player = ship
+        return ship
+    end
+
+    -- Fallback 1: Check players table with localPlayerId
+    if state.players and state.localPlayerId then
+        local localPlayer = state.players[state.localPlayerId]
+        if localPlayer then
+            PlayerManager.attachShip(state, localPlayer)
+            return localPlayer
+        end
+    end
+
+    -- Fallback 2: Find any player in players table
+    if state.players then
+        for _, entity in pairs(state.players) do
+            if entity then
+                PlayerManager.attachShip(state, entity)
+                return entity
+            end
+        end
+    end
+
+    return nil
+end
+
+function PlayerManager.resolveLocalPlayer(context)
+    if not context then
+        return nil
+    end
+
+    -- Direct player reference
+    if context.player then
+        return context.player
+    end
+
+    -- Context has getLocalPlayer method (like gameplay state)
+    if type(context.getLocalPlayer) == "function" then
+        return context:getLocalPlayer()
+    end
+
+    -- Context has a state property
+    local state = context.state or context
+    if state then
+        return PlayerManager.getLocalPlayer(state)
+    end
+
+    return nil
+end
+
+function PlayerManager.collectAllPlayers(state)
+    local players = {}
+    
+    if not state then
+        return players
+    end
+
+    -- Collect from players table
+    if state.players then
+        for playerId, entity in pairs(state.players) do
+            if entity and entity.playerId then
+                players[playerId] = entity
+            end
+        end
+    end
+
+    -- Ensure local player is included
+    local localShip = PlayerManager.getCurrentShip(state)
+    if localShip and localShip.playerId then
+        players[localShip.playerId] = localShip
+    elseif state.player and state.player.playerId then
+        players[state.player.playerId] = state.player
+    end
+
+    return players
+end
+
+function PlayerManager.getPlayerById(state, playerId)
+    if not (state and playerId) then
+        return nil
+    end
+
+    -- Check players table first
+    if state.players and state.players[playerId] then
+        return state.players[playerId]
+    end
+
+    -- Check if it's the local player
+    local localPlayer = PlayerManager.getLocalPlayer(state)
+    if localPlayer and localPlayer.playerId == playerId then
+        return localPlayer
+    end
+
+    return nil
 end
 
 return PlayerManager

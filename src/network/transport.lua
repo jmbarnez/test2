@@ -1,5 +1,14 @@
 local Transport = {}
 
+-- Set to true to enable network debug logging
+local DEBUG_NETWORK = false
+
+local function debug_print(...)
+    if DEBUG_NETWORK then
+        print(...)
+    end
+end
+
 local function extend_cpath()
     local path_sep = package.config:sub(1, 1)
     local patterns = {
@@ -71,7 +80,7 @@ function Transport.createServer(config)
         local flags = reliable and "reliable" or "unreliable"
         local ok, err = pcall(function() self.host:broadcast(channel or 0, data, flags) end)
         if not ok then
-            print("Server broadcast error:", err)
+            debug_print("Server broadcast error:", err)
             return false
         end
         return true
@@ -84,7 +93,7 @@ function Transport.createServer(config)
         local flags = reliable and "reliable" or "unreliable"
         local ok, err = pcall(function() peer:send(data, channel or 0, flags) end)
         if not ok then
-            print("Server send error:", err)
+            debug_print("Server send error:", err)
             return false
         end
         return true
@@ -94,7 +103,7 @@ function Transport.createServer(config)
         timeout = timeout or 0
         local ok, event = pcall(function() return self.host:service(timeout) end)
         if not ok then
-            print("ENet server service error:", event)
+            debug_print("ENet server service error:", event)
             return
         end
         
@@ -104,7 +113,7 @@ function Transport.createServer(config)
                 if self.onConnect then
                     local success, err = pcall(self.onConnect, event.peer)
                     if not success then
-                        print("Server onConnect callback error:", err)
+                        debug_print("Server onConnect callback error:", err)
                     end
                 end
             elseif event.type == "disconnect" then
@@ -112,14 +121,14 @@ function Transport.createServer(config)
                 if self.onDisconnect then
                     local success, err = pcall(self.onDisconnect, event.peer, event.data)
                     if not success then
-                        print("Server onDisconnect callback error:", err)
+                        debug_print("Server onDisconnect callback error:", err)
                     end
                 end
             elseif event.type == "receive" then
                 if self.onReceive then
                     local success, err = pcall(self.onReceive, event.peer, event.data, event.channel)
                     if not success then
-                        print("Server onReceive callback error:", err)
+                        debug_print("Server onReceive callback error:", err)
                     end
                 end
                 if event.packet then
@@ -130,14 +139,14 @@ function Transport.createServer(config)
                 if self.onTimeout then
                     local success, err = pcall(self.onTimeout, event.peer)
                     if not success then
-                        print("Server onTimeout callback error:", err)
+                        debug_print("Server onTimeout callback error:", err)
                     end
                 end
             end
             
             ok, event = pcall(function() return self.host:service(0) end)
             if not ok then
-                print("ENet server service error during event loop:", event)
+                debug_print("ENet server service error during event loop:", event)
                 break
             end
         end
@@ -147,12 +156,12 @@ function Transport.createServer(config)
         for _, peer in pairs(self.peers) do
             local ok, err = pcall(function() peer:disconnect_later(code or 0) end)
             if not ok then
-                print("Error disconnecting peer during shutdown:", err)
+                debug_print("Error disconnecting peer during shutdown:", err)
             end
         end
         local ok, err = pcall(function() self.host:flush() end)
         if not ok then
-            print("Error flushing host during shutdown:", err)
+            debug_print("Error flushing host during shutdown:", err)
         end
     end
 
@@ -184,7 +193,7 @@ function Transport.createClient(config)
         if self.peer then
             local ok = pcall(function() self.peer:disconnect_now() end)
             if not ok then
-                print("Warning: Error disconnecting existing peer")
+                debug_print("Warning: Error disconnecting existing peer")
             end
         end
         
@@ -207,7 +216,7 @@ function Transport.createClient(config)
         local flags = reliable and "reliable" or "unreliable"
         local ok, err = pcall(function() self.peer:send(data, channel or 0, flags) end)
         if not ok then
-            print("Client send error:", err)
+            debug_print("Client send error:", err)
             return false
         end
         return true
@@ -217,7 +226,7 @@ function Transport.createClient(config)
         timeout = timeout or 0
         local ok, event = pcall(function() return self.host:service(timeout) end)
         if not ok then
-            print("ENet client service error:", event)
+            debug_print("ENet client service error:", event)
             return
         end
         
@@ -226,14 +235,14 @@ function Transport.createClient(config)
                 if self.onConnect then
                     local success, err = pcall(self.onConnect, event.peer)
                     if not success then
-                        print("Client onConnect callback error:", err)
+                        debug_print("Client onConnect callback error:", err)
                     end
                 end
             elseif event.type == "disconnect" then
                 if self.onDisconnect then
                     local success, err = pcall(self.onDisconnect, event.peer, event.data)
                     if not success then
-                        print("Client onDisconnect callback error:", err)
+                        debug_print("Client onDisconnect callback error:", err)
                     end
                 end
                 self.peer = nil
@@ -241,7 +250,7 @@ function Transport.createClient(config)
                 if self.onReceive then
                     local success, err = pcall(self.onReceive, event.data, event.channel)
                     if not success then
-                        print("Client onReceive callback error:", err)
+                        debug_print("Client onReceive callback error:", err)
                     end
                 end
                 if event.packet then
@@ -251,7 +260,7 @@ function Transport.createClient(config)
                 if self.onTimeout then
                     local success, err = pcall(self.onTimeout, event.peer)
                     if not success then
-                        print("Client onTimeout callback error:", err)
+                        debug_print("Client onTimeout callback error:", err)
                     end
                 end
                 self.peer = nil
@@ -259,7 +268,7 @@ function Transport.createClient(config)
             
             ok, event = pcall(function() return self.host:service(0) end)
             if not ok then
-                print("ENet client service error during event loop:", event)
+                debug_print("ENet client service error during event loop:", event)
                 break
             end
         end
@@ -269,7 +278,7 @@ function Transport.createClient(config)
         if self.peer then
             local ok, err = pcall(function() self.peer:disconnect(code or 0) end)
             if not ok then
-                print("Client disconnect error:", err)
+                debug_print("Client disconnect error:", err)
             end
             self.peer = nil
         end

@@ -103,10 +103,11 @@ function NetworkManager:handleMessage(data, _channel)
 
     if message.type == "player_assigned" and message.playerId then
         self.state.localPlayerId = message.playerId
-        
+
         local localShip = PlayerManager.getCurrentShip(self.state)
         if localShip then
             localShip.playerId = message.playerId
+            PlayerManager.attachShip(self.state, localShip, nil, message.playerId)
         end
     elseif message.type == "snapshot" and message.payload then
         Snapshot.apply(self.state, message.payload)
