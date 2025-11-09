@@ -56,7 +56,6 @@ return function(context)
     context = context or {}
     local physicsWorld = context.physicsWorld
     local damageEntity = context.damageEntity
-    local particleSystem = context.particleSystem
     
     return tiny.system {
         filter = tiny.requireAll("projectile", "position"),
@@ -118,34 +117,6 @@ return function(context)
             
             -- Don't hit boundaries
             if targetData.type == "boundary" then
-                -- Create enhanced impact particles at boundary collision
-                if particleSystem and projectile.position then
-                    local colors = build_impact_colors(projectile.drawable)
-                    local vx, vy = 0, 0
-                    if projectile.velocity then
-                        vx, vy = projectile.velocity.x, projectile.velocity.y
-                    end
-                    
-                    particleSystem:createImpactEffect(
-                        projectile.position.x,
-                        projectile.position.y,
-                        "boundary",
-                        {
-                            colors = colors,
-                            particleCount = 25,
-                            speed = { min = 80, max = 200 },
-                            spread = math.pi,
-                            size = { min = 2, max = 8 },
-                            lifetime = { min = 0.3, max = 1.2 },
-                            fadeTime = 0.8,
-                            sparkCount = 15,
-                            sparkSpeed = { min = 120, max = 300 },
-                            sparkLifetime = { min = 0.2, max = 0.6 },
-                            velocityInherit = 0.3,
-                            initialVelocity = { x = vx, y = vy }
-                        }
-                    )
-                end
                 projectile.pendingDestroy = true
                 return
             end
@@ -168,42 +139,6 @@ return function(context)
                 if damage > 0 then
                     damageEntity(target, damage)
                 end
-            end
-            
-            -- Create enhanced impact particles on hit
-            if particleSystem and projectile.position then
-                local effectType = shouldDamage and "damage" or "hit"
-                local colors = build_impact_colors(projectile.drawable)
-                local vx, vy = 0, 0
-                if projectile.velocity then
-                    vx, vy = projectile.velocity.x, projectile.velocity.y
-                end
-                
-                local particleCount = shouldDamage and 35 or 20
-                local sparkCount = shouldDamage and 20 or 12
-                
-                particleSystem:createImpactEffect(
-                    projectile.position.x,
-                    projectile.position.y,
-                    effectType,
-                    {
-                        colors = colors,
-                        particleCount = particleCount,
-                        speed = { min = 60, max = 180 },
-                        spread = math.pi * 1.2,
-                        size = { min = 1.5, max = 6 },
-                        lifetime = { min = 0.4, max = 1.5 },
-                        fadeTime = 0.9,
-                        sparkCount = sparkCount,
-                        sparkSpeed = { min = 100, max = 250 },
-                        sparkLifetime = { min = 0.15, max = 0.5 },
-                        burstIntensity = shouldDamage and 1.5 or 1.0,
-                        velocityInherit = 0.4,
-                        initialVelocity = { x = vx, y = vy },
-                        glowRadius = shouldDamage and 15 or 10,
-                        shockwaveSize = shouldDamage and 25 or 18
-                    }
-                )
             end
             
             -- Destroy projectile on hit
