@@ -16,10 +16,10 @@ local function collect_players(state)
     end
 
     local localShip = PlayerManager.getCurrentShip(state)
-    if localShip then
-        players[localShip.playerId or "player"] = localShip
-    elseif state.player then
-        players[state.player.playerId or "player"] = state.player
+    if localShip and localShip.playerId then
+        players[localShip.playerId] = localShip
+    elseif state.player and state.player.playerId then
+        players[state.player.playerId] = state.player
     end
 
     return players
@@ -65,12 +65,12 @@ function Snapshot.apply(state, snapshot)
 
         if not entity then
             local localShip = PlayerManager.getCurrentShip(state)
-            if localShip and (localShip.playerId == playerId or playerId == "player") then
+            if localShip and localShip.playerId == playerId then
                 entity = localShip
             end
         end
 
-        if not entity and state.player and (state.player.playerId == playerId or playerId == "player") then
+        if not entity and state.player and state.player.playerId == playerId then
             entity = state.player
         end
 
@@ -96,8 +96,24 @@ function Snapshot.apply(state, snapshot)
         end
 
         if entity then
+            local localShip = PlayerManager.getCurrentShip(state)
+            local isLocalPlayer = false
+            
+            -- Check if this is the local player by comparing entities or player IDs
+            if localShip then
+                isLocalPlayer = (entity == localShip) or 
+                               (localShip.playerId and localShip.playerId == playerId) or
+                               (state.localPlayerId and state.localPlayerId == playerId)
+            end
+            
+            if isLocalPlayer then
+                -- Skip applying authoritative snapshot to the locally controlled ship to avoid jitter.
+                goto continue
+            end
             ShipRuntime.applySnapshot(entity, playerSnapshot)
         end
+
+        ::continue::
     end
 end
 

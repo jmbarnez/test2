@@ -79,7 +79,10 @@ local function draw_minimap(context, player)
             
             -- Only draw if within minimap bounds
             if mapX >= x and mapX <= x + minimap_size and mapY >= y and mapY <= y + minimap_size then
-                if entity.blueprint and entity.blueprint.category == "asteroids" then
+                if entity.player then
+                    love.graphics.setColor(hud_colors.minimap_teammate)
+                    love.graphics.circle("fill", mapX, mapY, 2.5)
+                elseif entity.blueprint and entity.blueprint.category == "asteroids" then
                     love.graphics.setColor(hud_colors.minimap_asteroid)
                     love.graphics.circle("fill", mapX, mapY, 1.5)
                 elseif entity.blueprint and entity.blueprint.category == "ships" then

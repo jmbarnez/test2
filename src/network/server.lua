@@ -3,6 +3,7 @@ local Snapshot = require("src.network.snapshot")
 local Intent = require("src.input.intent")
 local Entities = require("src.states.gameplay.entities")
 local PlayerManager = require("src.player.manager")
+local constants = require("src.constants.game")
 local json = require("libs.json")
 
 local love = love
@@ -28,7 +29,7 @@ function Server.new(config)
     config = config or {}
     local state = assert(config.state, "Server requires gameplay state")
     local host = config.host or "0.0.0.0"
-    local port = config.port or 22122
+    local port = config.port or constants.network.port
 
     local self = setmetatable({
         state = state,
@@ -37,6 +38,7 @@ function Server.new(config)
         peers = {},
         peerPlayers = {},
         playerSeq = 0,
+        usedPlayerIds = {},
         snapshotInterval = config.snapshotInterval or 0.1,
         snapshotTimer = 0,
     }, Server)
@@ -59,7 +61,22 @@ function Server.new(config)
         end,
     })
 
+    -- Ensure host player has a proper ID if they already exist
+    self:initializeHostPlayer()
+    
     return self
+end
+
+function Server:initializeHostPlayer()
+    local currentShip = PlayerManager.getCurrentShip(self.state)
+    if currentShip and not currentShip.playerId then
+        local hostPlayerId = self:generateUniquePlayerId()
+        currentShip.playerId = hostPlayerId
+        self.state.localPlayerId = hostPlayerId
+        self.state.players = self.state.players or {}
+        self.state.players[hostPlayerId] = currentShip
+        Intent.ensure(self.state, hostPlayerId)
+    end
 end
 
 function Server:shutdown()
@@ -70,14 +87,34 @@ function Server:shutdown()
     self.peerPlayers = {}
 end
 
+function Server:generateUniquePlayerId()
+    local playerId
+    repeat
+        self.playerSeq = self.playerSeq + 1
+        playerId = string.format("player_%03d", self.playerSeq)
+    until not self.usedPlayerIds[playerId]
+    
+    self.usedPlayerIds[playerId] = true
+    return playerId
+end
+
 function Server:onConnect(peer)
-    self.playerSeq = self.playerSeq + 1
-    local playerId = string.format("player_%03d", self.playerSeq)
+    local playerId = self:generateUniquePlayerId()
     self.peers[peer:index()] = peer
     self.peerPlayers[peer:index()] = playerId
 
     self:spawnPlayerForPeer(peer, playerId)
 
+    -- Send the client their assigned player ID
+    local playerAssignedPayload = encode_message({ 
+        type = "player_assigned", 
+        playerId = playerId 
+    })
+    if playerAssignedPayload then
+        self.transport:send(peer, playerAssignedPayload, 0, true)
+    end
+
+    -- Send full snapshot to new player so they can see all existing players
     local snapshot = Snapshot.capture(self.state)
     if snapshot then
         local payload = encode_message({ type = "snapshot", payload = snapshot })
@@ -85,6 +122,9 @@ function Server:onConnect(peer)
             self.transport:send(peer, payload, 0, true)
         end
     end
+    
+    -- Broadcast updated snapshot to all players so they can see the new player
+    self:broadcastSnapshot()
 end
 
 function Server:onDisconnect(peer, _code)
@@ -93,17 +133,25 @@ function Server:onDisconnect(peer, _code)
     self.peers[index] = nil
     self.peerPlayers[index] = nil
 
-    if playerId and self.state and self.state.players then
-        local entity = self.state.players[playerId]
-        if entity then
-            if self.state.world then
-                self.state.world:remove(entity)
+    if playerId then
+        -- Mark player ID as available for reuse
+        self.usedPlayerIds[playerId] = nil
+        
+        if self.state and self.state.players then
+            local entity = self.state.players[playerId]
+            if entity then
+                if self.state.world then
+                    self.state.world:remove(entity)
+                end
+                if entity.body and not entity.body:isDestroyed() then
+                    entity.body:destroy()
+                end
+                self.state.players[playerId] = nil
             end
-            if entity.body and not entity.body:isDestroyed() then
-                entity.body:destroy()
-            end
-            self.state.players[playerId] = nil
         end
+        
+        -- Broadcast updated snapshot to all remaining players
+        self:broadcastSnapshot()
     end
 end
 
@@ -143,42 +191,15 @@ end
 function Server:spawnPlayerForPeer(peer, playerId)
     self.state.players = self.state.players or {}
 
-    local entity
-    local currentShip = PlayerManager.getCurrentShip(self.state)
-    local function table_has_nonlocal_players(state, localShip)
-        if not state.players then
-            return false
-        end
-        for _, ent in pairs(state.players) do
-            if ent and ent ~= localShip then
-                return true
-            end
-        end
-        return false
-    end
-
-    if currentShip and not table_has_nonlocal_players(self.state, currentShip) then
-        -- Reuse existing local player entity for host peer
-        if self.state.players then
-            for id, ent in pairs(self.state.players) do
-                if ent == currentShip then
-                    self.state.players[id] = nil
-                end
-            end
-        end
-        entity = currentShip
-        entity.playerId = playerId
+    -- Always spawn a new player entity for connecting clients
+    -- The host player is already initialized and doesn't connect as a client
+    local entity = Entities.spawnPlayer(self.state, { playerId = playerId })
+    if entity then
         self.state.players[playerId] = entity
-        self.state.localPlayerId = playerId
-    else
-        entity = Entities.spawnPlayer(self.state, { playerId = playerId })
-        if entity then
-            self.state.players[playerId] = entity
-        end
     end
 
     Intent.ensure(self.state, playerId)
-
+    
     if self.onPlayerJoined then
         self.onPlayerJoined(peer, entity, playerId)
     end

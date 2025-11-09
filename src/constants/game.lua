@@ -66,8 +66,8 @@ constants.world = {
     bounds = {
         x = 0,                       -- World origin X coordinate
         y = 0,                       -- World origin Y coordinate
-        width = 5000,                -- Total world width in pixels
-        height = 5000,               -- Total world height in pixels
+        width = 50000,                -- Total world width in pixels
+        height = 50000,               -- Total world height in pixels
     },
     default_sector = "default_sector", -- Initial sector to load on game start
 }
@@ -82,7 +82,7 @@ constants.player = {
 }
 
 constants.network = {
-    host = "127.0.0.1",
+    host = "0.0.0.0",
     port = 25565,
 }
 

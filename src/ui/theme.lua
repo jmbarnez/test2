@@ -47,6 +47,7 @@ local theme = {
             minimap_background = { 0, 0, 0, 0.8 },
             minimap_border = { 0.15, 0.15, 0.2, 1 },
             minimap_player = { 0, 0.8, 0, 1 },
+            minimap_teammate = { 0.2, 0.6, 1, 1 },
             minimap_asteroid = { 0.4, 0.35, 0.3, 0.7 },
             minimap_ship = { 0.8, 0.2, 0.2, 1 },
             diagnostics = { 0.7, 0.7, 0.75, 1 },

@@ -25,9 +25,7 @@ end
 
 local function format_address(host, port)
     host = host or "127.0.0.1"
-    if type(port) ~= "number" then
-        port = tonumber(port) or 22122
-    end
+    port = type(port) == "number" and port or (tonumber(port) or 22122)
     return string.format("%s:%d", host, port)
 end
 
@@ -48,7 +46,7 @@ function NetworkManager.new(config)
     self.client = Transport.createClient({
         host = self.host,
         port = self.port,
-        channels = config.channels,
+        channels = config.channels or 2,
         onConnect = function(peer)
             self.connected = true
             if config.onConnect then
@@ -72,8 +70,6 @@ function NetworkManager.new(config)
         end,
     })
 
-    self.client.address = format_address(self.host, self.port)
-
     if config.autoConnect ~= false then
         self:connect()
     end
@@ -96,19 +92,23 @@ function NetworkManager:disconnect(code)
 end
 
 function NetworkManager:shutdown()
-    if self.client then
-        self.client:disconnect()
-    end
-    self.connected = false
+    self:disconnect()
 end
 
 function NetworkManager:handleMessage(data, _channel)
     local message = decode_message(data)
-    if type(message) ~= "table" then
+    if type(message) ~= "table" or not message.type then
         return
     end
 
-    if message.type == "snapshot" and message.payload then
+    if message.type == "player_assigned" and message.playerId then
+        self.state.localPlayerId = message.playerId
+        
+        local localShip = PlayerManager.getCurrentShip(self.state)
+        if localShip then
+            localShip.playerId = message.playerId
+        end
+    elseif message.type == "snapshot" and message.payload then
         Snapshot.apply(self.state, message.payload)
     elseif message.type == "intent" and message.playerId and message.payload then
         self:applyRemoteIntent(message.playerId, message.payload)
@@ -130,9 +130,9 @@ function NetworkManager:applyRemoteIntent(playerId, payload)
     intent.moveX = payload.moveX or 0
     intent.moveY = payload.moveY or 0
     intent.moveMagnitude = payload.moveMagnitude or 0
-    intent.aimX = payload.aimX or intent.aimX
-    intent.aimY = payload.aimY or intent.aimY
-    intent.hasAim = payload.hasAim ~= nil and payload.hasAim or intent.hasAim
+    intent.aimX = payload.aimX or intent.aimX or 0
+    intent.aimY = payload.aimY or intent.aimY or 0
+    intent.hasAim = payload.hasAim ~= nil and payload.hasAim or (intent.hasAim or false)
     intent.firePrimary = payload.firePrimary or false
     intent.fireSecondary = payload.fireSecondary or false
 end
@@ -158,24 +158,19 @@ function NetworkManager:sendSnapshot()
 end
 
 function NetworkManager:sendLocalIntent()
-    if not self.connected then
-        return
-    end
-
-    local ship = PlayerManager.getCurrentShip(self.state)
-    if not ship then
+    if not self.connected or not self.state.localPlayerId then
         return
     end
 
     local intents = self.state.playerIntents
-    local intent = intents and intents[ship.playerId]
+    local intent = intents and intents[self.state.localPlayerId]
     if not intent then
         return
     end
 
     local payload = encode_message({
         type = "intent",
-        playerId = ship.playerId,
+        playerId = self.state.localPlayerId,
         payload = {
             moveX = intent.moveX,
             moveY = intent.moveY,
@@ -204,14 +199,13 @@ function NetworkManager:update(dt)
         return
     end
 
-    self.snapshotTimer = self.snapshotTimer + dt
     self.intentTimer = self.intentTimer + dt
-
     if self.intentTimer >= self.intentInterval then
         self.intentTimer = self.intentTimer - self.intentInterval
         self:sendLocalIntent()
     end
 
+    self.snapshotTimer = self.snapshotTimer + dt
     if self.snapshotTimer >= self.snapshotInterval then
         self.snapshotTimer = self.snapshotTimer - self.snapshotInterval
         self:sendSnapshot()

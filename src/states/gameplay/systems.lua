@@ -28,10 +28,14 @@ function Systems.initialize(state, damageCallback)
         keyboardCaptured = false,
     }
 
+    local constants = require("src.constants.game")
     state.multiplayerUI = state.multiplayerUI or {
         visible = false,
         status = "",
-        addressInput = string.format("%s:%d", (state.networkManager and state.networkManager.host) or "127.0.0.1", (state.networkManager and state.networkManager.port) or 22122),
+        addressInput = string.format("%s:%d", 
+            (state.networkManager and state.networkManager.host) or constants.network.host, 
+            (state.networkManager and state.networkManager.port) or constants.network.port
+        ),
     }
 
     if damageCallback then

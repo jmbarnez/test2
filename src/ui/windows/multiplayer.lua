@@ -1,6 +1,7 @@
 local window = require("src.ui.window")
 local theme = require("src.ui.theme")
 local Server = require("src.network.server")
+local constants = require("src.constants.game")
 
 local love = love
 
@@ -8,17 +9,17 @@ local multiplayer_window = {}
 
 local function split_address(address)
     if type(address) ~= "string" then
-        return "127.0.0.1", 22122
+        return constants.network.host, constants.network.port
     end
 
     local host, port = address:match("([^:]+):?(%d*)")
-    host = host ~= "" and host or "127.0.0.1"
-    port = tonumber(port) or 22122
+    host = host ~= "" and host or constants.network.host
+    port = tonumber(port) or constants.network.port
     return host, port
 end
 
 local function format_address(host, port)
-    return string.format("%s:%d", host or "127.0.0.1", tonumber(port) or 22122)
+    return string.format("%s:%d", host or constants.network.host, tonumber(port) or constants.network.port)
 end
 
 local function draw_button(x, y, w, h, label, isActive)
@@ -106,7 +107,7 @@ local function draw_text_input(frame, context)
     end
 
     love.graphics.setColor(1, 1, 1, 1)
-    local display = (state.addressInput or "127.0.0.1:22122") .. caret
+    local display = (state.addressInput or format_address(constants.network.host, constants.network.port)) .. caret
     love.graphics.print(display, frame.content.x + 8, inputY + (inputHeight - fonts.body:getHeight()) * 0.5)
 
     return {
@@ -145,6 +146,12 @@ local function host_game(context)
         context.networkServer = nil
     end
 
+    -- Disconnect any existing client connection first
+    local manager = get_manager(context)
+    if manager then
+        manager:disconnect()
+    end
+
     local ok, err = pcall(function()
         context.networkServer = Server.new({
             state = context,
@@ -159,23 +166,8 @@ local function host_game(context)
         return
     end
 
-    local manager = get_manager(context)
-    if not manager then
-        set_status(state, "Client manager unavailable")
-        return
-    end
-
-    manager:disconnect()
-    manager:setAddress(host, port)
-    local connected, connectErr = pcall(function()
-        manager:connect()
-    end)
-
-    if not connected then
-        set_status(state, string.format("Host running, client connect failed: %s", tostring(connectErr)))
-        return
-    end
-
+    -- When hosting, we don't need to connect as a client since we're already the local player
+    -- The server will handle the host player directly
     set_status(state, string.format("Hosting on %s:%d", host, port))
 end
 
@@ -311,6 +303,12 @@ function multiplayer_window.draw(context)
 
     process_requests(context)
 
+    if frame.close_clicked then
+        state.visible = false
+        state.dragging = false
+        close_text_input(state)
+    end
+
     love.graphics.pop()
 end
 
@@ -336,6 +334,10 @@ function multiplayer_window.keypressed(context, key)
     if not state.visible then
         if key == "f5" then
             state.visible = true
+            -- Initialize with default network constants if no address is set
+            if not state.addressInput or state.addressInput == "" then
+                state.addressInput = format_address(constants.network.host, constants.network.port or constants.network.defaultPort)
+            end
             ensure_status(state, "")
             return true
         end
