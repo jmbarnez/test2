@@ -334,9 +334,8 @@ function multiplayer_window.keypressed(context, key)
     if not state.visible then
         if key == "f5" then
             state.visible = true
-            -- Initialize with default network constants if no address is set
             if not state.addressInput or state.addressInput == "" then
-                state.addressInput = format_address(constants.network.host, constants.network.port or constants.network.defaultPort)
+                state.addressInput = format_address(constants.network.host, constants.network.port)
             end
             ensure_status(state, "")
             return true

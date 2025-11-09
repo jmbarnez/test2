@@ -125,11 +125,6 @@ function gameplay:update(dt)
         self.engineTrail:update(dt)
     end
 
-    local movementSystem = self.movementSystem
-    if movementSystem and movementSystem.update then
-        movementSystem:update(dt)
-    end
-
     Entities.updateHealthTimers(self.world, dt)
 
     View.updateCamera(self)

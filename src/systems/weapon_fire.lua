@@ -3,6 +3,7 @@
 local tiny = require("libs.tiny")
 local constants = require("src.constants.game")
 local vector = require("src.util.vector")
+local Intent = require("src.input.intent")
 
 local DEFAULT_PROJECTILE_COLOR = { 0.2, 0.8, 1.0 }
 local DEFAULT_PROJECTILE_GLOW = { 0.5, 0.9, 1.0 }
@@ -226,7 +227,9 @@ return function(context)
             end
 
             local cam = context.camera
-            local intents = context.intents or (context.intentHolder and context.intentHolder.playerIntents)
+            local intentHolder = context.intentHolder or context.state or context
+            local localPlayerId = intentHolder and intentHolder.localPlayerId
+            local localPlayerEntity = intentHolder and (intentHolder.player or intentHolder.playerShip)
             local beams = self.active_beams
             for i = 1, #beams do
                 beams[i] = nil
@@ -248,41 +251,65 @@ return function(context)
 
                     local fire = false
                     local targetX, targetY
+                    local intent = Intent.get(intentHolder, entity.playerId)
+                    local isLocalPlayer = false
+                    if entity.player then
+                        if localPlayerId then
+                            isLocalPlayer = entity.playerId == localPlayerId
+                        elseif localPlayerEntity then
+                            isLocalPlayer = entity == localPlayerEntity
+                        end
+                    end
+                    weapon.sequence = weapon.sequence or 0
+                    if weapon._replicatedSequence == nil then
+                        if isLocalPlayer then
+                            weapon._replicatedSequence = weapon.sequence
+                        else
+                            weapon._replicatedSequence = 0
+                        end
+                    end
 
                     if entity.player then
-                        local intent = intents and entity.playerId and intents[entity.playerId]
                         if intent then
                             fire = not not intent.firePrimary
-                            if intent.hasAim then
-                                targetX = intent.aimX
-                                targetY = intent.aimY
+                            targetX = intent.aimX
+                            targetY = intent.aimY
+                        elseif not isLocalPlayer then
+                            fire = weapon.firing or weapon.alwaysFire
+                            if weapon.fireMode == "hitscan" and weapon.beamTimer and weapon.beamTimer > 0 then
+                                fire = true
                             end
-                        end
-
-                        if (not targetX or not targetY) and love.mouse then
-                            local mx, my = love.mouse.getPosition()
-                            if cam then
-                                local zoom = cam.zoom or 1
-                                if zoom ~= 0 then
-                                    mx = mx / zoom + cam.x
-                                    my = my / zoom + cam.y
-                                else
-                                    mx = cam.x
-                                    my = cam.y
-                                end
-                            end
-                            targetX = targetX or mx
-                            targetY = targetY or my
-                        end
-
-                        if not fire and love.mouse and love.mouse.isDown then
-                            fire = love.mouse.isDown(1)
+                            targetX = weapon.targetX
+                            targetY = weapon.targetY
                         end
                     else
                         fire = weapon.firing or weapon.alwaysFire
                         targetX = weapon.targetX
                         targetY = weapon.targetY
                     end
+
+                    if (not targetX or not targetY) and isLocalPlayer and love.mouse then
+                        local mx, my = love.mouse.getPosition()
+                        if cam then
+                            local zoom = cam.zoom or 1
+                            if zoom ~= 0 then
+                                mx = mx / zoom + cam.x
+                                my = my / zoom + cam.y
+                            else
+                                mx = cam.x
+                                my = cam.y
+                            end
+                        end
+                        targetX = targetX or mx
+                        targetY = targetY or my
+                    end
+
+                    if isLocalPlayer and not fire and love.mouse and love.mouse.isDown then
+                        fire = love.mouse.isDown(1)
+                    end
+
+                    weapon.targetX = targetX
+                    weapon.targetY = targetY
 
                     -- Determine firing direction
                     local dirX, dirY
@@ -304,15 +331,38 @@ return function(context)
                     end
 
                     local fireMode = weapon.fireMode or "hitscan"
+                    local replicatedFiring = false
 
                     -- PROJECTILE MODE (Cannon, missiles, etc.)
                     if fireMode == "projectile" then
                         if fire and (not weapon.cooldown or weapon.cooldown <= 0) then
                             spawn_projectile(world, physicsWorld, entity, startX, startY, dirX, dirY, weapon)
-                            
+
                             -- Reset cooldown
                             local fireRate = weapon.fireRate or 0.5
                             weapon.cooldown = fireRate
+                            weapon.sequence = (weapon.sequence or 0) + 1
+                            if isLocalPlayer then
+                                weapon._replicatedSequence = weapon.sequence
+                            end
+                            replicatedFiring = true
+                        else
+                            replicatedFiring = fire
+                        end
+
+                        if not isLocalPlayer then
+                            local currentSequence = weapon.sequence or 0
+                            local lastSequence = weapon._replicatedSequence
+                            if lastSequence == nil then
+                                weapon._replicatedSequence = currentSequence
+                                lastSequence = currentSequence
+                            end
+                            if currentSequence > lastSequence then
+                                for seq = lastSequence + 1, currentSequence do
+                                    spawn_projectile(world, physicsWorld, entity, startX, startY, dirX, dirY, weapon)
+                                end
+                                weapon._replicatedSequence = currentSequence
+                            end
                         end
 
                     -- HITSCAN MODE (Laser beams)
@@ -351,6 +401,15 @@ return function(context)
                                 weapon.beamTimer = nil
                             end
                         end
+
+                        replicatedFiring = beamActive
+                    else
+                        replicatedFiring = fire
+                    end
+
+                    weapon.firing = replicatedFiring
+                    if isLocalPlayer then
+                        weapon._replicatedSequence = weapon.sequence
                     end
                 end
             end

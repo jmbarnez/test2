@@ -37,19 +37,7 @@ return function(context)
             pos.x = pos.x + dx * rate
             pos.y = pos.y + dy * rate
             if entity.body and not entity.body:isDestroyed() then
-                local bx = entity.body:getX()
-                local by = entity.body:getY()
-                entity.body:setPosition(bx + (pos.x - bx) * rate, by + (pos.y - by) * rate)
-            end
-        end
-
-        if entity.velocity then
-            local vx = net.targetVX or entity.velocity.x or 0
-            local vy = net.targetVY or entity.velocity.y or 0
-            entity.velocity.x = vx
-            entity.velocity.y = vy
-            if entity.body and not entity.body:isDestroyed() then
-                entity.body:setLinearVelocity(vx, vy)
+                entity.body:setPosition(pos.x, pos.y)
             end
         end
 
@@ -76,20 +64,26 @@ return function(context)
                 if self.filter(entity) then
                     interpolate_entity(entity, dt)
 
-                    local body = entity.body
-                    if body and not body:isDestroyed() then
-                        local x, y = body:getPosition()
-                        entity.position.x = x
-                        entity.position.y = y
+                    -- Only sync from physics body if NOT a remote networked entity
+                    -- Remote entities are controlled by network interpolation
+                    local isRemoteNetworked = entity.networkState and entity.networkState.initialized
 
-                        if entity.velocity then
-                            local vx, vy = body:getLinearVelocity()
-                            entity.velocity.x = vx
-                            entity.velocity.y = vy
-                        end
+                    if not isRemoteNetworked then
+                        local body = entity.body
+                        if body and not body:isDestroyed() then
+                            local x, y = body:getPosition()
+                            entity.position.x = x
+                            entity.position.y = y
 
-                        if entity.syncBodyAngle ~= false then
-                            entity.rotation = body:getAngle()
+                            if entity.velocity then
+                                local vx, vy = body:getLinearVelocity()
+                                entity.velocity.x = vx
+                                entity.velocity.y = vy
+                            end
+
+                            if entity.syncBodyAngle ~= false then
+                                entity.rotation = body:getAngle()
+                            end
                         end
                     end
                 end

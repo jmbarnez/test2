@@ -42,6 +42,10 @@ local function looks_like_spawn_config(value)
 end
 
 function Entities.spawnPlayer(state, shipIdOrConfig, overrides)
+    if not (state and state.world) then
+        return nil
+    end
+
     local config
 
     if type(shipIdOrConfig) == "table" and overrides == nil and looks_like_spawn_config(shipIdOrConfig) then
@@ -72,7 +76,8 @@ function Entities.spawnPlayer(state, shipIdOrConfig, overrides)
     local shipEntity = state.world:add(playerShip)
 
     local playerId = config.playerId or "player"
-    PlayerManager.attachShip(state, shipEntity, levelData, playerId)
+    local displayName = config.displayName
+    PlayerManager.attachShip(state, shipEntity, levelData, playerId, displayName)
 
     return shipEntity
 end

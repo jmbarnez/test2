@@ -19,6 +19,11 @@ return function(context)
                 return
             end
 
+            -- Skip remote networked players - they're controlled by network interpolation
+            if entity.networkState and entity.networkState.initialized then
+                return
+            end
+
             local intents = context.intents or (context.intentHolder and context.intentHolder.playerIntents)
             local intentHolder = context.intentHolder or context.state
             local localPlayerId = intentHolder and intentHolder.localPlayerId

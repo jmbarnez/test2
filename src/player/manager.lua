@@ -16,6 +16,19 @@ local function copy_table(source)
     return clone
 end
 
+local function trim_string(value)
+    if type(value) ~= "string" then
+        return nil
+    end
+
+    local trimmed = value:match("^%s*(.-)%s*$")
+    if trimmed == "" then
+        return nil
+    end
+
+    return trimmed
+end
+
 local function normalize_level(levelData)
     if type(levelData) == "number" then
         return { current = levelData }
@@ -76,7 +89,7 @@ function PlayerManager.applyLevel(state, levelData, playerId)
     return pilot
 end
 
-function PlayerManager.attachShip(state, shipEntity, levelData, playerId)
+function PlayerManager.attachShip(state, shipEntity, levelData, playerId, displayName)
     if not (state and shipEntity) then
         return shipEntity
     end
@@ -89,6 +102,13 @@ function PlayerManager.attachShip(state, shipEntity, levelData, playerId)
         or "player"
 
     shipEntity.playerId = resolvedPlayerId
+
+    local resolvedDisplayName = trim_string(displayName)
+        or shipEntity.displayName
+        or trim_string(shipEntity.name)
+        or "Player"
+
+    shipEntity.displayName = resolvedDisplayName
 
     for id, entity in pairs(state.players) do
         if entity == shipEntity and id ~= resolvedPlayerId then
@@ -107,6 +127,7 @@ function PlayerManager.attachShip(state, shipEntity, levelData, playerId)
 
     if isLocalPlayer then
         state.localPlayerId = resolvedPlayerId
+        state.localPlayerName = resolvedDisplayName
 
         local pilot = PlayerManager.applyLevel(state, levelData, resolvedPlayerId)
         shipEntity.level = nil
@@ -115,6 +136,7 @@ function PlayerManager.attachShip(state, shipEntity, levelData, playerId)
         if pilot then
             pilot.playerId = resolvedPlayerId
             pilot.currentShip = shipEntity
+            pilot.displayName = resolvedDisplayName
         end
 
         state.playerShip = shipEntity
@@ -123,6 +145,9 @@ function PlayerManager.attachShip(state, shipEntity, levelData, playerId)
         shipEntity.pilot = nil
         if levelData then
             shipEntity.level = copy_table(levelData)
+        end
+        if shipEntity.pilot then
+            shipEntity.pilot.displayName = resolvedDisplayName
         end
     end
 

@@ -92,19 +92,26 @@ function Snapshot.apply(state, snapshot)
                 goto continue
             end
 
+            -- Store current interpolated state before applying snapshot
             local hadNetworkState = entity.networkState ~= nil
             local currentPosition = entity.position and { x = entity.position.x, y = entity.position.y } or nil
             local currentRotation = entity.rotation
             local currentVelocity = entity.velocity and { x = entity.velocity.x, y = entity.velocity.y } or nil
 
+            -- Apply snapshot to update entity state (this updates position/rotation/velocity)
             ShipRuntime.applySnapshot(entity, playerSnapshot)
 
+            -- Set up network state with NEW targets from snapshot
             entity.networkState = entity.networkState or {}
             local netState = entity.networkState
+            
+            -- The snapshot has updated entity.position to the authoritative server position
+            -- Use this as the new interpolation target
             local targetPos = entity.position or { x = 0, y = 0 }
             netState.targetX = targetPos.x
             netState.targetY = targetPos.y
             netState.targetRotation = entity.rotation or 0
+            
             if entity.velocity then
                 netState.targetVX = entity.velocity.x or 0
                 netState.targetVY = entity.velocity.y or 0
@@ -112,10 +119,12 @@ function Snapshot.apply(state, snapshot)
                 netState.targetVX = playerSnapshot.velocity and playerSnapshot.velocity.x or 0
                 netState.targetVY = playerSnapshot.velocity and playerSnapshot.velocity.y or 0
             end
+            
             netState.receivedAt = love.timer and love.timer.getTime and love.timer.getTime() or 0
-            netState.initialized = netState.initialized or false
 
-            if hadNetworkState or netState.initialized then
+            -- If already initialized, restore current interpolated position
+            -- The movement system will interpolate from current to target
+            if hadNetworkState and netState.initialized then
                 if currentPosition and entity.position then
                     entity.position.x = currentPosition.x
                     entity.position.y = currentPosition.y
@@ -127,8 +136,10 @@ function Snapshot.apply(state, snapshot)
                     entity.velocity.x = currentVelocity.x
                     entity.velocity.y = currentVelocity.y
                 end
-                if entity.body and not entity.body:isDestroyed() and currentPosition then
-                    entity.body:setPosition(currentPosition.x, currentPosition.y)
+                if entity.body and not entity.body:isDestroyed() then
+                    if currentPosition then
+                        entity.body:setPosition(currentPosition.x, currentPosition.y)
+                    end
                     if currentRotation ~= nil then
                         entity.body:setAngle(currentRotation)
                     end
@@ -137,7 +148,28 @@ function Snapshot.apply(state, snapshot)
                     end
                 end
             else
+                -- First time seeing this entity, snap to the target position
                 netState.initialized = true
+            end
+
+            -- Remote players are controlled purely by network interpolation
+            -- Keep their physics bodies kinematic so local collisions don't diverge from the server
+            if entity.body and not entity.body:isDestroyed() then
+                entity.body:setType("kinematic")
+                entity.body:setLinearDamping(0)
+                entity.body:setAngularDamping(0)
+
+                -- On pure clients (no local server), make remote fixtures sensors so
+                -- they don't push local physics objects and cause jitter
+                if not (state and state.networkServer) then
+                    local fixtures = { entity.body:getFixtures() }
+                    for i = 1, #fixtures do
+                        local fixture = fixtures[i]
+                        if fixture and not fixture:isSensor() then
+                            fixture:setSensor(true)
+                        end
+                    end
+                end
             end
         end
 

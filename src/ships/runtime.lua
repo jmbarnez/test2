@@ -523,6 +523,7 @@ local function serialize_weapon_state(weapon)
         maxRange = weapon.maxRange,
         targetX = weapon.targetX,
         targetY = weapon.targetY,
+        sequence = weapon.sequence,
     }
 
     if weapon.mount then
@@ -546,6 +547,7 @@ local function apply_weapon_state(weapon, snapshot)
     weapon.maxRange = snapshot.maxRange or weapon.maxRange
     weapon.targetX = snapshot.targetX
     weapon.targetY = snapshot.targetY
+    weapon.sequence = snapshot.sequence or weapon.sequence
 
     if snapshot.mount then
         weapon.weaponMount = deep_copy(snapshot.mount)
@@ -576,6 +578,12 @@ function runtime.serialize(entity)
         end
     end
 
+    -- Serialize primary weapon component
+    local weaponState
+    if entity.weapon then
+        weaponState = serialize_weapon_state(entity.weapon)
+    end
+
     local snapshot = {
         entityId = entity.id or entity.entityId,
         playerId = entity.playerId,
@@ -602,6 +610,8 @@ function runtime.serialize(entity)
             max = entity.maxThrust or (entity.stats and entity.stats.main_thrust),
         },
         weapons = weapons,
+        weapon = weaponState,
+        weaponMount = entity.weaponMount and deep_copy(entity.weaponMount) or nil,
         stats = entity.stats and deep_copy(entity.stats) or nil,
         cargo = entity.cargo and {
             used = entity.cargo.used,
@@ -630,25 +640,22 @@ function runtime.applySnapshot(entity, snapshot)
         entity.position = entity.position or {}
         entity.position.x = snapshot.position.x or entity.position.x or 0
         entity.position.y = snapshot.position.y or entity.position.y or 0
-        if body and not body:isDestroyed() then
-            body:setPosition(entity.position.x, entity.position.y)
-        end
+        -- Don't update body here - snapshot.lua handles body positioning for interpolation
     end
 
     if snapshot.rotation ~= nil then
         entity.rotation = snapshot.rotation
-        if body and not body:isDestroyed() then
-            body:setAngle(snapshot.rotation)
-        end
+        -- Don't update body here - snapshot.lua handles body rotation for interpolation
     end
 
-    if snapshot.velocity and body and not body:isDestroyed() then
-        body:setLinearVelocity(snapshot.velocity.x or 0, snapshot.velocity.y or 0)
+    if snapshot.velocity then
+        entity.velocity = entity.velocity or {}
+        entity.velocity.x = snapshot.velocity.x or 0
+        entity.velocity.y = snapshot.velocity.y or 0
+        -- Don't update body here - snapshot.lua handles body velocity for interpolation
     end
 
-    if snapshot.angularVelocity and body and not body:isDestroyed() then
-        body:setAngularVelocity(snapshot.angularVelocity)
-    end
+    -- Don't update angularVelocity on body - snapshot.lua handles all body state for interpolation
 
     if snapshot.health then
         entity.health = entity.health or {}
@@ -693,6 +700,16 @@ function runtime.applySnapshot(entity, snapshot)
                 apply_weapon_state(weapon, weaponSnapshot)
             end
         end
+    end
+
+    -- Apply primary weapon component
+    if snapshot.weapon and entity.weapon then
+        apply_weapon_state(entity.weapon, snapshot.weapon)
+    end
+
+    -- Apply weapon mount
+    if snapshot.weaponMount then
+        entity.weaponMount = deep_copy(snapshot.weaponMount)
     end
 
     if snapshot.cargo and entity.cargo then

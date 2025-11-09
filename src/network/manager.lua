@@ -185,7 +185,7 @@ function NetworkManager:sendLocalIntent()
     })
 
     if payload then
-        self.client:send(payload, 0, false)
+        self.client:send(payload, 0, true)
     end
 end
 
