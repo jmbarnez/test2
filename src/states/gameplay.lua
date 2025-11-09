@@ -8,6 +8,7 @@
 
 local constants = require("src.constants.game")
 local PlayerManager = require("src.player.manager")
+local PlayerWeapons = require("src.player.weapons")
 local UIStateManager = require("src.ui.state_manager")
 require("src.entities.ship_factory")
 require("src.entities.asteroid_factory")
@@ -62,12 +63,17 @@ function gameplay:enter(_, config)
     
     -- Initialize prediction system for multiplayer
     Prediction.initialize(self)
-    local player = Entities.spawnPlayer(self)
-    if player then
-        if self.engineTrail then
-            self.engineTrail:attachPlayer(player)
+    -- Default role is offline until user chooses Host/Join
+    self.netRole = self.netRole or 'offline'
+    -- Do not pre-spawn when acting as a client; server will spawn on connect
+    if self.netRole ~= 'client' then
+        local player = Entities.spawnPlayer(self)
+        if player then
+            if self.engineTrail then
+                self.engineTrail:attachPlayer(player)
+            end
+            self:registerPlayerCallbacks(player)
         end
-        self:registerPlayerCallbacks(player)
     end
     View.updateCamera(self)
 end
@@ -260,6 +266,22 @@ function gameplay:keypressed(key)
             UIStateManager.requestRespawn(self)
         end
         return
+    end
+
+    if key == "q" or key == "e" then
+        if self.uiInput and self.uiInput.keyboardCaptured then
+            return
+        end
+
+        local player = PlayerManager.getCurrentShip(self)
+        if not player then
+            return
+        end
+
+        local direction = key == "q" and -1 or 1
+        if PlayerWeapons.cycle(player, direction) then
+            return
+        end
     end
 
     if key == "tab" then

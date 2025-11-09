@@ -155,7 +155,7 @@ local function is_local_player(state, entity, playerId)
         or (state.localPlayerId and state.localPlayerId == playerId)
 end
 
-local function initialize_network_state(entity, playerSnapshot)
+local function initialize_network_state(entity, playerSnapshot, isLocal)
     entity.networkState = entity.networkState or {}
     local netState = entity.networkState
 
@@ -167,7 +167,7 @@ local function initialize_network_state(entity, playerSnapshot)
         netState.targetY = playerSnapshot.position.y
     end
 
-    if playerSnapshot.rotation ~= nil then
+    if playerSnapshot.rotation ~= nil and not isLocal then
         entity.rotation = playerSnapshot.rotation
         netState.targetRotation = playerSnapshot.rotation
     end
@@ -199,7 +199,7 @@ local function initialize_network_state(entity, playerSnapshot)
     netState.initialized = true
 end
 
-local function update_network_state(entity, playerSnapshot)
+local function update_network_state(entity, playerSnapshot, isLocal)
     entity.networkState = entity.networkState or {}
     local netState = entity.networkState
 
@@ -208,7 +208,7 @@ local function update_network_state(entity, playerSnapshot)
         netState.targetY = playerSnapshot.position.y
     end
 
-    if playerSnapshot.rotation ~= nil then
+    if playerSnapshot.rotation ~= nil and not isLocal then
         netState.targetRotation = playerSnapshot.rotation
     end
 
@@ -319,18 +319,18 @@ function Snapshot.apply(state, snapshot)
             ShipRuntime.applySnapshot(entity, bufferedSnapshot)
             
             if not entity.networkState or not entity.networkState.initialized then
-                initialize_network_state(entity, bufferedSnapshot)
+                initialize_network_state(entity, bufferedSnapshot, is_local_player(state, entity, playerId))
             else
-                update_network_state(entity, bufferedSnapshot)
+                update_network_state(entity, bufferedSnapshot, is_local_player(state, entity, playerId))
             end
         else
             -- Fallback to direct application if buffer not ready
             ShipRuntime.applySnapshot(entity, playerSnapshot)
             
             if not entity.networkState or not entity.networkState.initialized then
-                initialize_network_state(entity, playerSnapshot)
+                initialize_network_state(entity, playerSnapshot, is_local_player(state, entity, playerId))
             else
-                update_network_state(entity, playerSnapshot)
+                update_network_state(entity, playerSnapshot, is_local_player(state, entity, playerId))
             end
         end
 

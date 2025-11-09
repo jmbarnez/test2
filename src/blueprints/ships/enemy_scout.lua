@@ -77,9 +77,9 @@ return {
         },
         stats = {
             mass = 4,
-            main_thrust = 150,
-            strafe_thrust = 95,
-            reverse_thrust = 110,
+            main_thrust = 75,
+            strafe_thrust = 47.5,
+            reverse_thrust = 55,
             rotation_torque = 780,
             max_acceleration = 100,
             max_speed = 160,
@@ -112,14 +112,20 @@ return {
     },
     weapons = {
         {
-            id = "laser_beam",
+            id = "cannon",
             overrides = {
                 weapon = {
-                    damagePerSecond = constants.weapons.laser.damage_per_second * 0.6,
                     offset = 1.2 * scale,
-                    color = { 1, 0.2, 0.25 },
-                    glowColor = { 1, 0.45, 0.5 },
-                    alwaysFire = false,
+                    projectileSize = 3,
+                    color = { 1.0, 0.25, 0.25 },
+                    glowColor = { 1.0, 0.5, 0.4 },
+                    projectileBlueprint = {
+                        drawable = {
+                            size = 3,
+                            color = { 1.0, 0.25, 0.25 },
+                            glowColor = { 1.0, 0.5, 0.4 },
+                        },
+                    },
                 },
                 weaponMount = {
                     anchor = { x = 0, y = 1.0 },

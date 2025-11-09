@@ -54,9 +54,9 @@ function Systems.initialize(state, damageCallback)
         uiInput = state.uiInput,
         intentHolder = state,
     }))
-    -- Add spawners on server or offline, but not on pure client
-    local isPureClient = state.networkManager and not state.networkServer
-    if not isPureClient then
+    -- Add spawners on server or offline, but not on clients
+    local isClient = state.netRole == 'client'
+    if not isClient then
         state.spawnerSystem = state.world:addSystem(createAsteroidSpawner(state))
         state.enemySpawnerSystem = state.world:addSystem(createEnemySpawner(state))
     end
@@ -67,7 +67,7 @@ function Systems.initialize(state, damageCallback)
     state.weaponSystem = state.world:addSystem(createWeaponSystem(state))
     state.shipSystem = state.world:addSystem(createShipSystem(state))
     state.projectileSystem = state.world:addSystem(createProjectileSystem(state))
-    if not isPureClient then
+    if not isClient then
         state.enemyAISystem = state.world:addSystem(createEnemyAISystem(state))
     end
     state.hudSystem = state.world:addSystem(createHudSystem(state))

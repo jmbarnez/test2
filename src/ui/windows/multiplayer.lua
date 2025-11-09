@@ -1,7 +1,9 @@
 local window = require("src.ui.window")
 local theme = require("src.ui.theme")
 local Server = require("src.network.server")
+local PlayerManager = require("src.player.manager")
 local constants = require("src.constants.game")
+local tiny = require("libs.tiny")
 
 local love = love
 
@@ -152,6 +154,18 @@ local function host_game(context)
         manager:disconnect()
     end
 
+    -- Remove any existing local ship to avoid duplicates when switching roles
+    local currentShip = PlayerManager.getCurrentShip(context)
+    if currentShip then
+        if currentShip.body and not currentShip.body:isDestroyed() then
+            currentShip.body:destroy()
+        end
+        if context.world then
+            pcall(function() context.world:remove(currentShip) end)
+        end
+        PlayerManager.clearShip(context, currentShip)
+    end
+
     local ok, err = pcall(function()
         context.networkServer = Server.new({
             state = context,
@@ -166,16 +180,53 @@ local function host_game(context)
         return
     end
 
-    -- When hosting, we don't need to connect as a client since we're already the local player
-    -- The server will handle the host player directly
+    -- Listen-server: also connect as a client to unify flow
+    context.netRole = 'server'
+    if context.spawnerSystem then tiny.activate(context.spawnerSystem) end
+    if context.enemySpawnerSystem then tiny.activate(context.enemySpawnerSystem) end
+    if context.enemyAISystem then tiny.activate(context.enemyAISystem) end
+    local manager = get_manager(context)
+    if manager then
+        manager:disconnect()
+        manager:setAddress("127.0.0.1", port)
+        pcall(function() manager:connect() end)
+    end
     set_status(state, string.format("Hosting on %s:%d", host, port))
 end
 
 local function join_game(context)
     local state = context.multiplayerUI
     local host, port = split_address(state.addressInput or "")
+    if not host or host == "" or host == "0.0.0.0" then
+        host = "127.0.0.1"
+    end
     state.addressInput = format_address(host, port)
     close_text_input(state)
+
+    -- Joining as a client: ensure any local server is shut down
+    if context.networkServer then
+        context.networkServer:shutdown()
+        context.networkServer = nil
+    end
+
+    -- Remove any existing local ship to avoid duplicates; server will spawn on connect
+    local currentShip = PlayerManager.getCurrentShip(context)
+    if currentShip then
+        if currentShip.body and not currentShip.body:isDestroyed() then
+            currentShip.body:destroy()
+        end
+        if context.world then
+            pcall(function() context.world:remove(currentShip) end)
+        end
+        PlayerManager.clearShip(context, currentShip)
+    end
+
+    -- Mark role and deactivate server-only systems if present
+    context.netRole = 'client'
+    if context.spawnerSystem then tiny.deactivate(context.spawnerSystem) end
+    if context.enemySpawnerSystem then tiny.deactivate(context.enemySpawnerSystem) end
+    if context.enemyAISystem then tiny.deactivate(context.enemyAISystem) end
+    context.worldSynced = false
 
     local manager = get_manager(context)
     if not manager then
@@ -335,7 +386,7 @@ function multiplayer_window.keypressed(context, key)
         if key == "f5" then
             state.visible = true
             if not state.addressInput or state.addressInput == "" then
-                state.addressInput = format_address(constants.network.host, constants.network.port)
+                state.addressInput = format_address("127.0.0.1", constants.network.port)
             end
             ensure_status(state, "")
             return true

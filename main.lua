@@ -7,13 +7,23 @@ local NetworkManager = require("src.network.manager")
 local TARGET_FPS = 60
 local TARGET_FRAME_TIME = 1 / TARGET_FPS
 
+-- Determine if we should manually limit FPS (disable if vsync is enabled)
+local VSYNC_ENABLED = (constants.window and constants.window.vsync or 0) ~= 0
+local USE_FRAME_LIMIT = not VSYNC_ENABLED
+
 function love.run()
     if love.load then love.load(love.arg.parseGameArguments(arg), arg) end
     if love.timer then love.timer.step() end
-    
+
     local dt = 0
-    
+    local frameStart = love.timer and love.timer.getTime() or 0
+
     return function()
+        -- Mark the start of the frame to compute sleep time later
+        if love.timer then
+            frameStart = love.timer.getTime()
+        end
+
         if love.event then
             love.event.pump()
             for name, a, b, c, d, e, f in love.event.poll() do
@@ -22,54 +32,69 @@ function love.run()
                         return a or 0
                     end
                 end
-                love.handlers[name](a, b, c, d, e, f)
+                local handler = love.handlers and love.handlers[name]
+                if handler then handler(a, b, c, d, e, f) end
             end
         end
-        
-        if love.timer then dt = love.timer.step() end
-        
+
+        if love.timer then
+            dt = love.timer.step()
+        else
+            dt = 0
+        end
+
         if love.update then love.update(dt) end
-        
+
         if love.graphics and love.graphics.isActive() then
             love.graphics.origin()
             love.graphics.clear(love.graphics.getBackgroundColor())
-            
             if love.draw then love.draw() end
-            
             love.graphics.present()
         end
-        
-        -- Frame rate limiting to 60 FPS
-        if love.timer then
-            local frameTime = love.timer.getTime()
-            local nextFrameTime = frameTime + TARGET_FRAME_TIME
-            local sleepTime = nextFrameTime - love.timer.getTime()
-            if sleepTime > 0 then
-                love.timer.sleep(sleepTime)
+
+        -- Manual frame limiting only when vsync is disabled
+        if USE_FRAME_LIMIT and love.timer then
+            local elapsed = love.timer.getTime() - frameStart
+            local remaining = TARGET_FRAME_TIME - elapsed
+            if remaining > 0 then
+                love.timer.sleep(remaining)
             end
         end
     end
 end
 
 local function setMultiplayerStatus(status)
-    if gameplay.multiplayerUI then
+    if gameplay and gameplay.multiplayerUI then
         gameplay.multiplayerUI.status = status or ""
     end
 end
 
 function love.load()
     local window = constants.window
-    love.window.setTitle(window.title)
-    love.window.setMode(window.width, window.height, {
-        resizable = window.resizable,
-        vsync = window.vsync == 1,
-        fullscreen = window.fullscreen,
-        msaa = window.msaa,
-    })
+    if love.window and window then
+        love.window.setTitle(window.title or "Game")
+        love.window.setMode(window.width, window.height, {
+            resizable = window.resizable,
+            vsync = window.vsync, -- respect numeric vsync setting (0, 1, or adaptive if supported)
+            fullscreen = window.fullscreen,
+            msaa = window.msaa,
+        })
+        -- Update limiter toggle in case config changed at runtime
+        VSYNC_ENABLED = (window.vsync or 0) ~= 0
+        USE_FRAME_LIMIT = not VSYNC_ENABLED
+    end
 
     local physics = constants.physics
-    love.physics.setMeter(physics.meter_scale)
-    love.math.setRandomSeed(os.time())
+    if love.physics and physics then
+        love.physics.setMeter(physics.meter_scale or 64)
+    end
+
+    if love.math and love.timer then
+        love.math.setRandomSeed(love.timer.getTime() * 100000)
+    elseif love.math then
+        love.math.setRandomSeed(os.time())
+    end
+
     Gamestate.registerEvents()
     Gamestate.switch(gameplay)
 
@@ -96,4 +121,3 @@ function love.load()
         })
     end
 end
-

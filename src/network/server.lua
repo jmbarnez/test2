@@ -118,8 +118,6 @@ function Server.new(config)
             self:onDisconnect(peer, "timeout")
         end,
     })
-
-    self:initializeHostPlayer()
     
     return self
 end

@@ -172,9 +172,9 @@ return {
         },
         stats = {
             mass = 1.6,
-            main_thrust = 230,
-            reverse_thrust = 90,
-            strafe_thrust = 150,
+            main_thrust = 115,
+            reverse_thrust = 45,
+            strafe_thrust = 75,
             rotation_torque = 420,
             max_acceleration = 160,
             max_speed = 210,
@@ -203,7 +203,7 @@ return {
     },
     weapons = {
         {
-            id = "cannon",
+            id = "laser_turret",
             mount = {
                 anchor = { x = 0, y = 0.72 },
                 inset = 4,

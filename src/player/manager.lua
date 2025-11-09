@@ -1,3 +1,5 @@
+local PlayerWeapons = require("src.player.weapons")
+
 local PlayerManager = {}
 
 local function copy_table(source)
@@ -124,6 +126,10 @@ function PlayerManager.attachShip(state, shipEntity, levelData, playerId)
         if levelData then
             shipEntity.level = copy_table(levelData)
         end
+    end
+
+    if shipEntity then
+        PlayerWeapons.initialize(shipEntity)
     end
 
     return shipEntity

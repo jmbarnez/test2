@@ -8,6 +8,10 @@ return {
     enemies = {
         count = { min = 15, max = 25 },
         ship_id = "enemy_scout",
+        ship_ids = {
+            { id = "enemy_drone", weight = 3 },
+            { id = "enemy_scout", weight = 2 },
+        },
         spawn_radius = 1500,
         spawn_safe_radius = 900,
         wander_radius = 1500,

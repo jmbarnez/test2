@@ -119,6 +119,10 @@ function NetworkManager:handleMessage(data, _channel)
         end
         Intent.ensure(self.state, message.playerId)
     elseif message.type == "snapshot" and message.payload then
+        -- Skip snapshots on host AFTER initial sync (to preserve local input authority)
+        if self.state and self.state.networkServer and self.state.worldSynced then
+            return
+        end
         -- Server reconciliation for local player
         if message.payload.players and self.state.localPlayerId then
             local serverPlayerData = message.payload.players[self.state.localPlayerId]
@@ -162,6 +166,10 @@ end
 
 function NetworkManager:sendSnapshot()
     if not self.connected or not self.client then
+        return
+    end
+
+    if self.state and self.state.netRole == 'client' then
         return
     end
 

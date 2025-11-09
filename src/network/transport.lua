@@ -40,8 +40,7 @@ end
 local function format_address(config)
     local host = config.host or config.address or "127.0.0.1"
     local port = config.port or 22122
-    local channel_limit = config.channels and (":" .. tostring(config.channels)) or ""
-    return string.format("%s:%d%s", host, port, channel_limit)
+    return string.format("%s:%d", host, port)
 end
 
 local function wrap_callbacks(instance, config)

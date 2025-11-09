@@ -201,12 +201,17 @@ local function fire_hitscan(entity, startX, startY, dirX, dirY, weapon, physicsW
 
     local beamWidth = weapon.width or beamConst.width or 3
 
+    local beamColor = weapon.color or beamConst.color or { 0.6, 0.85, 1.0 }
+    local beamGlow = weapon.glowColor or beamConst.glow_color or { 1.0, 0.8, 0.6 }
+
     beams[#beams + 1] = {
         x1 = startX,
         y1 = startY,
         x2 = endX,
         y2 = endY,
         width = beamWidth,
+        color = beamColor,
+        glow = beamGlow,
     }
 end
 
@@ -440,18 +445,21 @@ return function(context)
                 local innerWidth = math.max(baseWidth * 0.35, 0.35)
                 local coreWidth = math.max(baseWidth * 0.18, 0.18)
 
+                local glow = beam.glow or { 1.0, 0.8, 0.6 }
+                local color = beam.color or { 0.6, 0.85, 1.0 }
+
                 -- Outer glow
-                love.graphics.setColor(0.2, 0.4, 1, 0.1)
+                love.graphics.setColor(glow[1], glow[2], glow[3], 0.1)
                 love.graphics.setLineWidth(outerWidth)
                 love.graphics.line(0, 0, length, 0)
 
                 -- Middle beam
-                love.graphics.setColor(0.4, 0.7, 1, 0.6)
+                love.graphics.setColor(glow[1], glow[2], glow[3], 0.6)
                 love.graphics.setLineWidth(midWidth)
                 love.graphics.line(0, 0, length, 0)
 
                 -- Inner core
-                love.graphics.setColor(0.8, 0.9, 1, 0.9)
+                love.graphics.setColor(color[1], color[2], color[3], 0.9)
                 love.graphics.setLineWidth(innerWidth)
                 love.graphics.line(0, 0, length, 0)
 

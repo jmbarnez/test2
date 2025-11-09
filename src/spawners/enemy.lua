@@ -30,6 +30,69 @@ local function choose_count(range)
     return range or 1
 end
 
+local function normalize_ship_variants(entries)
+    if type(entries) ~= "table" then
+        return nil
+    end
+
+    local normalized = {}
+    local total_weight = 0
+
+    for i = 1, #entries do
+        local entry = entries[i]
+        local entry_type = type(entry)
+
+        if entry_type == "string" then
+            normalized[#normalized + 1] = { id = entry, weight = 1 }
+            total_weight = total_weight + 1
+        elseif entry_type == "table" then
+            local id = entry.id or entry.ship_id or entry.shipId or entry.ship or entry[1]
+            if id then
+                local weight = entry.weight or entry.chance or entry.probability or 1
+                if type(weight) ~= "number" then
+                    weight = 1
+                end
+                if weight > 0 then
+                    normalized[#normalized + 1] = {
+                        id = id,
+                        weight = weight,
+                        context = type(entry.context) == "table" and entry.context or nil,
+                    }
+                    total_weight = total_weight + weight
+                end
+            end
+        end
+    end
+
+    if total_weight <= 0 then
+        return nil
+    end
+
+    return {
+        entries = normalized,
+        total_weight = total_weight,
+    }
+end
+
+local function pick_ship_variant(pool)
+    if not pool or pool.total_weight <= 0 then
+        return nil
+    end
+
+    local roll = love.math.random() * pool.total_weight
+    local cumulative = 0
+
+    for i = 1, #pool.entries do
+        local entry = pool.entries[i]
+        cumulative = cumulative + entry.weight
+        if roll <= cumulative then
+            return entry
+        end
+    end
+
+    return pool.entries[#pool.entries]
+end
+
 return function(context)
     context = context or {}
 
@@ -41,7 +104,8 @@ return function(context)
 
     local defaultCount = enemyConfig.count or 8
     local count = choose_count(defaultCount)
-    local ship_id = enemyConfig.ship_id or enemyConfig.shipId or enemyConfig.ship or enemyConfig.default_ship or "enemy_scout"
+    local default_ship_id = enemyConfig.ship_id or enemyConfig.shipId or enemyConfig.ship or enemyConfig.default_ship or "enemy_scout"
+    local ship_variant_pool = normalize_ship_variants(enemyConfig.ship_ids or enemyConfig.shipIds or enemyConfig.ships)
     local safe_radius = enemyConfig.safe_radius or enemyConfig.spawn_safe_radius or 600
 
     local instantiateContext = {
@@ -107,11 +171,24 @@ return function(context)
             local spawn_x, spawn_y = pick_spawn_point()
             spawn_positions[#spawn_positions + 1] = { x = spawn_x, y = spawn_y }
 
-            local enemy = loader.instantiate("ships", ship_id, {
+            local chosen_variant = pick_ship_variant(ship_variant_pool)
+            local ship_id = (chosen_variant and chosen_variant.id) or default_ship_id
+
+            local instantiate_context = {
                 position = { x = spawn_x, y = spawn_y },
                 physicsWorld = instantiateContext.physicsWorld,
                 worldBounds = instantiateContext.worldBounds,
-            })
+            }
+
+            if chosen_variant and chosen_variant.context then
+                for key, value in pairs(chosen_variant.context) do
+                    if instantiate_context[key] == nil then
+                        instantiate_context[key] = value
+                    end
+                end
+            end
+
+            local enemy = loader.instantiate("ships", ship_id, instantiate_context)
 
             enemy.enemy = true
             enemy.faction = enemy.faction or "enemy"

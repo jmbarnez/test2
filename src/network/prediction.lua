@@ -4,6 +4,8 @@
 local constants = require("src.constants.game")
 local PlayerManager = require("src.player.manager")
 
+local simpleMode = constants.network.simple_mode
+
 local Prediction = {}
 
 -- Input history for rollback
@@ -15,13 +17,18 @@ local maxHistoryFrames = constants.network.max_rollback_frames or 30
 local currentFrame = 0
 
 -- Prediction state
-local predictionEnabled = constants.network.prediction_enabled
-local reconciliationEnabled = constants.network.reconciliation_enabled
+local predictionEnabled = not simpleMode and constants.network.prediction_enabled
+local reconciliationEnabled = not simpleMode and constants.network.reconciliation_enabled
 local positionTolerance = constants.network.position_tolerance or 5.0
 
 function Prediction.initialize(state)
     if not state then return end
-    
+
+    if simpleMode or not predictionEnabled then
+        state.prediction = nil
+        return
+    end
+
     state.prediction = {
         enabled = predictionEnabled,
         currentFrame = 0,
@@ -34,7 +41,7 @@ end
 
 -- Store input for this frame
 function Prediction.recordInput(state, input)
-    if not (state and state.prediction and predictionEnabled) then
+    if simpleMode or not (state and state.prediction and predictionEnabled) then
         return
     end
     
@@ -70,7 +77,7 @@ end
 
 -- Store state snapshot for rollback
 function Prediction.recordState(state)
-    if not (state and state.prediction and predictionEnabled) then
+    if simpleMode or not (state and state.prediction and predictionEnabled) then
         return
     end
     
@@ -103,7 +110,7 @@ end
 
 -- Server reconciliation when snapshot arrives
 function Prediction.reconcile(state, serverSnapshot, serverFrame)
-    if not (state and state.prediction and reconciliationEnabled) then
+    if simpleMode or not (state and state.prediction and reconciliationEnabled) then
         return
     end
     
@@ -178,7 +185,7 @@ end
 
 -- Replay inputs after rollback
 function Prediction.replayInputs(state, fromFrame)
-    if not (state and state.prediction) then
+    if simpleMode or not (state and state.prediction) then
         return
     end
     
@@ -296,15 +303,17 @@ end
 
 -- Check if we should apply server correction for local player
 function Prediction.shouldApplyServerCorrection(state, playerId)
-    if not (state and state.prediction and reconciliationEnabled) then
-        return true -- Always apply if prediction disabled
-    end
-    
+    -- Never apply server corrections to the local player, even in simple mode
+    -- Local input should always have authority over the local player
     local localPlayer = PlayerManager.getCurrentShip(state)
     if not localPlayer then return true end
     
-    -- Don't apply direct server corrections to local player - use reconciliation instead
-    return localPlayer.playerId ~= playerId
+    -- Don't apply snapshots to local player
+    if localPlayer.playerId == playerId or state.localPlayerId == playerId then
+        return false
+    end
+    
+    return true
 end
 
 return Prediction

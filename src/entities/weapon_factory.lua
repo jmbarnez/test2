@@ -105,6 +105,10 @@ function weapon_factory.instantiate(blueprint, context)
         }
     }
 
+    if blueprint.icon ~= nil then
+        weapon.blueprint.icon = deep_copy(blueprint.icon)
+    end
+
     weapon.isWeapon = true
 
     local itemId = Items.registerWeaponBlueprint(blueprint)
