@@ -2,6 +2,7 @@ local Transport = require("src.network.transport")
 local Snapshot = require("src.network.snapshot")
 local PlayerManager = require("src.player.manager")
 local Intent = require("src.input.intent")
+local json = require("libs.json")
 
 local love = love
 
@@ -9,17 +10,14 @@ local NetworkManager = {}
 NetworkManager.__index = NetworkManager
 
 local function encode_message(message)
-    if not (love and love.data and love.data.encode) then
-        return nil
+    local ok, result = pcall(json.encode, message)
+    if ok then
+        return result
     end
-    return love.data.encode("string", "json", message)
 end
 
 local function decode_message(data)
-    if not (love and love.data and love.data.decode) then
-        return nil
-    end
-    local ok, decoded = pcall(love.data.decode, "string", "json", data)
+    local ok, decoded = pcall(json.decode, data)
     if ok then
         return decoded
     end

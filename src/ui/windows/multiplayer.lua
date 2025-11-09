@@ -1,5 +1,6 @@
 local window = require("src.ui.window")
 local theme = require("src.ui.theme")
+local Server = require("src.network.server")
 
 local love = love
 
@@ -120,6 +121,102 @@ local function ensure_status(state, message)
     state.status = message or state.status or ""
 end
 
+local function close_text_input(state)
+    state.inputActive = false
+    love.keyboard.setTextInput(false)
+end
+
+local function get_manager(context)
+    return context and context.networkManager
+end
+
+local function set_status(state, text)
+    state.status = text or ""
+end
+
+local function host_game(context)
+    local state = context.multiplayerUI
+    local host, port = split_address(state.addressInput or "")
+    state.addressInput = format_address(host, port)
+    close_text_input(state)
+
+    if context.networkServer then
+        context.networkServer:shutdown()
+        context.networkServer = nil
+    end
+
+    local ok, err = pcall(function()
+        context.networkServer = Server.new({
+            state = context,
+            host = host,
+            port = port,
+        })
+    end)
+
+    if not ok then
+        set_status(state, string.format("Host failed: %s", tostring(err)))
+        context.networkServer = nil
+        return
+    end
+
+    local manager = get_manager(context)
+    if not manager then
+        set_status(state, "Client manager unavailable")
+        return
+    end
+
+    manager:disconnect()
+    manager:setAddress(host, port)
+    local connected, connectErr = pcall(function()
+        manager:connect()
+    end)
+
+    if not connected then
+        set_status(state, string.format("Host running, client connect failed: %s", tostring(connectErr)))
+        return
+    end
+
+    set_status(state, string.format("Hosting on %s:%d", host, port))
+end
+
+local function join_game(context)
+    local state = context.multiplayerUI
+    local host, port = split_address(state.addressInput or "")
+    state.addressInput = format_address(host, port)
+    close_text_input(state)
+
+    local manager = get_manager(context)
+    if not manager then
+        set_status(state, "Client manager unavailable")
+        return
+    end
+
+    manager:disconnect()
+    manager:setAddress(host, port)
+    local ok, err = pcall(function()
+        manager:connect()
+    end)
+
+    if not ok then
+        set_status(state, string.format("Join failed: %s", tostring(err)))
+        return
+    end
+
+    set_status(state, string.format("Connecting to %s:%d...", host, port))
+end
+
+local function process_requests(context)
+    local state = context.multiplayerUI
+    if state._hostRequested then
+        state._hostRequested = nil
+        host_game(context)
+    end
+    if state._joinRequested then
+        state._joinRequested = nil
+        join_game(context)
+    end
+end
+
 function multiplayer_window.draw(context)
     if not context or not context.multiplayerUI then
         return false
@@ -211,6 +308,8 @@ function multiplayer_window.draw(context)
     else
         love.keyboard.setTextInput(false)
     end
+
+    process_requests(context)
 
     love.graphics.pop()
 end

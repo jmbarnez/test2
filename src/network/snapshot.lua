@@ -1,5 +1,6 @@
 local ShipRuntime = require("src.ships.runtime")
 local PlayerManager = require("src.player.manager")
+local Entities = require("src.states.gameplay.entities")
 
 local Snapshot = {}
 
@@ -71,6 +72,27 @@ function Snapshot.apply(state, snapshot)
 
         if not entity and state.player and (state.player.playerId == playerId or playerId == "player") then
             entity = state.player
+        end
+
+        if not entity then
+            local spawnConfig = {
+                playerId = playerId,
+            }
+
+            if playerSnapshot.blueprint and playerSnapshot.blueprint.id then
+                spawnConfig.shipId = playerSnapshot.blueprint.id
+            end
+
+            if playerSnapshot.level then
+                spawnConfig.level = playerSnapshot.level
+            end
+
+            local ok, spawned = pcall(Entities.spawnPlayer, state, spawnConfig)
+            if ok and spawned then
+                state.players = state.players or {}
+                state.players[playerId] = spawned
+                entity = spawned
+            end
         end
 
         if entity then

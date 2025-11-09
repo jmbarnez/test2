@@ -3,6 +3,7 @@ local Snapshot = require("src.network.snapshot")
 local Intent = require("src.input.intent")
 local Entities = require("src.states.gameplay.entities")
 local PlayerManager = require("src.player.manager")
+local json = require("libs.json")
 
 local love = love
 
@@ -10,17 +11,16 @@ local Server = {}
 Server.__index = Server
 
 local function encode_message(message)
-    if love and love.data and love.data.encode then
-        return love.data.encode("string", "json", message)
+    local ok, result = pcall(json.encode, message)
+    if ok then
+        return result
     end
 end
 
 local function decode_message(data)
-    if love and love.data and love.data.decode then
-        local ok, decoded = pcall(love.data.decode, "string", "json", data)
-        if ok then
-            return decoded
-        end
+    local ok, decoded = pcall(json.decode, data)
+    if ok then
+        return decoded
     end
 end
 
@@ -145,8 +145,27 @@ function Server:spawnPlayerForPeer(peer, playerId)
 
     local entity
     local currentShip = PlayerManager.getCurrentShip(self.state)
-    if not next(self.state.players) and currentShip then
-        -- Reuse local player for first peer (host)
+    local function table_has_nonlocal_players(state, localShip)
+        if not state.players then
+            return false
+        end
+        for _, ent in pairs(state.players) do
+            if ent and ent ~= localShip then
+                return true
+            end
+        end
+        return false
+    end
+
+    if currentShip and not table_has_nonlocal_players(self.state, currentShip) then
+        -- Reuse existing local player entity for host peer
+        if self.state.players then
+            for id, ent in pairs(self.state.players) do
+                if ent == currentShip then
+                    self.state.players[id] = nil
+                end
+            end
+        end
         entity = currentShip
         entity.playerId = playerId
         self.state.players[playerId] = entity

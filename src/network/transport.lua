@@ -94,7 +94,9 @@ function Transport.createServer(config)
                 if self.onReceive then
                     self.onReceive(event.peer, event.data, event.channel)
                 end
-                event.packet:destroy()
+                if event.packet then
+                    event.packet:destroy()
+                end
             elseif event.type == "timeout" then
                 self.peers[event.peer:index()] = nil
                 if self.onTimeout then
@@ -170,7 +172,9 @@ function Transport.createClient(config)
                 if self.onReceive then
                     self.onReceive(event.data, event.channel)
                 end
-                event.packet:destroy()
+                if event.packet then
+                    event.packet:destroy()
+                end
             elseif event.type == "timeout" then
                 if self.onTimeout then
                     self.onTimeout(event.peer)
