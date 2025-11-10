@@ -37,6 +37,7 @@ constants.window = {
     resizable = false,                -- Allow window resizing
     vsync = 0,                       -- Disable vsync (using manual 60 FPS limiting)
     msaa = 0,                        -- Multisample anti-aliasing samples (0 = disabled)
+    max_fps = 240,                   -- Manual frame limiter target when vsync is disabled
 }
 
 -- View configuration (camera defaults)
@@ -236,6 +237,21 @@ constants.asteroids = {
         show_duration = 1.5,         -- Seconds to show health bar after taking damage
         height = 4,                  -- Health bar height in pixels
         padding = 6,                 -- Vertical padding above asteroid
+    },
+    loot = {
+        rolls = 1,
+        entries = {
+            {
+                id = "resource:ore_chunk",
+                chance = 0.9,
+                quantity = { min = 1, max = 3 },
+            },
+            {
+                id = "resource:rare_crystal",
+                chance = 0.1,
+                quantity = 1,
+            },
+        },
     },
     field = {
         count = { min = 30, max = 50 }, -- Number of asteroids to spawn in a field

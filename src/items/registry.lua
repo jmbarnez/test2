@@ -2,6 +2,10 @@ local Items = {}
 
 local definitions = {}
 local weaponByBlueprint = {}
+local builtin_definitions = {
+    require("src.items.definitions.resource_ore_chunk"),
+    require("src.items.definitions.resource_rare_crystal"),
+}
 
 local function deep_copy(value, cache)
     if type(value) ~= "table" then
@@ -59,6 +63,17 @@ function Items.register(definition)
 
     definitions[id] = definition
     return definition
+end
+
+-- Register built-in definitions supplied via modules -----------------------
+
+for index = 1, #builtin_definitions do
+    local definition = builtin_definitions[index]
+    if type(definition) == "table" then
+        Items.register(definition)
+    else
+        error(string.format("Invalid built-in item definition at index %d", index))
+    end
 end
 
 function Items.has(id)

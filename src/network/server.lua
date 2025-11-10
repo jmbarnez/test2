@@ -94,12 +94,14 @@ function Server.new(config)
         peerPlayers = {},
         playerSeq = 0,
         usedPlayerIds = {},
+        playerInputTicks = {},
         snapshotInterval = config.snapshotInterval or (1.0 / (constants.network.snapshot_rate or 10)),
         snapshotTimer = 0,
         onPlayerJoined = config.onPlayerJoined,
     }, Server)
 
     state.netTick = state.netTick or 0
+    state.playerInputTicks = state.playerInputTicks or {}
 
     self.transport = Transport.createServer({
         host = host,
@@ -227,7 +229,7 @@ function Server:onReceive(peer, data, _channel)
     end
 
     if message.type == "input" and message.playerId and message.payload then
-        self:applyInput(message.playerId, message.payload)
+        self:applyInput(message.playerId, message.payload, message.inputTick)
     elseif message.type == "chat" and message.payload then
         local text = message.payload.text
         if type(text) == "string" and text ~= "" then
@@ -237,7 +239,7 @@ function Server:onReceive(peer, data, _channel)
     end
 end
 
-function Server:applyInput(playerId, payload)
+function Server:applyInput(playerId, payload, inputTick)
     local container = Intent.ensureContainer(self.state)
     if not container then
         return
@@ -257,6 +259,11 @@ function Server:applyInput(playerId, payload)
     intent.hasAim = payload.hasAim ~= nil and payload.hasAim or intent.hasAim
     intent.firePrimary = not not payload.firePrimary
     intent.fireSecondary = not not payload.fireSecondary
+
+    if inputTick then
+        self.playerInputTicks[playerId] = inputTick
+        self.state.playerInputTicks[playerId] = inputTick
+    end
 end
 
 function Server:spawnPlayerForPeer(peer, playerId)

@@ -1,5 +1,8 @@
 local UIStateManager = {}
 
+---@diagnostic disable-next-line: undefined-global
+local love = love
+
 -- Create default UI state configurations
 local function createCargoUIState()
     return {
@@ -29,6 +32,18 @@ local function createMultiplayerUIState()
         status = "",
         _hostRequested = false,
         _joinRequested = false,
+        _was_mouse_down = false,
+    }
+end
+
+local function createPauseUIState()
+    return {
+        visible = false,
+        title = "Paused",
+        message = "Take a breather while the galaxy waits.",
+        hint = "Press Esc or Enter to resume",
+        buttonLabel = "Resume",
+        resumeHovered = false,
         _was_mouse_down = false,
     }
 end
@@ -90,6 +105,7 @@ function UIStateManager.initialize(state)
     state.cargoUI = state.cargoUI or createCargoUIState()
     state.deathUI = state.deathUI or createDeathUIState()
     state.multiplayerUI = state.multiplayerUI or createMultiplayerUIState()
+    state.pauseUI = state.pauseUI or createPauseUIState()
     state.chatUI = state.chatUI or createChatUIState()
     
     -- Initialize input state
@@ -102,6 +118,8 @@ function UIStateManager.initialize(state)
     if state.respawnRequested == nil then
         state.respawnRequested = false
     end
+
+    state.isPaused = state.pauseUI.visible
 end
 
 function UIStateManager.cleanup(state)
@@ -113,8 +131,10 @@ function UIStateManager.cleanup(state)
     state.deathUI = nil
     state.multiplayerUI = nil
     state.chatUI = nil
+    state.pauseUI = nil
     state.uiInput = nil
     state.respawnRequested = nil
+    state.isPaused = nil
 end
 
 function UIStateManager.addChatMessage(state, playerId, text)
@@ -161,6 +181,10 @@ function UIStateManager.showDeathUI(state)
     deathUI.buttonHovered = false
     deathUI._was_mouse_down = love.mouse and love.mouse.isDown and love.mouse.isDown(1) or false
 
+    if UIStateManager.isPauseUIVisible(state) then
+        UIStateManager.hidePauseUI(state)
+    end
+
     if state.uiInput then
         state.uiInput.mouseCaptured = true
         state.uiInput.keyboardCaptured = true
@@ -188,6 +212,53 @@ function UIStateManager.toggleCargoUI(state)
     end
 
     state.cargoUI.visible = not state.cargoUI.visible
+end
+
+local function setPauseVisibility(state, visible)
+    if not (state and state.pauseUI) then
+        return
+    end
+
+    local pauseUI = state.pauseUI
+    if pauseUI.visible == visible then
+        state.isPaused = pauseUI.visible
+        return
+    end
+
+    pauseUI.visible = visible
+    pauseUI.resumeHovered = false
+    pauseUI._was_mouse_down = love.mouse and love.mouse.isDown and love.mouse.isDown(1) or false
+
+    if state.uiInput then
+        state.uiInput.mouseCaptured = visible
+        state.uiInput.keyboardCaptured = visible
+    end
+
+    state.isPaused = visible
+end
+
+function UIStateManager.showPauseUI(state)
+    setPauseVisibility(state, true)
+end
+
+function UIStateManager.hidePauseUI(state)
+    setPauseVisibility(state, false)
+end
+
+function UIStateManager.togglePauseUI(state)
+    if not (state and state.pauseUI) then
+        return
+    end
+
+    setPauseVisibility(state, not state.pauseUI.visible)
+end
+
+function UIStateManager.isPauseUIVisible(state)
+    return state and state.pauseUI and state.pauseUI.visible
+end
+
+function UIStateManager.isPaused(state)
+    return state and state.isPaused
 end
 
 function UIStateManager.isDeathUIVisible(state)

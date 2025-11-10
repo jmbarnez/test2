@@ -4,7 +4,7 @@ local constants = require("src.constants.game")
 local gameplay = require("src.states.gameplay")
 local NetworkManager = require("src.network.manager")
 
-local TARGET_FPS = 60
+local TARGET_FPS = constants.window.max_fps or 60
 local TARGET_FRAME_TIME = 1 / TARGET_FPS
 
 -- Determine if we should manually limit FPS (disable if vsync is enabled)
@@ -53,7 +53,7 @@ function love.run()
         end
 
         -- Manual frame limiting only when vsync is disabled
-        if USE_FRAME_LIMIT and love.timer then
+        if USE_FRAME_LIMIT and love.timer and TARGET_FPS > 0 then
             local elapsed = love.timer.getTime() - frameStart
             local remaining = TARGET_FRAME_TIME - elapsed
             if remaining > 0 then

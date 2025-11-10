@@ -1,0 +1,17 @@
+# Build artifacts
+/dist/
+/*.love
+/build/
+
+# Logs and debug outputs
+/logs/
+*.log
+*.tmp
+
+# Editor and IDE settings
+.vscode/
+.idea/
+
+# Operating system files
+.DS_Store
+Thumbs.db

@@ -20,6 +20,7 @@ local View = require("src.states.gameplay.view")
 local PlayerEngineTrail = require("src.effects.player_engine_trail")
 local Snapshot = require("src.network.snapshot")
 local Interpolation = require("src.network.interpolation")
+local Prediction = require("src.network.prediction")
 local MultiplayerWindow = require("src.ui.windows.multiplayer")
 local ChatWindow = require("src.ui.windows.chat")
 
@@ -66,12 +67,9 @@ function gameplay:enter(_, config)
     self.netRole = config and config.netRole or self.netRole or 'offline'
 
     -- Initialize client-side prediction buffers
-    self.prediction = {
-        tick = 0,
-        history = {},
-        maxSize = constants.network.prediction_buffer_size or 90,
-        lastAck = 0,
-    }
+    self.prediction = self.prediction or {}
+    self.prediction.maxSize = constants.network.prediction_buffer_size or self.prediction.maxSize or 90
+    Prediction.reset(self)
     -- Do not pre-spawn when acting as a client; server will spawn on connect
     if self.netRole ~= 'client' then
         local player = Entities.spawnPlayer(self)
@@ -136,6 +134,7 @@ function gameplay:reinitializeAsClient()
     self.prediction = {
         tick = 0,
         history = {},
+        order = {},
         maxSize = constants.network.prediction_buffer_size or 90,
         lastAck = 0,
     }
@@ -164,22 +163,26 @@ function gameplay:update(dt)
         self:respawnPlayer()
     end
 
-    -- Update network systems
-    if self.networkManager then
-        self.networkManager:update(dt)
-    end
-    if self.networkServer then
-        self.networkServer:update(dt)
-    end
+    -- Update network systems (only in multiplayer modes)
+    if self.netRole ~= 'offline' then
+        if self.networkManager then
+            self.networkManager:update(dt)
+        end
+        if self.networkServer then
+            self.networkServer:update(dt)
+        end
 
-    -- Interpolate remote entities for smooth movement (both client and host)
-    if constants.network.interpolation_enabled and (self.netRole == 'client' or self.netRole == 'host') then
-        Interpolation.updateWorld(self.world, dt)
-    end
+        -- Initialize prediction module
+        Prediction.initialize(self)
 
-    self.world:update(dt)
+        -- Interpolate remote entities for smooth movement (both client and host)
+        if constants.network.interpolation_enabled and (self.netRole == 'client' or self.netRole == 'host') then
+            Interpolation.updateWorld(self.world, dt)
+        end
+    end
 
     -- Fixed timestep physics for deterministic multiplayer
+    -- MUST update physics BEFORE world systems so systems read fresh physics state
     -- Accumulate frame time and step physics in fixed increments
     local physicsWorld = self.physicsWorld
     if physicsWorld then
@@ -200,6 +203,16 @@ function gameplay:update(dt)
             self.physicsAccumulator = 0
         end
     end
+
+    if constants.network.client_prediction_enabled and self.netRole == 'client' then
+        local ship = PlayerManager.getCurrentShip(self)
+        if ship then
+            Prediction.recordState(self, ship)
+        end
+    end
+
+    -- Update ECS systems after physics (systems read freshly updated physics state)
+    self.world:update(dt)
 
     if self.engineTrail then
         self.engineTrail:update(dt)

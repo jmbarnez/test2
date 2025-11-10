@@ -5,6 +5,7 @@ local UIStateManager = require("src.ui.state_manager")
 local Intent = require("src.input.intent")
 local json = require("libs.json")
 local constants = require("src.constants.game")
+local Prediction = require("src.network.prediction")
 
 local love = love
 
@@ -172,6 +173,7 @@ function NetworkManager:sendInput()
             firePrimary = intent.firePrimary,
             fireSecondary = intent.fireSecondary,
         },
+        inputTick = Prediction.getLastRecordedTick(self.state),
     })
 
     if payload then

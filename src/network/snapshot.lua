@@ -3,6 +3,7 @@ local PlayerManager = require("src.player.manager")
 local Entities = require("src.states.gameplay.entities")
 local loader = require("src.blueprints.loader")
 local constants = require("src.constants.game")
+local Prediction = require("src.network.prediction")
 
 local Snapshot = {}
 
@@ -78,6 +79,9 @@ function Snapshot.capture(state)
         local serialized = ShipRuntime.serialize(entity)
         if serialized then
             serialized.playerId = playerId
+            if state.playerInputTicks and state.playerInputTicks[playerId] then
+                serialized.lastInputTick = state.playerInputTicks[playerId]
+            end
             snapshot.players[playerId] = serialized
         end
     end
@@ -338,7 +342,15 @@ function Snapshot.apply(state, snapshot)
         local isLocal = is_local_player(state, playerId)
 
         if isLocal and not state.networkServer then
-            reconcile_local_player(entity, playerSnapshot)
+            if constants.network.client_prediction_enabled then
+                local corrected = Prediction.reconcile(state, entity, playerSnapshot)
+                if not corrected then
+                    -- fall back to basic reconciliation if within thresholds
+                    reconcile_local_player(entity, playerSnapshot)
+                end
+            else
+                reconcile_local_player(entity, playerSnapshot)
+            end
             goto continue
         end
 

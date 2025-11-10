@@ -129,6 +129,11 @@ return function(context)
             if projectile.projectile.owner == target then
                 return
             end
+
+            local ownerPlayerId = projectile.projectile.ownerPlayerId
+            if ownerPlayerId and target.playerId == ownerPlayerId then
+                return
+            end
             
             -- Freeze projectile rotation and velocity on impact
             if projectile.body and not projectile.body:isDestroyed() then

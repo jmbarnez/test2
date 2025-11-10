@@ -95,6 +95,7 @@ local function spawn_projectile(tinyWorld, physicsWorld, shooter, startX, startY
     projectileComponent.lifetime = projectileComponent.lifetime or lifetime
     projectileComponent.damage = projectileComponent.damage or damage
     projectileComponent.owner = shooter
+    projectileComponent.ownerPlayerId = shooter and shooter.playerId or nil
     projectile.projectile = projectileComponent
 
     local drawable = projectile.drawable or {}

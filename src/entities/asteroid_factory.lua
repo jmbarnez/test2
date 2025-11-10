@@ -213,6 +213,11 @@ function asteroid_factory.instantiate(blueprint, context)
     health_bar.offset = health_bar.offset or radius + health_bar.padding
     entity.healthBar = health_bar
 
+    local loot_config = config.loot or entity.loot or asteroid_constants.loot
+    if loot_config then
+        entity.loot = deep_copy(loot_config)
+    end
+
     if not entity.onDestroyed then
         entity.onDestroyed = function(self)
             if self.body and not self.body:isDestroyed() then
