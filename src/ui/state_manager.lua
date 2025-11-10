@@ -60,6 +60,7 @@ local function hsv_to_rgb(h, s, v)
     local q = v * (1 - f * s)
     local t = v * (1 - (1 - f) * s)
     i = i % 6
+    
     if i == 0 then return { v, t, p, 1 } end
     if i == 1 then return { q, v, p, 1 } end
     if i == 2 then return { p, v, t, 1 } end
@@ -74,10 +75,8 @@ local function generatePlayerColor(playerId)
 
     local golden_ratio_conjugate = 0.61803398875
     local hue = (hash / 4294967296 + golden_ratio_conjugate) % 1
-    local sat = 0.75 + ((hash % 97) / 96) * 0.2 -- 0.75 - 0.95
-    if sat > 1 then sat = 1 end
-    local value = 0.88 + ((hash % 53) / 52) * 0.12 -- 0.88 - 1
-    if value > 1 then value = 1 end
+    local sat = math.min(0.75 + ((hash % 97) / 96) * 0.2, 1)
+    local value = math.min(0.88 + ((hash % 53) / 52) * 0.12, 1)
 
     return hsv_to_rgb(hue, sat, value)
 end
@@ -88,19 +87,21 @@ function UIStateManager.initialize(state)
     end
 
     -- Initialize UI states
-    state.cargoUI = createCargoUIState()
-    state.deathUI = createDeathUIState()
-    state.multiplayerUI = createMultiplayerUIState()
-    state.chatUI = createChatUIState()
+    state.cargoUI = state.cargoUI or createCargoUIState()
+    state.deathUI = state.deathUI or createDeathUIState()
+    state.multiplayerUI = state.multiplayerUI or createMultiplayerUIState()
+    state.chatUI = state.chatUI or createChatUIState()
     
     -- Initialize input state
-    state.uiInput = {
+    state.uiInput = state.uiInput or {
         mouseCaptured = false,
         keyboardCaptured = false,
     }
     
     -- Initialize respawn state
-    state.respawnRequested = false
+    if state.respawnRequested == nil then
+        state.respawnRequested = false
+    end
 end
 
 function UIStateManager.cleanup(state)
@@ -142,10 +143,10 @@ function UIStateManager.addChatMessage(state, playerId, text)
         message.timestamp = love.timer.getTime()
     end
 
-    chat.messages[#chat.messages + 1] = message
+    table.insert(chat.messages, message)
 
     local maxHistory = chat.maxHistory or 50
-    if #chat.messages > maxHistory then
+    while #chat.messages > maxHistory do
         table.remove(chat.messages, 1)
     end
 end

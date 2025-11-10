@@ -18,10 +18,23 @@ local createDestructionSystem = require("src.systems.destruction")
 
 local Systems = {}
 
-function Systems.initialize(state, damageCallback)
-    state.world = tiny.world()
-
+local function ensure_world(state)
+    if not state.world then
+        state.world = tiny.world()
+    end
     Intent.ensureContainer(state)
+end
+
+local function add_common_systems(state)
+    state.movementSystem = state.world:addSystem(createMovementSystem())
+    state.weaponSystem = state.world:addSystem(createWeaponSystem(state))
+    state.shipSystem = state.world:addSystem(createShipSystem(state))
+    state.projectileSystem = state.world:addSystem(createProjectileSystem(state))
+    state.destructionSystem = state.world:addSystem(createDestructionSystem(state))
+end
+
+function Systems.initialize(state, damageCallback)
+    ensure_world(state)
 
     state.uiInput = {
         mouseCaptured = false,
@@ -54,25 +67,37 @@ function Systems.initialize(state, damageCallback)
         uiInput = state.uiInput,
         intentHolder = state,
     }))
-    -- Add spawners on server or offline, but not on clients
+
     local isClient = state.netRole == 'client'
     if not isClient then
         state.spawnerSystem = state.world:addSystem(createAsteroidSpawner(state))
         state.enemySpawnerSystem = state.world:addSystem(createEnemySpawner(state))
     end
 
-    state.movementSystem = state.world:addSystem(createMovementSystem())
+    add_common_systems(state)
 
-    state.renderSystem = state.world:addSystem(createRenderSystem(state))
-    state.weaponSystem = state.world:addSystem(createWeaponSystem(state))
-    state.shipSystem = state.world:addSystem(createShipSystem(state))
-    state.projectileSystem = state.world:addSystem(createProjectileSystem(state))
     if not isClient then
         state.enemyAISystem = state.world:addSystem(createEnemyAISystem(state))
     end
+
+    state.renderSystem = state.world:addSystem(createRenderSystem(state))
     state.hudSystem = state.world:addSystem(createHudSystem(state))
     state.uiSystem = state.world:addSystem(createUiSystem(state))
-    state.destructionSystem = state.world:addSystem(createDestructionSystem(state))
+end
+
+function Systems.initializeServer(state, damageCallback)
+    ensure_world(state)
+
+    if damageCallback then
+        state.damageEntity = damageCallback
+    end
+
+    -- Server runs authoritative systems only (no rendering/input/UI)
+    state.spawnerSystem = state.world:addSystem(createAsteroidSpawner(state))
+    state.enemySpawnerSystem = state.world:addSystem(createEnemySpawner(state))
+
+    add_common_systems(state)
+    state.enemyAISystem = state.world:addSystem(createEnemyAISystem(state))
 end
 
 function Systems.teardown(state)
@@ -87,6 +112,7 @@ function Systems.teardown(state)
     state.hudSystem = nil
     state.uiSystem = nil
     state.damageEntity = nil
+    state.destructionSystem = nil
 
     state.world = nil
 end

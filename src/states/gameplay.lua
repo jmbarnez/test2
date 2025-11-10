@@ -19,7 +19,7 @@ local Systems = require("src.states.gameplay.systems")
 local View = require("src.states.gameplay.view")
 local PlayerEngineTrail = require("src.effects.player_engine_trail")
 local Snapshot = require("src.network.snapshot")
-local Prediction = require("src.network.prediction")
+local Interpolation = require("src.network.interpolation")
 local MultiplayerWindow = require("src.ui.windows.multiplayer")
 local ChatWindow = require("src.ui.windows.chat")
 
@@ -49,6 +49,7 @@ end
 
 function gameplay:enter(_, config)
     local sectorId = resolveSectorId(config)
+    self.currentSectorId = sectorId or self.currentSectorId
 
     -- Initialize UI state
     UIStateManager.initialize(self)
@@ -61,10 +62,16 @@ function gameplay:enter(_, config)
     View.initialize(self)
     Systems.initialize(self, Entities.damage)
     
-    -- Initialize prediction system for multiplayer
-    Prediction.initialize(self)
     -- Default role is offline until user chooses Host/Join
-    self.netRole = self.netRole or 'offline'
+    self.netRole = config and config.netRole or self.netRole or 'offline'
+
+    -- Initialize client-side prediction buffers
+    self.prediction = {
+        tick = 0,
+        history = {},
+        maxSize = constants.network.prediction_buffer_size or 90,
+        lastAck = 0,
+    }
     -- Do not pre-spawn when acting as a client; server will spawn on connect
     if self.netRole ~= 'client' then
         local player = Entities.spawnPlayer(self)
@@ -84,7 +91,7 @@ function gameplay:leave()
     Systems.teardown(self)
     World.teardown(self)
     View.teardown(self)
-    
+
     if self.engineTrail then
         self.engineTrail:clear()
         self.engineTrail = nil
@@ -102,6 +109,42 @@ function gameplay:leave()
     
     -- Clean up UI state
     UIStateManager.cleanup(self)
+end
+
+function gameplay:reinitializeAsClient()
+    -- Tear down existing world/state except network connections
+    PlayerManager.clearShip(self)
+    Entities.destroyWorldEntities(self.world)
+    Systems.teardown(self)
+    World.teardown(self)
+    View.teardown(self)
+
+    if self.engineTrail then
+        self.engineTrail:clear()
+    end
+    self.engineTrail = PlayerEngineTrail.new()
+
+    self.netRole = 'client'
+    self.player = nil
+    self.playerShip = nil
+    self.players = {}
+    self.entitiesById = {}
+    self.worldSynced = false
+    self.localPlayerId = nil
+    self.networkServer = nil
+
+    self.prediction = {
+        tick = 0,
+        history = {},
+        maxSize = constants.network.prediction_buffer_size or 90,
+        lastAck = 0,
+    }
+
+    World.loadSector(self, self.currentSectorId)
+    World.initialize(self)
+    View.initialize(self)
+    Systems.initialize(self, Entities.damage)
+    View.updateCamera(self)
 end
 
 function gameplay:captureSnapshot()
@@ -129,14 +172,19 @@ function gameplay:update(dt)
         self.networkServer:update(dt)
     end
 
+    -- Interpolate remote entities for smooth movement (both client and host)
+    if constants.network.interpolation_enabled and (self.netRole == 'client' or self.netRole == 'host') then
+        Interpolation.updateWorld(self.world, dt)
+    end
+
     self.world:update(dt)
 
     -- Fixed timestep physics for deterministic multiplayer
     -- Accumulate frame time and step physics in fixed increments
     local physicsWorld = self.physicsWorld
     if physicsWorld then
-        local FIXED_DT = 1/60  -- 60Hz physics regardless of frame rate
-        local MAX_STEPS = 4    -- Prevent spiral of death
+        local FIXED_DT = constants.network.physics_timestep
+        local MAX_STEPS = constants.network.physics_max_steps
         
         self.physicsAccumulator = (self.physicsAccumulator or 0) + dt
         

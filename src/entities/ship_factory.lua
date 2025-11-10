@@ -191,6 +191,10 @@ function ship_factory.instantiate(blueprint, context)
     local body = love.physics.newBody(context.physicsWorld, spawn_x, spawn_y, body_type)
     body:setAngle(entity.rotation)
     apply_body_settings(body, body_config, entity.stats)
+    
+    -- Lock rotation - ships only rotate via player input, not collisions
+    body:setFixedRotation(true)
+    
     body:setUserData(entity)
 
     -- Setup colliders

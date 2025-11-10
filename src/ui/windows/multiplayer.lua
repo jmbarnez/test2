@@ -143,29 +143,20 @@ local function host_game(context)
     state.addressInput = format_address(host, port)
     close_text_input(state)
 
-    if context.networkServer then
-        context.networkServer:shutdown()
-        context.networkServer = nil
-    end
-
-    -- Disconnect any existing client connection first
+    -- Ensure any existing client connection is inactive while hosting
     local manager = get_manager(context)
     if manager then
         manager:disconnect()
     end
 
-    -- Remove any existing local ship to avoid duplicates when switching roles
-    local currentShip = PlayerManager.getCurrentShip(context)
-    if currentShip then
-        if currentShip.body and not currentShip.body:isDestroyed() then
-            currentShip.body:destroy()
-        end
-        if context.world then
-            pcall(function() context.world:remove(currentShip) end)
-        end
-        PlayerManager.clearShip(context, currentShip)
+    -- Clean up any running server before starting a new one
+    if context.networkServer then
+        context.networkServer:shutdown()
+        context.networkServer = nil
     end
 
+    -- Promote current world to server authority
+    context.netRole = 'server'
     local ok, err = pcall(function()
         context.networkServer = Server.new({
             state = context,
@@ -177,20 +168,20 @@ local function host_game(context)
     if not ok then
         set_status(state, string.format("Host failed: %s", tostring(err)))
         context.networkServer = nil
+        context.netRole = 'offline'
         return
     end
 
-    -- Listen-server: also connect as a client to unify flow
-    context.netRole = 'server'
+    -- Ensure host player has a network id
+    if context.networkServer then
+        context.networkServer:initializeHostPlayer()
+    end
+
+    -- Reactivate server-only systems in case they were previously disabled
     if context.spawnerSystem then tiny.activate(context.spawnerSystem) end
     if context.enemySpawnerSystem then tiny.activate(context.enemySpawnerSystem) end
     if context.enemyAISystem then tiny.activate(context.enemyAISystem) end
-    local manager = get_manager(context)
-    if manager then
-        manager:disconnect()
-        manager:setAddress("127.0.0.1", port)
-        pcall(function() manager:connect() end)
-    end
+
     set_status(state, string.format("Hosting on %s:%d", host, port))
 end
 
@@ -226,12 +217,17 @@ local function join_game(context)
     if context.spawnerSystem then tiny.deactivate(context.spawnerSystem) end
     if context.enemySpawnerSystem then tiny.deactivate(context.enemySpawnerSystem) end
     if context.enemyAISystem then tiny.deactivate(context.enemyAISystem) end
-    context.worldSynced = false
 
     local manager = get_manager(context)
     if not manager then
         set_status(state, "Client manager unavailable")
         return
+    end
+
+    if context.reinitializeAsClient then
+        context:reinitializeAsClient()
+    else
+        context.worldSynced = false
     end
 
     manager:disconnect()

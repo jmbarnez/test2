@@ -226,8 +226,8 @@ function Server:onReceive(peer, data, _channel)
         return
     end
 
-    if message.type == "intent" and message.playerId and message.payload then
-        self:applyIntent(message.playerId, message.payload)
+    if message.type == "input" and message.playerId and message.payload then
+        self:applyInput(message.playerId, message.payload)
     elseif message.type == "chat" and message.payload then
         local text = message.payload.text
         if type(text) == "string" and text ~= "" then
@@ -237,7 +237,7 @@ function Server:onReceive(peer, data, _channel)
     end
 end
 
-function Server:applyIntent(playerId, payload)
+function Server:applyInput(playerId, payload)
     local container = Intent.ensureContainer(self.state)
     if not container then
         return
@@ -314,8 +314,9 @@ function Server:broadcastSnapshot()
         return
     end
 
+    -- Use unreliable packets for snapshots to reduce lag (snapshots are frequent enough to mask occasional loss)
     for _, peer in pairs(self.peers) do
-        self.transport:send(peer, payload, 0, true)
+        self.transport:send(peer, payload, 0, false)
     end
 end
 
@@ -328,7 +329,7 @@ function Server:update(dt)
 
     -- Add a small delay before starting snapshots to let spawners run
     self.startupTimer = (self.startupTimer or 0) + dt
-    if self.startupTimer < 1.0 then  -- Wait 1 second before starting snapshots
+    if self.startupTimer < constants.network.server_startup_delay then
         return
     end
 

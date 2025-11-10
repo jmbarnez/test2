@@ -3,8 +3,8 @@ local Snapshot = require("src.network.snapshot")
 local PlayerManager = require("src.player.manager")
 local UIStateManager = require("src.ui.state_manager")
 local Intent = require("src.input.intent")
-local Prediction = require("src.network.prediction")
 local json = require("libs.json")
+local constants = require("src.constants.game")
 
 local love = love
 
@@ -26,24 +26,21 @@ local function decode_message(data)
 end
 
 local function format_address(host, port)
-    host = host or "127.0.0.1"
-    port = type(port) == "number" and port or (tonumber(port) or 22122)
+    host = host or constants.network.default_client_host
+    port = type(port) == "number" and port or (tonumber(port) or constants.network.port)
     return string.format("%s:%d", host, port)
 end
 
 function NetworkManager.new(config)
     config = config or {}
-    local constants = require("src.constants.game")
 
     local self = setmetatable({
         state = assert(config.state, "NetworkManager requires a gameplay state reference"),
-        snapshotInterval = config.snapshotInterval or (1.0 / (constants.network.snapshot_rate or 10)),
-        intentInterval = config.intentInterval or (1.0 / (constants.network.intent_rate or 20)),
-        snapshotTimer = 0,
-        intentTimer = 0,
+        inputInterval = config.inputInterval or (1.0 / (constants.network.input_rate or 30)),
+        inputTimer = 0,
         connected = false,
-        host = config.host or "127.0.0.1",
-        port = tonumber(config.port) or 22122,
+        host = config.host or constants.network.default_client_host,
+        port = tonumber(config.port) or constants.network.port,
     }, NetworkManager)
 
     self.client = Transport.createClient({
@@ -52,7 +49,6 @@ function NetworkManager.new(config)
         channels = config.channels or 2,
         onConnect = function(peer)
             self.connected = true
-            Prediction.initialize(self.state)
             if config.onConnect then
                 config.onConnect(peer)
             end
@@ -119,18 +115,6 @@ function NetworkManager:handleMessage(data, _channel)
         end
         Intent.ensure(self.state, message.playerId)
     elseif message.type == "snapshot" and message.payload then
-        -- Skip snapshots on host AFTER initial sync (to preserve local input authority)
-        if self.state and self.state.networkServer and self.state.worldSynced then
-            return
-        end
-        -- Server reconciliation for local player
-        if message.payload.players and self.state.localPlayerId then
-            local serverPlayerData = message.payload.players[self.state.localPlayerId]
-            if serverPlayerData then
-                Prediction.reconcile(self.state, serverPlayerData, message.payload.tick or 0)
-            end
-        end
-        
         Snapshot.apply(self.state, message.payload)
     elseif message.type == "intent" and message.playerId and message.payload then
         self:applyRemoteIntent(message.playerId, message.payload)
@@ -164,31 +148,7 @@ function NetworkManager:applyRemoteIntent(playerId, payload)
     intent.fireSecondary = payload.fireSecondary or false
 end
 
-function NetworkManager:sendSnapshot()
-    if not self.connected or not self.client then
-        return
-    end
-
-    if self.state and self.state.netRole == 'client' then
-        return
-    end
-
-    local snapshot = Snapshot.capture(self.state)
-    if not snapshot then
-        return
-    end
-
-    local payload = encode_message({
-        type = "snapshot",
-        payload = snapshot,
-    })
-
-    if payload then
-        self.client:send(payload, 0, true)
-    end
-end
-
-function NetworkManager:sendLocalIntent()
+function NetworkManager:sendInput()
     if not self.connected or not self.client or not self.state.localPlayerId then
         return
     end
@@ -199,12 +159,8 @@ function NetworkManager:sendLocalIntent()
         return
     end
 
-    -- Record input for client-side prediction
-    Prediction.recordInput(self.state, intent)
-    Prediction.recordState(self.state)
-
     local payload = encode_message({
-        type = "intent",
+        type = "input",
         playerId = self.state.localPlayerId,
         payload = {
             moveX = intent.moveX,
@@ -234,16 +190,10 @@ function NetworkManager:update(dt)
         return
     end
 
-    self.intentTimer = self.intentTimer + dt
-    if self.intentTimer >= self.intentInterval then
-        self.intentTimer = self.intentTimer - self.intentInterval
-        self:sendLocalIntent()
-    end
-
-    self.snapshotTimer = self.snapshotTimer + dt
-    if self.snapshotTimer >= self.snapshotInterval then
-        self.snapshotTimer = self.snapshotTimer - self.snapshotInterval
-        self:sendSnapshot()
+    self.inputTimer = self.inputTimer + dt
+    if self.inputTimer >= self.inputInterval then
+        self.inputTimer = self.inputTimer - self.inputInterval
+        self:sendInput()
     end
 end
 
@@ -258,7 +208,7 @@ function NetworkManager:sendChatMessage(text)
     end
 
     if self.connected and self.client and self.client.peer then
-        local clipped = trimmed:sub(1, 200)
+        local clipped = trimmed:sub(1, constants.network.chat_max_length)
         local payload = encode_message({
             type = "chat",
             payload = {

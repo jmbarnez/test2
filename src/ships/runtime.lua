@@ -1,247 +1,9 @@
-local loader = require("src.blueprints.loader")
 local Items = require("src.items.registry")
 local vector = require("src.util.vector")
+local ship_util = require("src.ships.util")
+local ShipCargo = require("src.ships.cargo")
 
 local runtime = {}
-
-local function sanitize_positive_number(value)
-    local n = tonumber(value) or 0
-    return n < 0 and 0 or n
-end
-
-local function deep_copy(value, cache)
-    if type(value) ~= "table" then
-        return value
-    end
-
-    cache = cache or {}
-    if cache[value] then
-        return cache[value]
-    end
-
-    local copy = {}
-    cache[value] = copy
-
-    for k, v in pairs(value) do
-        copy[deep_copy(k, cache)] = deep_copy(v, cache)
-    end
-
-    local mt = getmetatable(value)
-    if mt then
-        setmetatable(copy, mt)
-    end
-
-    return copy
-end
-
-local function instantiate_initial_item(descriptor)
-    if type(descriptor) ~= "table" then
-        if type(descriptor) == "string" then
-            local itemInstance = Items.instantiate(descriptor)
-            if itemInstance then
-                return itemInstance
-            end
-        end
-        return descriptor
-    end
-
-    if descriptor.id and descriptor.type then
-        local clone = deep_copy(descriptor)
-        clone.quantity = sanitize_positive_number(clone.quantity or 1)
-        clone.volume = sanitize_positive_number(clone.volume or 1)
-        return clone
-    end
-
-    local weaponId = descriptor.weapon or descriptor.weaponId
-    if weaponId then
-        local blueprint
-        local ok, loaded = pcall(loader.load, "weapons", weaponId)
-        if ok then
-            blueprint = loaded
-        end
-
-        local overrides = {}
-        if descriptor.quantity then
-            overrides.quantity = sanitize_positive_number(descriptor.quantity)
-        end
-        if descriptor.installed ~= nil then
-            overrides.installed = descriptor.installed
-        end
-        if descriptor.slot then
-            overrides.slot = descriptor.slot
-        end
-        if descriptor.mount then
-            overrides.mount = deep_copy(descriptor.mount)
-        end
-        if descriptor.overrides then
-            overrides.overrides = deep_copy(descriptor.overrides)
-        end
-        if descriptor.name then
-            overrides.name = descriptor.name
-        end
-
-        local instance
-        if blueprint then
-            instance = Items.ensureWeaponItem(blueprint, overrides)
-        else
-            instance = Items.createWeaponItem(weaponId, overrides)
-        end
-
-        if instance then
-            instance.quantity = sanitize_positive_number(instance.quantity or descriptor.quantity or 1)
-            instance.volume = sanitize_positive_number(descriptor.volume or instance.volume or 1)
-            if not instance.icon and blueprint and blueprint.icon then
-                instance.icon = deep_copy(blueprint.icon)
-            end
-            return instance
-        end
-    end
-
-    local fallback = deep_copy(descriptor)
-    fallback.quantity = sanitize_positive_number(fallback.quantity or 1)
-    fallback.volume = sanitize_positive_number(fallback.volume or 1)
-    return fallback
-end
-
-local function cargo_recalculate(self)
-    if type(self) ~= "table" then
-        return 0
-    end
-
-    local items = self.items
-    if type(items) ~= "table" then
-        items = {}
-        self.items = items
-    end
-
-    local total = 0
-    for index = #items, 1, -1 do
-        local item = items[index]
-        if type(item) ~= "table" then
-            table.remove(items, index)
-        else
-            item.quantity = sanitize_positive_number(item.quantity or item.count)
-            item.volume = sanitize_positive_number(item.volume or item.unitVolume)
-
-            if item.quantity == 0 or item.volume == 0 then
-                table.remove(items, index)
-            else
-                total = total + item.quantity * item.volume
-            end
-        end
-    end
-
-    self.capacity = sanitize_positive_number(self.capacity)
-    self.used = total
-    self.available = math.max(0, self.capacity - total)
-    return total
-end
-
-local function cargo_can_fit(self, additionalVolume)
-    if type(self) ~= "table" then
-        return false
-    end
-
-    local volume = sanitize_positive_number(additionalVolume)
-    if volume == 0 then
-        return true
-    end
-
-    local capacity = sanitize_positive_number(self.capacity)
-    local used = sanitize_positive_number(self.used)
-    return volume <= math.max(0, capacity - used)
-end
-
-local function cargo_try_add(self, descriptor, quantity)
-    if type(self) ~= "table" or type(descriptor) ~= "table" then
-        return false, "invalid_descriptor"
-    end
-
-    local qty = sanitize_positive_number(quantity or descriptor.quantity or 1)
-    local perVolume = sanitize_positive_number(descriptor.volume or descriptor.unitVolume)
-    if qty == 0 or perVolume == 0 then
-        return false, "zero_volume"
-    end
-
-    local deltaVolume = qty * perVolume
-    if not cargo_can_fit(self, deltaVolume) then
-        return false, "insufficient_capacity"
-    end
-
-    local items = self.items
-    local id = descriptor.id
-    local target
-
-    if id then
-        for i = 1, #items do
-            local existing = items[i]
-            if existing and existing.id == id then
-                target = existing
-                break
-            end
-        end
-    end
-
-    if target then
-        target.quantity = sanitize_positive_number(target.quantity) + qty
-        target.volume = sanitize_positive_number(target.volume)
-        if target.volume == 0 then
-            target.volume = perVolume
-        end
-    else
-        target = {
-            id = id,
-            name = descriptor.name or descriptor.displayName or id or "Unknown Cargo",
-            quantity = qty,
-            volume = perVolume,
-            icon = descriptor.icon,
-        }
-        items[#items + 1] = target
-    end
-
-    self.used = sanitize_positive_number(self.used) + deltaVolume
-    self.capacity = sanitize_positive_number(self.capacity)
-    self.available = math.max(0, self.capacity - self.used)
-    self.dirty = true
-    return true
-end
-
-local function cargo_try_remove(self, itemId, quantity)
-    if type(self) ~= "table" or not itemId then
-        return false, "invalid_item"
-    end
-
-    local qty = sanitize_positive_number(quantity or 1)
-    if qty == 0 then
-        return false, "zero_quantity"
-    end
-
-    local items = self.items
-    for index = 1, #items do
-        local item = items[index]
-        if item and (item.id == itemId or item.name == itemId) then
-            local removable = math.min(item.quantity or 0, qty)
-            if removable <= 0 then
-                return false, "insufficient_quantity"
-            end
-
-            item.quantity = (item.quantity or 0) - removable
-            local freedVolume = removable * (item.volume or 0)
-
-            if item.quantity <= 0 then
-                table.remove(items, index)
-            end
-
-            self.used = math.max(0, sanitize_positive_number(self.used) - freedVolume)
-            self.capacity = sanitize_positive_number(self.capacity)
-            self.available = math.max(0, self.capacity - self.used)
-            self.dirty = true
-            return true
-        end
-    end
-
-    return false, "not_found"
-end
 
 local function compute_polygon_radius(points)
     local maxRadius = 0
@@ -375,44 +137,13 @@ local function create_shapes(collider)
     end
 end
 
-runtime.deep_copy = deep_copy
 runtime.compute_polygon_radius = compute_polygon_radius
 runtime.compute_drawable_radius = compute_drawable_radius
 runtime.resolve_mount_anchor = resolve_mount_anchor
 runtime.create_shapes = create_shapes
 
 function runtime.create_entity(components)
-    return deep_copy(components or {})
-end
-
-function runtime.initialize_cargo(cargo)
-    if type(cargo) ~= "table" then
-        return nil
-    end
-
-    cargo.capacity = sanitize_positive_number(cargo.capacity or cargo.volumeCapacity or cargo.volumeLimit)
-    cargo.items = type(cargo.items) == "table" and cargo.items or {}
-
-    if #cargo.items > 0 then
-        local normalized = {}
-        for index = 1, #cargo.items do
-            local resolved = instantiate_initial_item(cargo.items[index])
-            if resolved then
-                normalized[#normalized + 1] = resolved
-            end
-        end
-        cargo.items = normalized
-    end
-
-    cargo.refresh = cargo.refresh or cargo_recalculate
-    cargo.canFit = cargo.canFit or cargo_can_fit
-    cargo.tryAddItem = cargo.tryAddItem or cargo_try_add
-    cargo.tryRemoveItem = cargo.tryRemoveItem or cargo_try_remove
-
-    cargo.refresh(cargo)
-    cargo.dirty = false
-    cargo.autoRefresh = cargo.autoRefresh ~= false
-    return cargo
+    return ship_util.deep_copy(components or {})
 end
 
 local function populate_weapon_inventory(entity, context)
@@ -422,10 +153,16 @@ local function populate_weapon_inventory(entity, context)
         return
     end
 
+    context = context or {}
+    local weaponOverrides = context.weaponOverrides or {}
+
     for i = 1, #weapons do
         local weapon = weapons[i]
         if weapon and weapon.itemId then
-            local overrides = context.weaponOverrides and context.weaponOverrides[weapon.blueprint.id]
+            local overrides
+            if weapon.blueprint and weapon.blueprint.id then
+                overrides = weaponOverrides[weapon.blueprint.id]
+            end
             local itemInstance = Items.instantiate(weapon.itemId, {
                 installed = true,
                 slot = weapon.assign,
@@ -449,7 +186,10 @@ function runtime.initialize_health(entity, constants)
     end
 
     if entity.health then
-        entity.health.max = entity.health.max or (entity.hull and entity.hull.max) or entity.health.current or 100
+        entity.health.max = entity.health.max
+            or (entity.hull and entity.hull.max)
+            or entity.health.current
+            or 100
         entity.health.current = math.min(entity.health.current or entity.health.max, entity.health.max)
         entity.health.showTimer = entity.health.showTimer or 0
     elseif entity.hull then
@@ -458,9 +198,9 @@ function runtime.initialize_health(entity, constants)
     end
 
     if not entity.healthBar then
-        local defaults = constants.ships and constants.ships.health_bar
+        local defaults = constants and constants.ships and constants.ships.health_bar
         if defaults then
-            entity.healthBar = deep_copy(defaults)
+            entity.healthBar = ship_util.deep_copy(defaults)
             local bar = entity.healthBar
             bar.showDuration = bar.showDuration or bar.show_duration
         end
@@ -469,7 +209,7 @@ function runtime.initialize_health(entity, constants)
     end
 end
 
-local function decrement_health_timer(entity, dt)
+function runtime.decrement_health_timer(entity, dt)
     if dt <= 0 then
         return
     end
@@ -480,78 +220,21 @@ local function decrement_health_timer(entity, dt)
     end
 end
 
-local function refresh_cargo_if_dirty(cargo)
-    if not cargo then
-        return
-    end
-
-    if cargo.autoRefresh ~= false and cargo.dirty and type(cargo.refresh) == "function" then
-        cargo.refresh(cargo)
-        cargo.dirty = false
-    end
-end
-
 function runtime.initialize(entity, constants, context)
     entity.shipRuntime = true
 
     if entity.cargo then
-        runtime.initialize_cargo(entity.cargo)
+        ShipCargo.initialize(entity.cargo)
     end
 
     runtime.initialize_health(entity, constants)
     populate_weapon_inventory(entity, context or {})
-    refresh_cargo_if_dirty(entity.cargo)
+    ShipCargo.refresh_if_needed(entity.cargo)
 end
 
 function runtime.update(entity, dt)
-    refresh_cargo_if_dirty(entity.cargo)
-    decrement_health_timer(entity, dt)
-end
-
-local function serialize_weapon_state(weapon)
-    if type(weapon) ~= "table" then
-        return nil
-    end
-
-    local state = {
-        id = weapon.id or (weapon.blueprint and weapon.blueprint.id),
-        assign = weapon.assign,
-        firing = not not weapon.firing,
-        alwaysFire = not not weapon.alwaysFire,
-        cooldown = weapon.cooldown,
-        beamTimer = weapon.beamTimer,
-        maxRange = weapon.maxRange,
-        targetX = weapon.targetX,
-        targetY = weapon.targetY,
-        sequence = weapon.sequence,
-    }
-
-    if weapon.mount then
-        state.mount = deep_copy(weapon.mount)
-    elseif weapon.weaponMount then
-        state.mount = deep_copy(weapon.weaponMount)
-    end
-
-    return state
-end
-
-local function apply_weapon_state(weapon, snapshot)
-    if type(weapon) ~= "table" or type(snapshot) ~= "table" then
-        return
-    end
-
-    weapon.firing = not not snapshot.firing
-    weapon.alwaysFire = not not snapshot.alwaysFire
-    weapon.cooldown = snapshot.cooldown or 0
-    weapon.beamTimer = snapshot.beamTimer
-    weapon.maxRange = snapshot.maxRange or weapon.maxRange
-    weapon.targetX = snapshot.targetX
-    weapon.targetY = snapshot.targetY
-    weapon.sequence = snapshot.sequence or weapon.sequence
-
-    if snapshot.mount then
-        weapon.weaponMount = deep_copy(snapshot.mount)
-    end
+    ShipCargo.refresh_if_needed(entity.cargo)
+    runtime.decrement_health_timer(entity, dt)
 end
 
 function runtime.serialize(entity)
@@ -567,24 +250,7 @@ function runtime.serialize(entity)
         angularVelocity = body:getAngularVelocity()
     end
 
-    local weapons
-    if type(entity.weapons) == "table" and #entity.weapons > 0 then
-        weapons = {}
-        for i = 1, #entity.weapons do
-            local weaponState = serialize_weapon_state(entity.weapons[i])
-            if weaponState then
-                weapons[#weapons + 1] = weaponState
-            end
-        end
-    end
-
-    -- Serialize primary weapon component
-    local weaponState
-    if entity.weapon then
-        weaponState = serialize_weapon_state(entity.weapon)
-    end
-
-    local snapshot = {
+    return {
         entityId = entity.id or entity.entityId,
         playerId = entity.playerId,
         faction = entity.faction,
@@ -603,23 +269,18 @@ function runtime.serialize(entity)
             current = entity.health.current,
             max = entity.health.max,
         } or nil,
-        level = entity.level and deep_copy(entity.level) or nil,
+        level = entity.level and ship_util.deep_copy(entity.level) or nil,
         thrust = {
             isThrusting = not not entity.isThrusting,
             current = entity.currentThrust or 0,
             max = entity.maxThrust or (entity.stats and entity.stats.main_thrust),
         },
-        weapons = weapons,
-        weapon = weaponState,
-        weaponMount = entity.weaponMount and deep_copy(entity.weaponMount) or nil,
-        stats = entity.stats and deep_copy(entity.stats) or nil,
+        stats = entity.stats and ship_util.deep_copy(entity.stats) or nil,
         cargo = entity.cargo and {
             used = entity.cargo.used,
             capacity = entity.cargo.capacity,
         } or nil,
     }
-
-    return snapshot
 end
 
 function runtime.applySnapshot(entity, snapshot)
@@ -664,7 +325,7 @@ function runtime.applySnapshot(entity, snapshot)
     end
 
     if snapshot.level then
-        entity.level = deep_copy(snapshot.level)
+        entity.level = ship_util.deep_copy(snapshot.level)
     end
 
     if snapshot.stats then
@@ -697,19 +358,19 @@ function runtime.applySnapshot(entity, snapshot)
             end
 
             if weapon then
-                apply_weapon_state(weapon, weaponSnapshot)
+                runtime.apply_weapon_state(weapon, weaponSnapshot)
             end
         end
     end
 
     -- Apply primary weapon component
     if snapshot.weapon and entity.weapon then
-        apply_weapon_state(entity.weapon, snapshot.weapon)
+        runtime.apply_weapon_state(entity.weapon, snapshot.weapon)
     end
 
     -- Apply weapon mount
     if snapshot.weaponMount then
-        entity.weaponMount = deep_copy(snapshot.weaponMount)
+        entity.weaponMount = ship_util.deep_copy(snapshot.weaponMount)
     end
 
     if snapshot.cargo and entity.cargo then
@@ -721,14 +382,23 @@ function runtime.applySnapshot(entity, snapshot)
     return entity
 end
 
-runtime.sanitize_positive_number = sanitize_positive_number
-runtime.instantiate_initial_item = instantiate_initial_item
-runtime.cargo_recalculate = cargo_recalculate
-runtime.cargo_can_fit = cargo_can_fit
-runtime.cargo_try_add = cargo_try_add
-runtime.cargo_try_remove = cargo_try_remove
-runtime.populate_weapon_inventory = populate_weapon_inventory
-runtime.serialize = runtime.serialize
-runtime.applySnapshot = runtime.applySnapshot
+function runtime.apply_weapon_state(weapon, snapshot)
+    if type(weapon) ~= "table" or type(snapshot) ~= "table" then
+        return
+    end
+
+    weapon.firing = not not snapshot.firing
+    weapon.alwaysFire = not not snapshot.alwaysFire
+    weapon.cooldown = snapshot.cooldown or 0
+    weapon.beamTimer = snapshot.beamTimer
+    weapon.maxRange = snapshot.maxRange or weapon.maxRange
+    weapon.targetX = snapshot.targetX
+    weapon.targetY = snapshot.targetY
+    weapon.sequence = snapshot.sequence or weapon.sequence
+
+    if snapshot.mount then
+        weapon.weaponMount = ship_util.deep_copy(snapshot.mount)
+    end
+end
 
 return runtime

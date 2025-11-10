@@ -265,14 +265,6 @@ return function(context)
                             isLocalPlayer = entity == localPlayerEntity
                         end
                     end
-                    weapon.sequence = weapon.sequence or 0
-                    if weapon._replicatedSequence == nil then
-                        if isLocalPlayer then
-                            weapon._replicatedSequence = weapon.sequence
-                        else
-                            weapon._replicatedSequence = 0
-                        end
-                    end
 
                     if entity.player then
                         if intent then
@@ -336,39 +328,22 @@ return function(context)
                     end
 
                     local fireMode = weapon.fireMode or "hitscan"
-                    local replicatedFiring = false
 
                     -- PROJECTILE MODE (Cannon, missiles, etc.)
                     if fireMode == "projectile" then
-                        if fire and (not weapon.cooldown or weapon.cooldown <= 0) then
+                        -- Only server/offline spawns projectiles; clients receive via snapshots
+                        local isClient = context.netRole == 'client'
+                        
+                        if fire and (not weapon.cooldown or weapon.cooldown <= 0) and not isClient then
                             spawn_projectile(world, physicsWorld, entity, startX, startY, dirX, dirY, weapon)
 
                             -- Reset cooldown
                             local fireRate = weapon.fireRate or 0.5
                             weapon.cooldown = fireRate
-                            weapon.sequence = (weapon.sequence or 0) + 1
-                            if isLocalPlayer then
-                                weapon._replicatedSequence = weapon.sequence
-                            end
-                            replicatedFiring = true
-                        else
-                            replicatedFiring = fire
                         end
-
-                        if not isLocalPlayer then
-                            local currentSequence = weapon.sequence or 0
-                            local lastSequence = weapon._replicatedSequence
-                            if lastSequence == nil then
-                                weapon._replicatedSequence = currentSequence
-                                lastSequence = currentSequence
-                            end
-                            if currentSequence > lastSequence then
-                                for seq = lastSequence + 1, currentSequence do
-                                    spawn_projectile(world, physicsWorld, entity, startX, startY, dirX, dirY, weapon)
-                                end
-                                weapon._replicatedSequence = currentSequence
-                            end
-                        end
+                        
+                        -- Track firing state for visual/audio feedback
+                        weapon.firing = fire
 
                     -- HITSCAN MODE (Laser beams)
                     elseif fireMode == "hitscan" then
@@ -407,14 +382,9 @@ return function(context)
                             end
                         end
 
-                        replicatedFiring = beamActive
+                        weapon.firing = beamActive
                     else
-                        replicatedFiring = fire
-                    end
-
-                    weapon.firing = replicatedFiring
-                    if isLocalPlayer then
-                        weapon._replicatedSequence = weapon.sequence
+                        weapon.firing = fire
                     end
                 end
             end

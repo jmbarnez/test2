@@ -1,3 +1,5 @@
+local constants = require("src.constants.game")
+
 local Transport = {}
 
 -- Set to true to enable network debug logging
@@ -38,8 +40,8 @@ local function load_enet()
 end
 
 local function format_address(config)
-    local host = config.host or config.address or "127.0.0.1"
-    local port = config.port or 22122
+    local host = config.host or config.address or constants.network.default_client_host
+    local port = config.port or constants.network.port
     return string.format("%s:%d", host, port)
 end
 
@@ -66,10 +68,10 @@ function Transport.createServer(config)
     local enet = load_enet()
 
     local address = format_address(config)
-    local max_clients = config.maxClients or 32
+    local max_clients = config.maxClients or constants.network.max_clients
 
     local ok, host = pcall(function() 
-        return enet.host_create(address, max_clients, config.channels or 2, config.bandwidthIn or 0, config.bandwidthOut or 0)
+        return enet.host_create(address, max_clients, config.channels or constants.network.channels, config.bandwidthIn or 0, config.bandwidthOut or 0)
     end)
     if not ok then
         error("Failed to create ENet server host on " .. address .. ": " .. tostring(host))
@@ -157,7 +159,7 @@ function Transport.createClient(config)
     config = config or {}
     local enet = load_enet()
 
-    local ok, host = pcall(function() return enet.host_create(nil, config.channels or 2) end)
+    local ok, host = pcall(function() return enet.host_create(nil, config.channels or constants.network.channels) end)
     if not ok then
         error("Failed to create ENet client host: " .. tostring(host))
     end
