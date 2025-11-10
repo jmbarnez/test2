@@ -82,6 +82,7 @@ constants.world = {
 -- ============================================================================
 constants.player = {
     starter_ship_id = "starter",     -- Blueprint ID for the player's starting ship
+    starting_currency = 10000,        -- Initial credits for the player
 }
 
 constants.ships = {
@@ -117,6 +118,10 @@ constants.stars = {
     defaults = {
         size_range = { 0.5, 2.5 },   -- Default min/max star size in pixels
         alpha_range = { 40 / 255, 200 / 255 }, -- Default min/max star opacity (0-1)
+    },
+    nebula = {
+        intensity_range = { 0.18, 0.32 },  -- Controls shader brightness/density
+        alpha_range = { 0.32, 0.55 },      -- Limits final nebula opacity when composited
     },
     layers = {
         -- Far background layer (slowest parallax)
@@ -173,6 +178,21 @@ constants.stars = {
             tail_fade = 0.06,
             head_color = { 1.0, 0.95, 0.8 },
             tail_color = { 0.6, 0.8, 1.0 },
+        },
+        asteroid_belts = {
+            spawn_chance = 0.65,               -- Probability that belts appear in a playthrough
+            count = { 1, 2 },                  -- Range of belts to create when spawned
+            parallax_range = { 0.008, 0.024 }, -- Parallax multiplier for belt movement
+            arc_span = { 0.45, 0.85 },         -- Fraction of full circle covered by the belt arc
+            radius_range = { 420, 820 },       -- Distance from belt center to arc midpoint
+            thickness_range = { 60, 140 },     -- Radial thickness of the belt
+            squash_range = { 0.6, 0.85 },      -- Vertical squash factor to make ellipses
+            segment_count = { 70, 140 },       -- Number of rubble segments composing the belt
+            segment_size = { 3, 9 },           -- Visual radius of each rubble segment
+            alpha_range = { 0.22, 0.42 },      -- Opacity range for belt segments
+            flicker_speed = { 0.6, 1.4 },      -- Speed of subtle flicker animation
+            color = { 0.55, 0.5, 0.48 },       -- Base rock color
+            highlight = { 0.9, 0.85, 0.8 },    -- Highlight tint for inner glow
         },
     },
 }

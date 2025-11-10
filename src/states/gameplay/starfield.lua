@@ -13,6 +13,7 @@ local nebulaShader = love.graphics.newShader([[
     extern float intensity;
     extern float hueShift;
     extern float saturation;
+    extern float finalAlpha;
     
     vec3 hsv2rgb(vec3 c) {
         vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
@@ -27,7 +28,7 @@ local nebulaShader = love.graphics.newShader([[
         float scale = 2.2 + sin(nebulaSeed * 3.14) * 0.8;
         float warp = 1.8 + cos(nebulaSeed * 2.71) * 0.6;
         float contrast = 2.4 + sin(nebulaSeed * 4.33) * 0.8;
-        float alpha = 0.7 + cos(nebulaSeed * 5.67) * 0.2;
+        float baseAlpha = 0.7 + cos(nebulaSeed * 5.67) * 0.2;
         float exposure = 1.4 + sin(nebulaSeed * 7.89) * 0.4;
         float paletteShift = sin(nebulaSeed * 12.34) * 0.5;
         float speed = 0.035;
@@ -89,7 +90,7 @@ local nebulaShader = love.graphics.newShader([[
         float combinedFalloff = mix(falloff1, falloff2, 0.4);
         
         // Enhanced density calculation
-        float density = combinedNoise * combinedFalloff * alpha * intensity;
+        float density = combinedNoise * combinedFalloff * baseAlpha * intensity;
         
         // Dynamic color palette based on hueShift
         float hue1 = density + paletteShift + hueShift + sin(nebulaSeed * 8.91) * 0.3;
@@ -116,7 +117,8 @@ local nebulaShader = love.graphics.newShader([[
         sparkle = smoothstep(0.95, 1.0, sparkle) * 0.3;
         finalColor += vec3(sparkle);
         
-        return vec4(finalColor, density);
+        float outputAlpha = density * finalAlpha;
+        return vec4(finalColor * finalAlpha, outputAlpha);
     }
 ]])
 
@@ -169,6 +171,139 @@ local function generate_stars(count, bounds, sizeRange, alphaRange, colorVariati
     return stars
 end
 
+local function random_range(range, default)
+    if not range then
+        return default or 0
+    end
+    local min_val = range[1] or default or 0
+    local max_val = range[2] or min_val
+    if max_val == min_val then
+        return min_val
+    end
+    return min_val + love.math.random() * (max_val - min_val)
+end
+
+local function random_int_range(range, default)
+    if not range then
+        return default or 0
+    end
+    local min_val = math.floor(range[1] or default or 0)
+    local max_val = math.floor(range[2] or min_val)
+    if max_val < min_val then
+        min_val, max_val = max_val, min_val
+    end
+    return love.math.random(min_val, max_val)
+end
+
+local function generate_asteroid_belts(bounds)
+    local background_props = constants.stars.background_props or {}
+    local config = background_props.asteroid_belts
+    if not config then
+        return {}
+    end
+
+    local chance = config.spawn_chance or 0
+    if chance <= 0 or love.math.random() >= chance then
+        return {}
+    end
+
+    local belts = {}
+    local count = math.max(0, random_int_range(config.count, 0))
+    local base_color = config.color or { 0.6, 0.55, 0.5 }
+    local highlight_color = config.highlight or { 0.9, 0.85, 0.8 }
+
+    for _ = 1, count do
+        local parallax = random_range(config.parallax_range, 0.012)
+        local radius = random_range(config.radius_range, 600)
+        local thickness = random_range(config.thickness_range, 100)
+        local squash = random_range(config.squash_range, 0.75)
+        local arc_fraction = random_range(config.arc_span, 0.6)
+        local arc_span = math_util.TAU * math.max(0, math.min(arc_fraction, 1))
+        local orientation = love.math.random() * math_util.TAU
+        local start_angle = orientation - arc_span * 0.5
+        local segment_count = math.max(1, random_int_range(config.segment_count, 90))
+
+        local segment_size_range = config.segment_size or { 4, 8 }
+        local alpha_range = config.alpha_range or { 0.25, 0.4 }
+        local flicker_range = config.flicker_speed or { 0.6, 1.2 }
+
+        local center_x = bounds.x + love.math.random() * bounds.width
+        local center_y = bounds.y + love.math.random() * bounds.height
+
+        local segments = {}
+        for i = 1, segment_count do
+            local t = (i - 0.5) / segment_count
+            local jitter = (love.math.random() - 0.5) * (arc_span / math.max(segment_count, 1)) * 0.6
+            local angle = start_angle + t * arc_span + jitter
+            local radial_offset = (love.math.random() - 0.5) * thickness
+            local local_radius = radius + radial_offset
+            local cos_a = math.cos(angle)
+            local sin_a = math.sin(angle)
+            local point_x = cos_a * local_radius
+            local point_y = sin_a * local_radius * squash
+
+            segments[#segments + 1] = {
+                x = center_x + point_x,
+                y = center_y + point_y,
+                size = random_range(segment_size_range, 6),
+                alpha = random_range(alpha_range, 0.3),
+                flickerSpeed = random_range(flicker_range, 1.0),
+                phase = love.math.random() * math_util.TAU,
+                highlightScale = 0.4 + love.math.random() * 0.35,
+                highlightAlpha = 0.45 + love.math.random() * 0.25,
+            }
+        end
+
+        belts[#belts + 1] = {
+            parallax = parallax,
+            segments = segments,
+            color = { base_color[1], base_color[2], base_color[3] },
+            highlight = { highlight_color[1], highlight_color[2], highlight_color[3] },
+        }
+    end
+
+    return belts
+end
+
+local function draw_asteroid_belts(belts, camRelX, camRelY, viewportWidth, viewportHeight, time)
+    if not belts then
+        return
+    end
+
+    for i = 1, #belts do
+        local belt = belts[i]
+        local offsetX = camRelX * (belt.parallax or 0)
+        local offsetY = camRelY * (belt.parallax or 0)
+        local color = belt.color or { 0.6, 0.55, 0.5 }
+        local highlight = belt.highlight or { 0.9, 0.85, 0.8 }
+        local segments = belt.segments
+
+        for j = 1, #segments do
+            local segment = segments[j]
+            local radius = segment.size
+            local sx = segment.x - offsetX
+            local sy = segment.y - offsetY
+
+            if sx >= -radius and sx <= viewportWidth + radius and
+               sy >= -radius and sy <= viewportHeight + radius then
+                local flicker_speed = segment.flickerSpeed or 0
+                local flicker_phase = segment.phase or 0
+                local flicker = 0.85 + 0.15 * math.sin(time * flicker_speed + flicker_phase)
+                local alpha = (segment.alpha or 0.3) * flicker
+
+                love.graphics.setColor(color[1], color[2], color[3], alpha)
+                love.graphics.circle("fill", sx, sy, radius)
+
+                local highlight_alpha = alpha * (segment.highlightAlpha or 0.5)
+                love.graphics.setColor(highlight[1], highlight[2], highlight[3], highlight_alpha)
+                love.graphics.circle("fill", sx, sy, radius * (segment.highlightScale or 0.55))
+            end
+        end
+    end
+
+    love.graphics.setColor(1, 1, 1, 1)
+end
+
 function Starfield.generateLayers(bounds)
     local layers = constants.stars.layers
     local generated = {}
@@ -193,10 +328,13 @@ function Starfield.initialize(state)
 
     state.starLayers = Starfield.generateLayers(bounds)
     state.nebulaSeed = love.math.random() * 1000
-    state.nebulaIntensity = 0.3
+    local nebula_config = constants.stars.nebula or {}
+    state.nebulaIntensity = random_range(nebula_config.intensity_range, 0.3)
+    state.nebulaAlpha = random_range(nebula_config.alpha_range, 0.4)
     state.starfieldTime = 0
     state.nebulaHueShift = love.math.random()
     state.nebulaSaturation = 0.7 + love.math.random() * 0.3
+    state.asteroidBelts = generate_asteroid_belts(bounds)
 end
 
 function Starfield.refresh(state)
@@ -208,9 +346,12 @@ function Starfield.refresh(state)
 
     state.starLayers = Starfield.generateLayers(bounds)
     state.nebulaSeed = love.math.random() * 1000
-    state.nebulaIntensity = 0.3
+    local nebula_config = constants.stars.nebula or {}
+    state.nebulaIntensity = random_range(nebula_config.intensity_range, 0.3)
+    state.nebulaAlpha = random_range(nebula_config.alpha_range, 0.4)
     state.nebulaHueShift = love.math.random()
     state.nebulaSaturation = 0.7 + love.math.random() * 0.3
+    state.asteroidBelts = generate_asteroid_belts(bounds)
 end
 
 function Starfield.update(state, dt)
@@ -240,8 +381,12 @@ function Starfield.draw(state)
     nebulaShader:send("intensity", state.nebulaIntensity or 0.3)
     nebulaShader:send("hueShift", state.nebulaHueShift or 0)
     nebulaShader:send("saturation", state.nebulaSaturation or 0.8)
+    nebulaShader:send("finalAlpha", state.nebulaAlpha or 0.4)
+    love.graphics.setColor(1, 1, 1, 1)
     love.graphics.rectangle("fill", 0, 0, vw, vh)
     love.graphics.setShader()
+
+    draw_asteroid_belts(state.asteroidBelts, camRelX, camRelY, vw, vh, time)
     
     love.graphics.setBlendMode("add")
 

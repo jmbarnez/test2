@@ -3,6 +3,7 @@ local theme = require("src.ui.theme")
 local window = require("src.ui.window")
 local tooltip = require("src.ui.tooltip")
 local PlayerManager = require("src.player.manager")
+local utf8 = require("utf8")
 ---@diagnostic disable-next-line: undefined-global
 local love = love
 
@@ -11,18 +12,68 @@ local cargo_window = {}
 local window_colors = theme.colors.window
 local theme_spacing = theme.spacing
 local window_metrics = theme.window
+local set_color = theme.utils.set_color
 
-local function set_color(color)
-    if type(color) == "table" then
-        love.graphics.setColor(
-            color[1] or 1,
-            color[2] or 1,
-            color[3] or 1,
-            color[4] or 1
-        )
-    else
-        love.graphics.setColor(1, 1, 1, 1)
+local function format_currency(value)
+    if type(value) ~= "number" then
+        return tostring(value or "--")
     end
+
+    local rounded = math.floor(value + 0.5)
+    local absValue = math.abs(rounded)
+    local chunks = {}
+
+    repeat
+        local remainder = absValue % 1000
+        absValue = math.floor(absValue / 1000)
+        if absValue > 0 then
+            chunks[#chunks + 1] = string.format("%03d", remainder)
+        else
+            chunks[#chunks + 1] = tostring(remainder)
+        end
+    until absValue == 0
+
+    local formatted = table.concat(chunks, ",", #chunks, 1)
+    if rounded < 0 then
+        formatted = "-" .. formatted
+    end
+
+    return formatted
+end
+
+local function draw_currency_icon(x, y, size)
+    love.graphics.push("all")
+
+    local radius = size * 0.5
+    local centerX = x + radius
+    local centerY = y + radius
+
+    local baseColor = window_colors.currency_icon_base or { 0.35, 0.7, 1.0, 1 }
+    local highlightColor = window_colors.currency_icon_highlight or { 0.75, 0.9, 1.0, 0.9 }
+    local borderColor = window_colors.currency_icon_border or { 0.08, 0.25, 0.38, 1 }
+    local symbolColor = window_colors.currency_icon_symbol or window_colors.title_text or { 1, 1, 1, 1 }
+
+    set_color(baseColor)
+    love.graphics.circle("fill", centerX, centerY, radius)
+
+    set_color(highlightColor)
+    love.graphics.circle("fill", centerX, centerY - radius * 0.25, radius * 0.6)
+
+    set_color(borderColor)
+    local borderWidth = math.max(1, size * 0.08)
+    love.graphics.setLineWidth(borderWidth)
+    love.graphics.circle("line", centerX, centerY, radius - borderWidth * 0.5)
+
+    set_color(symbolColor)
+    local lineWidth = math.max(1.2, size * 0.14)
+    love.graphics.setLineWidth(lineWidth)
+    love.graphics.line(centerX, centerY - radius * 0.4, centerX, centerY + radius * 0.4)
+
+    love.graphics.setLineWidth(math.max(1, size * 0.1))
+    love.graphics.line(centerX - radius * 0.45, centerY - radius * 0.15, centerX + radius * 0.45, centerY - radius * 0.15)
+    love.graphics.line(centerX - radius * 0.45, centerY + radius * 0.2, centerX + radius * 0.45, centerY + radius * 0.2)
+
+    love.graphics.pop()
 end
 
 local function draw_icon_layer(icon, layer, size)
@@ -244,9 +295,29 @@ function cargo_window.draw(context)
         context.cargoUI = state
     end
 
+    state.searchQuery = state.searchQuery or ""
+    state.isSearchActive = state.isSearchActive or false
+
+    local uiInput = context.uiInput
+
     if not state.visible then
         state.dragging = false
+        if state.isSearchActive then
+            state.isSearchActive = false
+            if uiInput then
+                uiInput.keyboardCaptured = false
+            end
+        end
+        state._was_mouse_down = love.mouse.isDown(1)
         return
+    end
+
+    local mouse_x, mouse_y = love.mouse.getPosition()
+    local is_mouse_down = love.mouse.isDown(1)
+    local just_pressed = is_mouse_down and not state._was_mouse_down
+
+    if state.isSearchActive and uiInput then
+        uiInput.keyboardCaptured = true
     end
 
     local player = PlayerManager.resolveLocalPlayer(context)
@@ -279,15 +350,15 @@ function cargo_window.draw(context)
         end
     end
 
-    local currencyText
+    local currencyAmountText
     if currencyValue ~= nil then
         if type(currencyValue) == "number" then
-            currencyText = string.format("Credits: %s", tostring(math.floor(currencyValue + 0.5)))
+            currencyAmountText = format_currency(currencyValue)
         else
-            currencyText = string.format("Credits: %s", tostring(currencyValue))
+            currencyAmountText = tostring(currencyValue)
         end
     else
-        currencyText = "Credits: --"
+        currencyAmountText = "--"
     end
 
     love.graphics.push("all")
@@ -298,11 +369,6 @@ function cargo_window.draw(context)
     local padding = theme_spacing.window_padding
     local topBarHeight = window_metrics.top_bar_height
     local bottomBarHeight = window_metrics.bottom_bar_height
-
-    local mouse_x, mouse_y = love.mouse.getPosition()
-    local is_mouse_down = love.mouse.isDown(1)
-    local just_pressed = is_mouse_down and not state._was_mouse_down
-    local uiInput = context.uiInput
 
     local frame = window.draw_frame {
         x = state.x or dims.x,
@@ -338,12 +404,86 @@ function cargo_window.draw(context)
     end
 
     local content = frame.content
+    local searchHeight = fonts.body:getHeight() + 12
+    local searchSpacing = 6
+    local gridY = content.y + searchHeight + searchSpacing
+    local gridHeight = content.height - searchHeight - searchSpacing
+    if gridHeight < 0 then
+        gridHeight = 0
+    end
+
     local slotsPerRow, slotsPerColumn, totalVisibleSlots, slotSize, slotWithLabelHeight = 
-        calculate_grid_layout(content.width, content.height)
+        calculate_grid_layout(content.width, gridHeight)
 
     local slotPadding = theme_spacing.slot_padding
-    local gridStartY = content.y
+    local gridStartY = gridY
     local gridStartX = content.x
+
+    local searchRect = {
+        x = content.x,
+        y = content.y,
+        width = content.width,
+        height = searchHeight,
+    }
+
+    local searchHovered = mouse_x >= searchRect.x and mouse_x <= searchRect.x + searchRect.width and
+        mouse_y >= searchRect.y and mouse_y <= searchRect.y + searchRect.height
+
+    if searchHovered and just_pressed then
+        state.isSearchActive = true
+        if uiInput then
+            uiInput.keyboardCaptured = true
+        end
+    elseif just_pressed and not searchHovered then
+        if state.isSearchActive and uiInput then
+            uiInput.keyboardCaptured = false
+        end
+        state.isSearchActive = false
+    end
+
+    love.graphics.setFont(fonts.body)
+    set_color(window_colors.input_background or { 0.06, 0.07, 0.1, 1 })
+    love.graphics.rectangle("fill", searchRect.x, searchRect.y, searchRect.width, searchRect.height, 4, 4)
+    set_color(window_colors.border or { 0.08, 0.08, 0.12, 0.8 })
+    love.graphics.setLineWidth(1)
+    love.graphics.rectangle("line", searchRect.x + 0.5, searchRect.y + 0.5, searchRect.width - 1, searchRect.height - 1, 4, 4)
+
+    local queryText = state.searchQuery or ""
+    local placeholder = "Search cargo"
+    if queryText == "" and not state.isSearchActive then
+        set_color(window_colors.muted or { 0.5, 0.5, 0.55, 1 })
+        love.graphics.print(placeholder, searchRect.x + 8, searchRect.y + (searchRect.height - fonts.body:getHeight()) * 0.5)
+    else
+        set_color(window_colors.text or { 0.85, 0.85, 0.9, 1 })
+        love.graphics.print(queryText, searchRect.x + 8, searchRect.y + (searchRect.height - fonts.body:getHeight()) * 0.5)
+
+        if state.isSearchActive then
+            local textWidth = fonts.body:getWidth(queryText)
+            local caretX = searchRect.x + 8 + textWidth + 2
+            local caretY = searchRect.y + 6
+            local caretHeight = searchRect.height - 12
+            set_color(window_colors.caret or window_colors.text or { 0.85, 0.85, 0.9, 1 })
+            love.graphics.rectangle("fill", caretX, caretY, 2, caretHeight)
+        end
+    end
+
+    if searchHovered then
+        love.graphics.setLineWidth(2)
+        set_color(window_colors.accent or { 0.2, 0.5, 0.9, 1 })
+        love.graphics.rectangle("line", searchRect.x + 0.5, searchRect.y + 0.5, searchRect.width - 1, searchRect.height - 1, 4, 4)
+    end
+
+    local filteredItems = items
+    if queryText ~= "" then
+        local lowerQuery = queryText:lower()
+        filteredItems = {}
+        for _, item in ipairs(items) do
+            local name = item and item.name
+            if type(name) == "string" and name:lower():find(lowerQuery, 1, true) then
+                filteredItems[#filteredItems + 1] = item
+            end
+        end
+    end
 
     local hoveredItem
     local hoveredSlotIndex
@@ -355,7 +495,7 @@ function cargo_window.draw(context)
         local slotX = gridStartX + col * (slotSize + slotPadding)
         local slotY = gridStartY + row * (slotWithLabelHeight + slotPadding)
 
-        local item = items[slotNumber]
+        local item = filteredItems[slotNumber]
         local isMouseOver = mouse_x >= slotX and mouse_x <= slotX + slotSize and 
                            mouse_y >= slotY and mouse_y <= slotY + slotSize
 
@@ -410,17 +550,76 @@ function cargo_window.draw(context)
     local currencyFont = fonts.small or fonts.body
     love.graphics.setFont(currencyFont)
     set_color(window_colors.text)
-    local currencyX = barX + barWidth + 16
-    local currencyY = bottomY + (bottomBarHeight - currencyFont:getHeight()) * 0.5
-    local currencyWidth = math.max(40, window_x + window_width - currencyX - progressMarginX)
-    love.graphics.printf(currencyText, currencyX, currencyY, currencyWidth, "right")
+    local currencyAreaX = barX + barWidth + 16
+    local currencyAreaWidth = math.max(60, window_x + window_width - currencyAreaX - progressMarginX)
+    local iconSize = math.max(14, math.min(bottomBarHeight - 10, currencyFont:getHeight() + 6))
+    local iconX = currencyAreaX
+    local iconY = bottomY + (bottomBarHeight - iconSize) * 0.5
+
+    draw_currency_icon(iconX, iconY, iconSize)
+
+    local amountX = iconX + iconSize + 8
+    local amountY = bottomY + (bottomBarHeight - currencyFont:getHeight()) * 0.5
+    local amountWidth = math.max(20, currencyAreaWidth - (amountX - currencyAreaX))
+    love.graphics.printf(currencyAmountText, amountX, amountY, amountWidth, "left")
 
     if frame.close_clicked then
         state.visible = false
         state.dragging = false
+        if state.isSearchActive and uiInput then
+            uiInput.keyboardCaptured = false
+        end
+        state.isSearchActive = false
     end
 
     love.graphics.pop()
+end
+
+function cargo_window.textinput(context, text)
+    if type(text) ~= "string" or text == "" then
+        return false
+    end
+
+    local state = context and context.cargoUI
+    if not (state and state.visible and state.isSearchActive) then
+        return false
+    end
+
+    state.searchQuery = (state.searchQuery or "") .. text
+    return true
+end
+
+local function clear_search_focus(context, state)
+    if context and context.uiInput then
+        context.uiInput.keyboardCaptured = false
+    end
+    state.isSearchActive = false
+end
+
+function cargo_window.keypressed(context, key, scancode, isrepeat)
+    local state = context and context.cargoUI
+    if not (state and state.visible) then
+        return false
+    end
+
+    if state.isSearchActive then
+        if key == "backspace" then
+            local current = state.searchQuery or ""
+            local byteoffset = utf8.offset(current, -1)
+            if byteoffset then
+                state.searchQuery = string.sub(current, 1, byteoffset - 1)
+            end
+            return true
+        elseif key == "escape" then
+            clear_search_focus(context, state)
+            return true
+        elseif key == "return" or key == "kpenter" then
+            clear_search_focus(context, state)
+            return true
+        end
+    end
+
+    return false
 end
 
 return cargo_window

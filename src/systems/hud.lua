@@ -9,19 +9,7 @@ local love = love
 local window_colors = theme.colors.window
 local hud_colors = theme.colors.hud
 local theme_spacing = theme.spacing
-
-local function set_color(color)
-    if type(color) == "table" then
-        love.graphics.setColor(
-            color[1] or 1,
-            color[2] or 1,
-            color[3] or 1,
-            color[4] or 1
-        )
-    else
-        love.graphics.setColor(1, 1, 1, 1)
-    end
-end
+local set_color = theme.utils.set_color
 
 local function draw_icon_layer(icon, layer, size)
     love.graphics.push()

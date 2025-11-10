@@ -35,18 +35,6 @@ local function createPauseUIState()
     }
 end
 
-local function createChatUIState()
-    return {
-        visible = true,
-        inputActive = false,
-        inputBuffer = "",
-        messages = {},
-        playerColors = {},
-        maxVisible = 6,
-        maxHistory = 50,
-    }
-end
-
 local function hash_string(str)
     local hash = 0
     for i = 1, #str do
@@ -92,7 +80,6 @@ function UIStateManager.initialize(state)
     state.cargoUI = state.cargoUI or createCargoUIState()
     state.deathUI = state.deathUI or createDeathUIState()
     state.pauseUI = state.pauseUI or createPauseUIState()
-    state.chatUI = state.chatUI or createChatUIState()
     
     -- Initialize input state
     state.uiInput = state.uiInput or {
@@ -115,45 +102,10 @@ function UIStateManager.cleanup(state)
 
     state.cargoUI = nil
     state.deathUI = nil
-    state.chatUI = nil
     state.pauseUI = nil
     state.uiInput = nil
     state.respawnRequested = nil
     state.isPaused = nil
-end
-
-function UIStateManager.addChatMessage(state, playerId, text)
-    if not (state and state.chatUI) then
-        return
-    end
-
-    local chat = state.chatUI
-    chat.messages = chat.messages or {}
-    chat.playerColors = chat.playerColors or {}
-
-    local colorKey = tostring(playerId or "unknown")
-    local playerColor = chat.playerColors[colorKey]
-    if not playerColor then
-        playerColor = generatePlayerColor(playerId)
-        chat.playerColors[colorKey] = playerColor
-    end
-
-    local message = {
-        playerId = playerId,
-        text = text,
-        color = playerColor,
-    }
-
-    if love and love.timer and love.timer.getTime then
-        message.timestamp = love.timer.getTime()
-    end
-
-    table.insert(chat.messages, message)
-
-    local maxHistory = chat.maxHistory or 50
-    while #chat.messages > maxHistory do
-        table.remove(chat.messages, 1)
-    end
 end
 
 function UIStateManager.showDeathUI(state)

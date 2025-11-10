@@ -1,4 +1,7 @@
 local PlayerWeapons = require("src.player.weapons")
+local constants = require("src.constants.game")
+
+local STARTING_CURRENCY = (constants.player and constants.player.starting_currency) or 0
 
 local PlayerManager = {}
 
@@ -121,6 +124,22 @@ function PlayerManager.attachShip(state, shipEntity, levelData, playerId)
 
         state.playerShip = shipEntity
         state.player = shipEntity
+
+        state.playerCurrency = state.playerCurrency or STARTING_CURRENCY
+
+        if shipEntity then
+            if shipEntity.currency == nil then
+                shipEntity.currency = state.playerCurrency
+            end
+            if shipEntity.credits == nil then
+                shipEntity.credits = state.playerCurrency
+            end
+            if shipEntity.wallet == nil and STARTING_CURRENCY > 0 then
+                shipEntity.wallet = { balance = state.playerCurrency }
+            elseif type(shipEntity.wallet) == "table" then
+                shipEntity.wallet.balance = shipEntity.wallet.balance or state.playerCurrency
+            end
+        end
     else
         shipEntity.pilot = nil
         if levelData then

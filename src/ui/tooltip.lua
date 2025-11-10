@@ -5,21 +5,10 @@ local love = love
 
 local tooltip = {}
 
+local set_color = theme.utils.set_color
+
 local current_request = nil
 local MAX_APPEND_DEPTH = 8
-
-local function set_color(color)
-    if type(color) == "table" then
-        love.graphics.setColor(
-            color[1] or 1,
-            color[2] or 1,
-            color[3] or 1,
-            color[4] or 1
-        )
-    else
-        love.graphics.setColor(1, 1, 1, 1)
-    end
-end
 
 local function wrap_text(font, text, max_width)
     if not (font and text) then

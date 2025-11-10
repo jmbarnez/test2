@@ -2,46 +2,96 @@ local constants = require("src.constants.game")
 ---@diagnostic disable-next-line: undefined-global
 local love = love
 
-local theme = {
-    font_sizes = {
+local palette = {
+    shadow = { 0, 0, 0, 0.98 },
+    overlay = { 0, 0, 0, 0.88 },
+    surface_deep = { 0.008, 0.008, 0.012, 1 },
+    surface_subtle = { 0.015, 0.015, 0.02, 1 },
+    surface_top = { 0.006, 0.008, 0.012, 1 },
+    border = { 0.18, 0.22, 0.28, 1 },
+    accent = { 0.18, 0.58, 0.88, 1 },
+    accent_glow = { 0.18, 0.58, 0.88, 0.12 },
+    accent_warning = { 0.88, 0.28, 0.28, 1 },
+    button_base = { 0.035, 0.045, 0.065, 1 },
+    button_hover = { 0.065, 0.095, 0.14, 1 },
+    text_heading = { 0.92, 0.95, 1, 1 },
+    text_body = { 0.75, 0.78, 0.82, 1 },
+    text_muted = { 0.42, 0.45, 0.5, 1 },
+    tooltip_background = { 0.012, 0.015, 0.022, 0.99 },
+    tooltip_border = { 0.18, 0.58, 0.88, 0.95 },
+    tooltip_shadow = { 0, 0, 0, 0.6 },
+}
+
+local typography = {
+    sizes = {
         title = 16,
         body = 13,
         small = 11,
         tiny = 9,
     },
-    colors = {
-        window = {
-            shadow = { 0, 0, 0, 0.98 },
-            background = { 0.008, 0.008, 0.012, 1 },
-            border = { 0.18, 0.22, 0.28, 1 },
-            top_bar = { 0.006, 0.008, 0.012, 1 },
-            bottom_bar = { 0.006, 0.008, 0.012, 1 },
-            title_text = { 0.92, 0.95, 1, 1 },
-            text = { 0.75, 0.78, 0.82, 1 },
-            muted = { 0.42, 0.45, 0.5, 1 },
+}
+
+local spacing = {
+    window_margin = 50,
+    window_padding = 20,
+    window_corner_radius = 0,
+    window_shadow_offset = 3,
+    window_glow_extra = 2,
+    slot_size = 56,
+    slot_padding = 6,
+    slot_text_height = 16,
+    tooltip_padding = 10,
+    tooltip_max_width = 240,
+    tooltip_offset_x = 18,
+    tooltip_offset_y = 16,
+    tooltip_shadow_offset = 5,
+    tooltip_line_spacing = 3,
+}
+
+local components = {
+    window = {
+        colors = {
+            shadow = palette.shadow,
+            background = palette.surface_deep,
+            border = palette.border,
+            top_bar = palette.surface_top,
+            bottom_bar = palette.surface_top,
+            title_text = palette.text_heading,
+            text = palette.text_body,
+            muted = palette.text_muted,
             row_alternate = { 0.015, 0.02, 0.03, 0.3 },
             row_hover = { 0.06, 0.08, 0.12, 0.2 },
-            progress_background = { 0.015, 0.015, 0.02, 1 },
+            progress_background = palette.surface_subtle,
             progress_fill = { 0.12, 0.48, 0.78, 1 },
-            warning = { 0.88, 0.28, 0.28, 1 },
-            accent = { 0.18, 0.58, 0.88, 1 },
-            button = { 0.035, 0.045, 0.065, 1 },
-            button_hover = { 0.065, 0.095, 0.14, 1 },
+            warning = palette.accent_warning,
+            accent = palette.accent,
+            button = palette.button_base,
+            button_hover = palette.button_hover,
             icon_background = { 0.015, 0.015, 0.025, 0.95 },
             icon_border = { 0.15, 0.2, 0.28, 0.75 },
             slot_background = { 0.012, 0.015, 0.022, 0.98 },
             slot_border = { 0.12, 0.16, 0.24, 0.65 },
             close_button = { 0.48, 0.52, 0.58, 1 },
-            close_button_hover = { 0.92, 0.28, 0.28, 1 },
-            glow = { 0.18, 0.58, 0.88, 0.12 },
+            close_button_hover = palette.accent_warning,
+            glow = palette.accent_glow,
+            input_background = { 0.06, 0.07, 0.1, 1 },
         },
-        text = {
-            heading = { 0.92, 0.95, 1, 1 },
-            body = { 0.75, 0.78, 0.82, 1 },
-            muted = { 0.42, 0.45, 0.5, 1 },
-            warning = { 0.88, 0.28, 0.28, 1 },
+        metrics = {
+            top_bar_height = 26,
+            bottom_bar_height = 28,
+            close_button_size = 12,
         },
-        hud = {
+    },
+    text = {
+        colors = {
+            heading = palette.text_heading,
+            body = palette.text_body,
+            muted = palette.text_muted,
+            warning = palette.accent_warning,
+        },
+    },
+    hud = {
+        colors = {
             health_border = { 0, 0, 0, 1 },
             health_fill = { 0.12, 0.68, 0.42, 0.94 },
             minimap_background = { 0, 0, 0, 0.88 },
@@ -52,36 +102,99 @@ local theme = {
             minimap_ship = { 0.88, 0.22, 0.22, 1 },
             diagnostics = { 0.68, 0.72, 0.78, 1 },
         },
-        tooltip = {
-            background = { 0.012, 0.015, 0.022, 0.99 },
-            border = { 0.18, 0.58, 0.88, 0.95 },
-            shadow = { 0, 0, 0, 0.6 },
-            heading = { 0.92, 0.95, 1, 1 },
+    },
+    tooltip = {
+        colors = {
+            background = palette.tooltip_background,
+            border = palette.tooltip_border,
+            shadow = palette.tooltip_shadow,
+            heading = palette.text_heading,
             text = { 0.75, 0.78, 0.85, 1 },
         },
     },
-    spacing = {
-        window_margin = 50,
-        window_padding = 20,
-        window_corner_radius = 0,
-        window_shadow_offset = 3,
-        window_glow_extra = 2,
-        slot_size = 56,
-        slot_padding = 6,
-        slot_text_height = 16,
-        tooltip_padding = 10,
-        tooltip_max_width = 240,
-        tooltip_offset_x = 18,
-        tooltip_offset_y = 16,
-        tooltip_shadow_offset = 5,
-        tooltip_line_spacing = 3,
-    },
-    window = {
-        top_bar_height = 26,
-        bottom_bar_height = 28,
-        close_button_size = 12,
-    },
 }
+
+local theme = {
+    palette = palette,
+    typography = typography,
+    spacing = spacing,
+    components = components,
+}
+
+theme.font_sizes = theme.typography.sizes
+theme.colors = {
+    window = components.window.colors,
+    text = components.text.colors,
+    hud = components.hud.colors,
+    tooltip = components.tooltip.colors,
+}
+theme.window = components.window.metrics
+
+theme.utils = theme.utils or {}
+function theme.utils.set_color(color)
+    if type(color) == "table" then
+        love.graphics.setColor(
+            color[1] or 1,
+            color[2] or 1,
+            color[3] or 1,
+            color[4] or 1
+        )
+    else
+        love.graphics.setColor(1, 1, 1, 1)
+    end
+end
+
+function theme.get_component(name)
+    return theme.components[name]
+end
+
+function theme.get_colors(name)
+    local component = theme.components[name]
+    if component then
+        return component.colors
+    end
+    return nil
+end
+
+function theme.get_spacing()
+    return theme.spacing
+end
+
+function theme.get_typography()
+    return theme.typography
+end
+
+function theme.apply_scale(scale)
+    scale = tonumber(scale)
+    if not scale or scale <= 0 or math.abs(scale - 1) < 1e-6 then
+        return
+    end
+
+    for key, value in pairs(theme.font_sizes) do
+        if type(value) == "number" then
+            theme.font_sizes[key] = math.max(1, math.floor(value * scale + 0.5))
+        end
+    end
+
+    for key, value in pairs(theme.spacing) do
+        if type(value) == "number" then
+            theme.spacing[key] = value * scale
+        end
+    end
+
+    for _, component in pairs(theme.components) do
+        if component.metrics then
+            for key, value in pairs(component.metrics) do
+                if type(value) == "number" then
+                    component.metrics[key] = value * scale
+                end
+            end
+        end
+    end
+
+    theme.window = theme.components.window.metrics
+    theme._fonts = nil
+end
 
 local function get_line_height(font)
     if not font then

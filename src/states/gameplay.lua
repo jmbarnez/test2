@@ -10,6 +10,7 @@ local constants = require("src.constants.game")
 local PlayerManager = require("src.player.manager")
 local PlayerWeapons = require("src.player.weapons")
 local UIStateManager = require("src.ui.state_manager")
+local cargo_window = require("src.ui.windows.cargo")
 require("src.entities.ship_factory")
 require("src.entities.asteroid_factory")
 require("src.entities.weapon_factory")
@@ -29,6 +30,8 @@ local function resolveSectorId(config)
     elseif type(config) == "string" then
         return config
     end
+
+    return nil
 end
 
 function gameplay:getLocalPlayer()
@@ -215,6 +218,10 @@ function gameplay:updateCamera()
 end
 
 function gameplay:keypressed(key)
+    if cargo_window.keypressed(self, key) then
+        return
+    end
+
     if UIStateManager.isPauseUIVisible(self) then
         if key == "escape" or key == "return" or key == "kpenter" then
             UIStateManager.hidePauseUI(self)

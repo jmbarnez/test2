@@ -3,19 +3,7 @@ local theme = require("src.ui.theme")
 local love = love
 
 local window = {}
-
-local function set_color(color)
-    if type(color) == "table" then
-        love.graphics.setColor(
-            color[1] or 1,
-            color[2] or 1,
-            color[3] or 1,
-            color[4] or 1
-        )
-        return
-    end
-    love.graphics.setColor(1, 1, 1, 1)
-end
+local set_color = theme.utils.set_color
 
 local function point_in_rect(px, py, rect)
     return px >= rect.x and px <= rect.x + rect.width and
