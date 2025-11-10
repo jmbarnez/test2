@@ -11,75 +11,75 @@ local theme = {
     },
     colors = {
         window = {
-            shadow = { 0, 0, 0, 0.9 },
-            background = { 0.02, 0.02, 0.04, 0.98 },
-            border = { 0.08, 0.08, 0.12, 0.8 },
-            top_bar = { 0.01, 0.01, 0.02, 1 },
-            bottom_bar = { 0.01, 0.01, 0.02, 1 },
-            title_text = { 0.85, 0.85, 0.9, 1 },
-            text = { 0.75, 0.75, 0.8, 1 },
-            muted = { 0.4, 0.4, 0.45, 1 },
-            row_alternate = { 0.04, 0.04, 0.06, 0.5 },
-            row_hover = { 0.06, 0.06, 0.1, 0.3 },
-            progress_background = { 0.03, 0.03, 0.05, 1 },
-            progress_fill = { 0.15, 0.4, 0.6, 1 },
-            warning = { 0.7, 0.3, 0.3, 1 },
-            accent = { 0.2, 0.5, 0.7, 1 },
-            button = { 0.05, 0.05, 0.08, 1 },
-            button_hover = { 0.08, 0.08, 0.12, 1 },
-            icon_background = { 0.03, 0.03, 0.05, 0.9 },
-            icon_border = { 0.1, 0.1, 0.15, 0.6 },
-            slot_background = { 0.02, 0.02, 0.04, 0.95 },
-            slot_border = { 0.08, 0.08, 0.12, 0.5 },
-            close_button = { 0.5, 0.5, 0.55, 1 },
-            close_button_hover = { 0.8, 0.3, 0.3, 1 },
-            glow = { 0.2, 0.5, 0.7, 0.2 },
+            shadow = { 0, 0, 0, 0.98 },
+            background = { 0.008, 0.008, 0.012, 1 },
+            border = { 0.18, 0.22, 0.28, 1 },
+            top_bar = { 0.006, 0.008, 0.012, 1 },
+            bottom_bar = { 0.006, 0.008, 0.012, 1 },
+            title_text = { 0.92, 0.95, 1, 1 },
+            text = { 0.75, 0.78, 0.82, 1 },
+            muted = { 0.42, 0.45, 0.5, 1 },
+            row_alternate = { 0.015, 0.02, 0.03, 0.3 },
+            row_hover = { 0.06, 0.08, 0.12, 0.2 },
+            progress_background = { 0.015, 0.015, 0.02, 1 },
+            progress_fill = { 0.12, 0.48, 0.78, 1 },
+            warning = { 0.88, 0.28, 0.28, 1 },
+            accent = { 0.18, 0.58, 0.88, 1 },
+            button = { 0.035, 0.045, 0.065, 1 },
+            button_hover = { 0.065, 0.095, 0.14, 1 },
+            icon_background = { 0.015, 0.015, 0.025, 0.95 },
+            icon_border = { 0.15, 0.2, 0.28, 0.75 },
+            slot_background = { 0.012, 0.015, 0.022, 0.98 },
+            slot_border = { 0.12, 0.16, 0.24, 0.65 },
+            close_button = { 0.48, 0.52, 0.58, 1 },
+            close_button_hover = { 0.92, 0.28, 0.28, 1 },
+            glow = { 0.18, 0.58, 0.88, 0.12 },
         },
         text = {
-            heading = { 0.85, 0.85, 0.9, 1 },
-            body = { 0.75, 0.75, 0.8, 1 },
-            muted = { 0.4, 0.4, 0.45, 1 },
-            warning = { 0.7, 0.3, 0.3, 1 },
+            heading = { 0.92, 0.95, 1, 1 },
+            body = { 0.75, 0.78, 0.82, 1 },
+            muted = { 0.42, 0.45, 0.5, 1 },
+            warning = { 0.88, 0.28, 0.28, 1 },
         },
         hud = {
             health_border = { 0, 0, 0, 1 },
-            health_fill = { 0.15, 0.6, 0.3, 0.9 },
-            minimap_background = { 0, 0, 0, 0.8 },
-            minimap_border = { 0.15, 0.15, 0.2, 1 },
-            minimap_player = { 0, 0.8, 0, 1 },
-            minimap_teammate = { 0.2, 0.6, 1, 1 },
-            minimap_asteroid = { 0.4, 0.35, 0.3, 0.7 },
-            minimap_ship = { 0.8, 0.2, 0.2, 1 },
-            diagnostics = { 0.7, 0.7, 0.75, 1 },
+            health_fill = { 0.12, 0.68, 0.42, 0.94 },
+            minimap_background = { 0, 0, 0, 0.88 },
+            minimap_border = { 0.15, 0.2, 0.28, 1 },
+            minimap_player = { 0, 0.88, 0.32, 1 },
+            minimap_teammate = { 0.18, 0.58, 0.98, 1 },
+            minimap_asteroid = { 0.4, 0.38, 0.35, 0.78 },
+            minimap_ship = { 0.88, 0.22, 0.22, 1 },
+            diagnostics = { 0.68, 0.72, 0.78, 1 },
         },
         tooltip = {
-            background = { 0.03, 0.03, 0.05, 0.96 },
-            border = { 0.2, 0.5, 0.7, 0.9 },
-            shadow = { 0, 0, 0, 0.4 },
-            heading = { 0.9, 0.9, 0.95, 1 },
-            text = { 0.78, 0.78, 0.82, 1 },
+            background = { 0.012, 0.015, 0.022, 0.99 },
+            border = { 0.18, 0.58, 0.88, 0.95 },
+            shadow = { 0, 0, 0, 0.6 },
+            heading = { 0.92, 0.95, 1, 1 },
+            text = { 0.75, 0.78, 0.85, 1 },
         },
     },
     spacing = {
         window_margin = 50,
         window_padding = 20,
-        window_corner_radius = 2,
-        window_shadow_offset = 1,
+        window_corner_radius = 0,
+        window_shadow_offset = 3,
         window_glow_extra = 2,
         slot_size = 56,
-        slot_padding = 4,
+        slot_padding = 6,
         slot_text_height = 16,
-        tooltip_padding = 8,
+        tooltip_padding = 10,
         tooltip_max_width = 240,
         tooltip_offset_x = 18,
         tooltip_offset_y = 16,
-        tooltip_shadow_offset = 4,
-        tooltip_line_spacing = 2,
+        tooltip_shadow_offset = 5,
+        tooltip_line_spacing = 3,
     },
     window = {
-        top_bar_height = 24,
+        top_bar_height = 26,
         bottom_bar_height = 28,
-        close_button_size = 14,
+        close_button_size = 12,
     },
 }
 
@@ -127,11 +127,11 @@ function theme.draw_modal_window(state, fonts, options)
     local screenWidth = love.graphics.getWidth()
     local screenHeight = love.graphics.getHeight()
 
-    local overlayColor = options.overlay_color or options.overlayColor or { 0, 0, 0, 0.75 }
+    local overlayColor = options.overlay_color or options.overlayColor or { 0, 0, 0, 0.88 }
     local padding = options.padding or spacing.window_padding or 20
-    local cornerRadius = options.corner_radius or options.cornerRadius or spacing.window_corner_radius or 6
-    local buttonHeight = options.button_height or options.buttonHeight or 46
-    local buttonWidthMax = options.button_width or options.buttonWidth or 240
+    local cornerRadius = 0
+    local buttonHeight = options.button_height or options.buttonHeight or 44
+    local buttonWidthMax = options.button_width or options.buttonWidth or 220
 
     local defaultTitle = options.defaultTitle or options.title or state and state.title or ""
     local title = options.title or defaultTitle
@@ -142,7 +142,7 @@ function theme.draw_modal_window(state, fonts, options)
     local hoverField = options.hoverField or "buttonHovered"
 
     local maxPanelWidth = math.max(240, screenWidth - padding * 2)
-    local panelWidth = math.min(options.max_width or options.maxWidth or 440, maxPanelWidth)
+    local panelWidth = math.min(options.max_width or options.maxWidth or 420, maxPanelWidth)
     local innerWidth = math.max(160, panelWidth - padding * 2)
 
     local titleHeight = get_line_height(fonts.title)
@@ -186,28 +186,28 @@ function theme.draw_modal_window(state, fonts, options)
 
     if windowColors.shadow then
         love.graphics.setColor(windowColors.shadow)
-        love.graphics.rectangle("fill", panelX + 2, panelY + 2, panelWidth, panelHeight, cornerRadius, cornerRadius)
+        love.graphics.rectangle("fill", panelX + 2, panelY + 2, panelWidth, panelHeight)
     end
 
-    love.graphics.setColor(windowColors.background or { 0.02, 0.02, 0.04, 0.95 })
-    love.graphics.rectangle("fill", panelX, panelY, panelWidth, panelHeight, cornerRadius, cornerRadius)
+    love.graphics.setColor(windowColors.background or { 0.008, 0.008, 0.012, 1 })
+    love.graphics.rectangle("fill", panelX, panelY, panelWidth, panelHeight)
 
-    love.graphics.setColor(windowColors.border or { 0.1, 0.1, 0.15, 0.8 })
-    love.graphics.setLineWidth(2)
-    love.graphics.rectangle("line", panelX + 1, panelY + 1, panelWidth - 2, panelHeight - 2, cornerRadius, cornerRadius)
+    love.graphics.setColor(windowColors.border or { 0.18, 0.22, 0.28, 1 })
+    love.graphics.setLineWidth(1)
+    love.graphics.rectangle("line", panelX + 0.5, panelY + 0.5, panelWidth - 1, panelHeight - 1)
 
     local textAreaX = panelX + (panelWidth - innerWidth) * 0.5
     local currentY = panelY + padding
 
     love.graphics.setFont(fonts.title)
-    love.graphics.setColor(windowColors.title_text or textColors.heading or { 0.85, 0.85, 0.9, 1 })
+    love.graphics.setColor(windowColors.title_text or textColors.heading or { 0.92, 0.95, 1, 1 })
     love.graphics.printf(title, textAreaX, currentY, innerWidth, "center")
     currentY = currentY + titleHeight
 
     if hasMessage and messageHeight > 0 then
         currentY = currentY + 14
         love.graphics.setFont(fonts.body)
-        love.graphics.setColor(windowColors.text or textColors.body or { 0.75, 0.75, 0.8, 1 })
+        love.graphics.setColor(windowColors.text or textColors.body or { 0.75, 0.78, 0.82, 1 })
         love.graphics.printf(message, textAreaX, currentY, innerWidth, "center")
         currentY = currentY + messageHeight
     end
@@ -247,20 +247,26 @@ function theme.draw_modal_window(state, fonts, options)
             buttonActivated = true
         end
 
-        local buttonColor = windowColors.button or { 0.05, 0.05, 0.08, 1 }
+        local buttonColor = windowColors.button or { 0.035, 0.045, 0.065, 1 }
         if buttonHovered then
-            buttonColor = windowColors.button_hover or { 0.08, 0.08, 0.12, 1 }
+            buttonColor = windowColors.button_hover or { 0.065, 0.095, 0.14, 1 }
         end
 
         love.graphics.setColor(buttonColor)
-        love.graphics.rectangle("fill", buttonX, buttonY, buttonWidth, buttonHeight, cornerRadius, cornerRadius)
+        love.graphics.rectangle("fill", buttonX, buttonY, buttonWidth, buttonHeight)
 
-        love.graphics.setColor(windowColors.border or { 0.1, 0.1, 0.15, 0.9 })
-        love.graphics.setLineWidth(1.5)
-        love.graphics.rectangle("line", buttonX, buttonY, buttonWidth, buttonHeight, cornerRadius, cornerRadius)
+        love.graphics.setColor(windowColors.border or { 0.18, 0.22, 0.28, 1 })
+        love.graphics.setLineWidth(1)
+        love.graphics.rectangle("line", buttonX + 0.5, buttonY + 0.5, buttonWidth - 1, buttonHeight - 1)
+
+        if buttonHovered and windowColors.accent then
+            love.graphics.setColor(windowColors.accent)
+            love.graphics.setLineWidth(1)
+            love.graphics.rectangle("line", buttonX + 1.5, buttonY + 1.5, buttonWidth - 3, buttonHeight - 3)
+        end
 
         love.graphics.setFont(fonts.body)
-        love.graphics.setColor(windowColors.title_text or textColors.heading or { 0.85, 0.85, 0.9, 1 })
+        love.graphics.setColor(windowColors.title_text or textColors.heading or { 0.92, 0.95, 1, 1 })
         love.graphics.printf(baseButtonLabel, buttonX, buttonY + (buttonHeight - fonts.body:getHeight()) * 0.5, buttonWidth, "center")
 
         currentY = currentY + buttonHeight
@@ -273,7 +279,7 @@ function theme.draw_modal_window(state, fonts, options)
     if hasHint and hintHeight > 0 then
         currentY = currentY + 12
         love.graphics.setFont(fonts.small)
-        love.graphics.setColor(windowColors.muted or textColors.muted or { 0.4, 0.4, 0.45, 1 })
+        love.graphics.setColor(windowColors.muted or textColors.muted or { 0.42, 0.45, 0.5, 1 })
         love.graphics.printf(hint, textAreaX, currentY, innerWidth, "center")
     end
 

@@ -15,6 +15,9 @@ local createShipSystem = require("src.systems.ship")
 local createHudSystem = require("src.systems.hud")
 local createUiSystem = require("src.systems.ui")
 local createDestructionSystem = require("src.systems.destruction")
+local createLootDropSystem = require("src.systems.loot_drop")
+local createPickupSystem = require("src.systems.pickup")
+local Entities = require("src.states.gameplay.entities")
 
 local Systems = {}
 
@@ -27,9 +30,18 @@ end
 
 local function add_common_systems(state)
     state.movementSystem = state.world:addSystem(createMovementSystem())
+    state.pickupSystem = state.world:addSystem(createPickupSystem({
+        state = state,
+    }))
     state.weaponSystem = state.world:addSystem(createWeaponSystem(state))
     state.shipSystem = state.world:addSystem(createShipSystem(state))
     state.projectileSystem = state.world:addSystem(createProjectileSystem(state))
+    state.lootDropSystem = state.world:addSystem(createLootDropSystem({
+        state = state,
+        spawnLootItem = function(drop)
+            return Entities.spawnLootPickup(state, drop)
+        end,
+    }))
     state.destructionSystem = state.world:addSystem(createDestructionSystem(state))
 end
 
@@ -39,16 +51,6 @@ function Systems.initialize(state, damageCallback)
     state.uiInput = {
         mouseCaptured = false,
         keyboardCaptured = false,
-    }
-
-    local constants = require("src.constants.game")
-    state.multiplayerUI = state.multiplayerUI or {
-        visible = false,
-        status = "",
-        addressInput = string.format("%s:%d", 
-            (state.networkManager and state.networkManager.host) or constants.network.host, 
-            (state.networkManager and state.networkManager.port) or constants.network.port
-        ),
     }
 
     if damageCallback then
@@ -68,36 +70,16 @@ function Systems.initialize(state, damageCallback)
         intentHolder = state,
     }))
 
-    local isClient = state.netRole == 'client'
-    if not isClient then
-        state.spawnerSystem = state.world:addSystem(createAsteroidSpawner(state))
-        state.enemySpawnerSystem = state.world:addSystem(createEnemySpawner(state))
-    end
-
-    add_common_systems(state)
-
-    if not isClient then
-        state.enemyAISystem = state.world:addSystem(createEnemyAISystem(state))
-    end
-
-    state.renderSystem = state.world:addSystem(createRenderSystem(state))
-    state.hudSystem = state.world:addSystem(createHudSystem(state))
-    state.uiSystem = state.world:addSystem(createUiSystem(state))
-end
-
-function Systems.initializeServer(state, damageCallback)
-    ensure_world(state)
-
-    if damageCallback then
-        state.damageEntity = damageCallback
-    end
-
-    -- Server runs authoritative systems only (no rendering/input/UI)
     state.spawnerSystem = state.world:addSystem(createAsteroidSpawner(state))
     state.enemySpawnerSystem = state.world:addSystem(createEnemySpawner(state))
 
     add_common_systems(state)
+
     state.enemyAISystem = state.world:addSystem(createEnemyAISystem(state))
+
+    state.renderSystem = state.world:addSystem(createRenderSystem(state))
+    state.hudSystem = state.world:addSystem(createHudSystem(state))
+    state.uiSystem = state.world:addSystem(createUiSystem(state))
 end
 
 function Systems.teardown(state)
@@ -105,9 +87,11 @@ function Systems.teardown(state)
     state.spawnerSystem = nil
     state.enemySpawnerSystem = nil
     state.movementSystem = nil
+    state.pickupSystem = nil
     state.renderSystem = nil
     state.weaponSystem = nil
     state.projectileSystem = nil
+    state.lootDropSystem = nil
     state.enemyAISystem = nil
     state.hudSystem = nil
     state.uiSystem = nil

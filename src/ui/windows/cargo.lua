@@ -256,6 +256,39 @@ function cargo_window.draw(context)
     end
 
     local items = (cargo and cargo.items) or {}
+    local usedVolume = cargo and cargo.used or 0
+    local capacityVolume = cargo and cargo.capacity or 0
+    local availableVolume = cargo and cargo.available
+    if availableVolume == nil and capacityVolume > 0 then
+        availableVolume = math.max(0, capacityVolume - usedVolume)
+    end
+    local percentFull = 0
+    if capacityVolume and capacityVolume > 0 then
+        percentFull = usedVolume / capacityVolume
+    end
+    percentFull = math.max(0, math.min(percentFull, 1))
+
+    local currencyValue
+    if player then
+        if player.currency ~= nil then
+            currencyValue = player.currency
+        elseif player.credits ~= nil then
+            currencyValue = player.credits
+        elseif player.wallet then
+            currencyValue = player.wallet.balance or player.wallet.credits
+        end
+    end
+
+    local currencyText
+    if currencyValue ~= nil then
+        if type(currencyValue) == "number" then
+            currencyText = string.format("Credits: %s", tostring(math.floor(currencyValue + 0.5)))
+        else
+            currencyText = string.format("Credits: %s", tostring(currencyValue))
+        end
+    else
+        currencyText = "Credits: --"
+    end
 
     love.graphics.push("all")
     love.graphics.origin()
@@ -343,6 +376,44 @@ function cargo_window.draw(context)
     state._hovered_slot = hoveredSlotIndex
     state._hovered_item = hoveredItem
     state._was_mouse_down = is_mouse_down
+
+    -- Bottom bar / capacity display
+    local bottomY = window_y + window_height - bottomBarHeight
+    set_color(window_colors.bottom_bar or window_colors.background)
+    love.graphics.rectangle("fill", window_x + 1, bottomY, window_width - 2, bottomBarHeight - 1)
+
+    local progressMarginX = padding
+    local barHeight = math.max(6, math.floor(bottomBarHeight * 0.45))
+    local barWidth = math.max(80, math.floor((window_width - progressMarginX * 2) * 0.5))
+    local barX = window_x + progressMarginX
+    local barY = bottomY + (bottomBarHeight - barHeight) * 0.5
+
+    if barHeight > 0 and barWidth > 0 then
+        set_color(window_colors.progress_background or { 0.03, 0.03, 0.05, 1 })
+        love.graphics.rectangle("fill", barX, barY, barWidth, barHeight, 3, 3)
+
+        local fillWidth = math.floor(barWidth * percentFull + 0.5)
+        if fillWidth > 0 then
+            local fillColor = window_colors.progress_fill or { 0.15, 0.4, 0.6, 1 }
+            if percentFull >= 0.95 and window_colors.warning then
+                fillColor = window_colors.warning
+            end
+            set_color(fillColor)
+            love.graphics.rectangle("fill", barX, barY, fillWidth, barHeight, 3, 3)
+        end
+
+        set_color(window_colors.border or { 0.08, 0.08, 0.12, 0.8 })
+        love.graphics.setLineWidth(1)
+        love.graphics.rectangle("line", barX + 0.5, barY + 0.5, barWidth - 1, barHeight - 1, 3, 3)
+    end
+
+    local currencyFont = fonts.small or fonts.body
+    love.graphics.setFont(currencyFont)
+    set_color(window_colors.text)
+    local currencyX = barX + barWidth + 16
+    local currencyY = bottomY + (bottomBarHeight - currencyFont:getHeight()) * 0.5
+    local currencyWidth = math.max(40, window_x + window_width - currencyX - progressMarginX)
+    love.graphics.printf(currencyText, currencyX, currencyY, currencyWidth, "right")
 
     if frame.close_clicked then
         state.visible = false

@@ -2,7 +2,6 @@ local tiny = require("libs.tiny")
 local Intent = require("src.input.intent")
 local PlayerManager = require("src.player.manager")
 local math_util = require("src.util.math")
-local Prediction = require("src.network.prediction")
 
 local function screen_to_world(x, y, camera)
     if not camera then
@@ -71,7 +70,6 @@ return function(context)
                 Intent.setFireSecondary(intent, love.mouse.isDown and love.mouse.isDown(2))
             end
 
-            Prediction.recordInput(state, intent)
         end,
     }
 end

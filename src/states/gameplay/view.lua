@@ -77,7 +77,6 @@ function View.resize(state, w, h)
         state.camera.height = h
     end
 
-    Starfield.refresh(state)
     View.updateCamera(state)
 end
 

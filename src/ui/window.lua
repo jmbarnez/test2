@@ -17,6 +17,15 @@ local function set_color(color)
     love.graphics.setColor(1, 1, 1, 1)
 end
 
+local function point_in_rect(px, py, rect)
+    return px >= rect.x and px <= rect.x + rect.width and
+           py >= rect.y and py <= rect.y + rect.height
+end
+
+local function clamp(value, min_val, max_val)
+    return math.max(min_val, math.min(value, max_val))
+end
+
 function window.draw_frame(options)
     local colors = theme.colors.window
     local spacing = theme.spacing
@@ -43,30 +52,25 @@ function window.draw_frame(options)
     local shadow_offset = spacing.window_shadow_offset
 
     local fonts = options.fonts or theme.get_fonts()
-
     local previous_font = love.graphics.getFont()
 
+    -- Initialize state position
     if state then
         state.width = width
         state.height = height
-        if state.x == nil then
-            state.x = x
-        end
-        if state.y == nil then
-            state.y = y
-        end
+        state.x = state.x or x
+        state.y = state.y or y
         x = state.x
         y = state.y
     end
 
+    -- Define close button rect
     local close_button_rect
     if show_close then
         local close_size = options.close_button_size or metrics.close_button_size
-        local close_x = x + width - padding - close_size
-        local close_y = y + (top_bar_height - close_size) * 0.5
         close_button_rect = {
-            x = close_x,
-            y = close_y,
+            x = x + width - padding - close_size,
+            y = y + (top_bar_height - close_size) * 0.5,
             width = close_size,
             height = close_size,
             size = close_size,
@@ -83,67 +87,42 @@ function window.draw_frame(options)
     local close_clicked = false
     local close_hovered = false
 
-    if state then
-        if just_pressed and mouse_x and mouse_y then
-            if close_button_rect and mouse_x >= close_button_rect.x and mouse_x <= close_button_rect.x + close_button_rect.width and mouse_y >= close_button_rect.y and mouse_y <= close_button_rect.y + close_button_rect.height then
+    -- Handle input
+    if state and mouse_x and mouse_y then
+        if just_pressed then
+            if close_button_rect and point_in_rect(mouse_x, mouse_y, close_button_rect) then
                 close_clicked = true
-            end
-
-            if mouse_x >= top_bar_rect.x and mouse_x <= top_bar_rect.x + top_bar_rect.width and mouse_y >= top_bar_rect.y and mouse_y <= top_bar_rect.y + top_bar_rect.height then
+            elseif point_in_rect(mouse_x, mouse_y, top_bar_rect) then
                 state.dragging = true
                 state.drag_offset_x = mouse_x - x
                 state.drag_offset_y = mouse_y - y
             end
         end
 
-        if state.dragging and is_down and mouse_x and mouse_y then
+        if state.dragging and is_down then
             local offset_x = state.drag_offset_x or 0
             local offset_y = state.drag_offset_y or 0
-            local new_x = mouse_x - offset_x
-            local new_y = mouse_y - offset_y
             local screen_width = love.graphics.getWidth()
             local screen_height = love.graphics.getHeight()
 
-            new_x = math.max(0, math.min(new_x, screen_width - width))
-            new_y = math.max(0, math.min(new_y, screen_height - top_bar_height))
-
-            state.x = new_x
-            state.y = new_y
-            x = new_x
-            y = new_y
+            state.x = clamp(mouse_x - offset_x, 0, screen_width - width)
+            state.y = clamp(mouse_y - offset_y, 0, screen_height - top_bar_height)
+            x = state.x
+            y = state.y
         end
 
         if not is_down then
             state.dragging = false
         end
 
-        if state.x then
-            top_bar_rect.x = state.x
-        end
-        if state.y then
-            top_bar_rect.y = state.y
-        end
-
+        -- Update rects after position change
+        top_bar_rect.x = x
+        top_bar_rect.y = y
         if close_button_rect then
-            close_button_rect.x = (state.x or x) + width - padding - close_button_rect.size
-            close_button_rect.y = (state.y or y) + (top_bar_height - close_button_rect.size) * 0.5
+            close_button_rect.x = x + width - padding - close_button_rect.size
+            close_button_rect.y = y + (top_bar_height - close_button_rect.size) * 0.5
+            close_hovered = point_in_rect(mouse_x, mouse_y, close_button_rect)
         end
-    end
-
-    -- Update local references in case state adjusted position
-    if state then
-        x = state.x or x
-        y = state.y or y
-    end
-    top_bar_rect.x = x
-    top_bar_rect.y = y
-    if close_button_rect then
-        close_button_rect.x = x + width - padding - close_button_rect.size
-        close_button_rect.y = y + (top_bar_height - close_button_rect.size) * 0.5
-    end
-
-    if close_button_rect and mouse_x and mouse_y then
-        close_hovered = mouse_x >= close_button_rect.x and mouse_x <= close_button_rect.x + close_button_rect.width and mouse_y >= close_button_rect.y and mouse_y <= close_button_rect.y + close_button_rect.height
     end
 
     -- Outer glow
@@ -191,19 +170,29 @@ function window.draw_frame(options)
     -- Title text (with glow)
     if title then
         love.graphics.setFont(fonts.title)
-        set_color(colors.glow)
         local title_y = y + (top_bar_height - fonts.title:getHeight()) * 0.5
+        set_color(colors.glow)
         love.graphics.print(title, x + padding + 1, title_y + 1)
         set_color(colors.title_text)
         love.graphics.print(title, x + padding, title_y)
     end
 
     -- Close button
-    if show_close then
+    if show_close and close_button_rect then
         set_color(close_hovered and colors.close_button_hover or colors.close_button)
         love.graphics.setLineWidth(1.5)
-        love.graphics.line(close_button_rect.x, close_button_rect.y, close_button_rect.x + close_button_rect.size, close_button_rect.y + close_button_rect.size)
-        love.graphics.line(close_button_rect.x, close_button_rect.y + close_button_rect.size, close_button_rect.x + close_button_rect.size, close_button_rect.y)
+        love.graphics.line(
+            close_button_rect.x,
+            close_button_rect.y,
+            close_button_rect.x + close_button_rect.size,
+            close_button_rect.y + close_button_rect.size
+        )
+        love.graphics.line(
+            close_button_rect.x,
+            close_button_rect.y + close_button_rect.size,
+            close_button_rect.x + close_button_rect.size,
+            close_button_rect.y
+        )
     end
 
     love.graphics.setFont(previous_font)

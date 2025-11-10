@@ -182,11 +182,17 @@ return {
             angular_damping = 0.18,
         },
         cargo = {
-            capacity = 110,
+            capacity = 5,
             items = {
                 { weapon = "cannon" },
                 { weapon = "laser_beam" },
             },
+        },
+        magnet = {
+            radius = 220,
+            strength = 220,
+            falloff = 0.65,
+            collectRadius = 24,
         },
         hull = {
             max = 95,

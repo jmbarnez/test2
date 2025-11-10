@@ -34,7 +34,7 @@ constants.window = {
     width = 1600,                    -- Window width in pixels
     height = 900,                   -- Window height in pixels
     fullscreen = false,              -- Start in windowed mode
-    resizable = false,                -- Allow window resizing
+    resizable = true,                -- Allow window resizing
     vsync = 0,                       -- Disable vsync (using manual 60 FPS limiting)
     msaa = 0,                        -- Multisample anti-aliasing samples (0 = disabled)
     max_fps = 240,                   -- Manual frame limiter target when vsync is disabled
@@ -55,6 +55,8 @@ constants.physics = {
     meter_scale = 64,                -- Pixels per meter (Box2D works in meters)
     gravity = { x = 0, y = 0 },      -- Zero gravity for space environment
     allow_sleeping = true,           -- Allow physics bodies to sleep when idle (optimization)
+    fixed_timestep = 1/60,           -- Fixed timestep for deterministic simulation
+    max_steps = 4,                   -- Maximum physics steps per frame (prevent spiral of death)
 }
 
 -- ============================================================================
@@ -80,45 +82,6 @@ constants.world = {
 -- ============================================================================
 constants.player = {
     starter_ship_id = "starter",     -- Blueprint ID for the player's starting ship
-}
-
-constants.network = {
-    -- Connection settings
-    host = "0.0.0.0",
-    port = 25565,
-    default_client_host = "127.0.0.1",  -- Default host for clients to connect to
-    max_clients = 32,                    -- Maximum number of connected clients
-    channels = 2,                        -- Number of ENet channels
-    
-    -- Update rates
-    snapshot_rate = 60,        -- Hz: snapshots per second (server -> clients)
-    input_rate = 60,           -- Hz: inputs per second (clients -> server)
-    
-    -- Server timing
-    server_startup_delay = 1.0,  -- Seconds to wait before starting snapshots
-    
-    -- Physics synchronization
-    physics_timestep = 1/60,     -- Fixed timestep for deterministic physics (60Hz)
-    physics_max_steps = 4,       -- Maximum physics steps per frame (prevent spiral of death)
-    
-    -- Client-side prediction & interpolation
-    interpolation_enabled = true,           -- Enable position drift correction
-    interpolation_snap_threshold = 50,      -- Pixels: teleport if drift exceeds this
-    interpolation_blend_threshold = 3,      -- Pixels: start blending corrections above this
-    interpolation_correction_speed = 20,    -- Blend speed multiplier
-    interpolation_rotation_threshold = 0.5, -- Radians: snap rotation if drift exceeds (~30 degrees)
-    
-    -- Client-side prediction specifics
-    client_prediction_enabled = true,       -- Enable client-side prediction and reconciliation
-    prediction_buffer_size = 120,           -- Max buffered input snapshots for reconciliation
-    prediction_position_threshold = 6,      -- Pixels: acceptable position error before correction
-    prediction_velocity_threshold = 4,      -- Pixels/sec: acceptable velocity error before correction
-    
-    -- Client reconciliation (for local player on client)
-    reconciliation_threshold = 12,  -- Pixels: snap local player if server disagrees by this much
-    
-    -- Chat settings
-    chat_max_length = 200,  -- Maximum characters per chat message
 }
 
 constants.ships = {

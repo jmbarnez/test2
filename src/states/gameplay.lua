@@ -18,11 +18,6 @@ local Entities = require("src.states.gameplay.entities")
 local Systems = require("src.states.gameplay.systems")
 local View = require("src.states.gameplay.view")
 local PlayerEngineTrail = require("src.effects.player_engine_trail")
-local Snapshot = require("src.network.snapshot")
-local Interpolation = require("src.network.interpolation")
-local Prediction = require("src.network.prediction")
-local MultiplayerWindow = require("src.ui.windows.multiplayer")
-local ChatWindow = require("src.ui.windows.chat")
 
 local love = love
 
@@ -34,14 +29,6 @@ local function resolveSectorId(config)
     elseif type(config) == "string" then
         return config
     end
-end
-
-function gameplay:textinput(text)
-    if ChatWindow.textinput(self, text) then
-        return
-    end
-
-    MultiplayerWindow.textinput(self, text)
 end
 
 function gameplay:getLocalPlayer()
@@ -63,22 +50,12 @@ function gameplay:enter(_, config)
     View.initialize(self)
     Systems.initialize(self, Entities.damage)
     
-    -- Default role is offline until user chooses Host/Join
-    self.netRole = config and config.netRole or self.netRole or 'offline'
-
-    -- Initialize client-side prediction buffers
-    self.prediction = self.prediction or {}
-    self.prediction.maxSize = constants.network.prediction_buffer_size or self.prediction.maxSize or 90
-    Prediction.reset(self)
-    -- Do not pre-spawn when acting as a client; server will spawn on connect
-    if self.netRole ~= 'client' then
-        local player = Entities.spawnPlayer(self)
-        if player then
-            if self.engineTrail then
-                self.engineTrail:attachPlayer(player)
-            end
-            self:registerPlayerCallbacks(player)
+    local player = Entities.spawnPlayer(self)
+    if player then
+        if self.engineTrail then
+            self.engineTrail:attachPlayer(player)
         end
+        self:registerPlayerCallbacks(player)
     end
     View.updateCamera(self)
 end
@@ -95,63 +72,8 @@ function gameplay:leave()
         self.engineTrail = nil
     end
     
-    -- Clean up network connections
-    if self.networkManager then
-        self.networkManager:shutdown()
-        self.networkManager = nil
-    end
-    if self.networkServer then
-        self.networkServer:shutdown()
-        self.networkServer = nil
-    end
-    
     -- Clean up UI state
     UIStateManager.cleanup(self)
-end
-
-function gameplay:reinitializeAsClient()
-    -- Tear down existing world/state except network connections
-    PlayerManager.clearShip(self)
-    Entities.destroyWorldEntities(self.world)
-    Systems.teardown(self)
-    World.teardown(self)
-    View.teardown(self)
-
-    if self.engineTrail then
-        self.engineTrail:clear()
-    end
-    self.engineTrail = PlayerEngineTrail.new()
-
-    self.netRole = 'client'
-    self.player = nil
-    self.playerShip = nil
-    self.players = {}
-    self.entitiesById = {}
-    self.worldSynced = false
-    self.localPlayerId = nil
-    self.networkServer = nil
-
-    self.prediction = {
-        tick = 0,
-        history = {},
-        order = {},
-        maxSize = constants.network.prediction_buffer_size or 90,
-        lastAck = 0,
-    }
-
-    World.loadSector(self, self.currentSectorId)
-    World.initialize(self)
-    View.initialize(self)
-    Systems.initialize(self, Entities.damage)
-    View.updateCamera(self)
-end
-
-function gameplay:captureSnapshot()
-    return Snapshot.capture(self)
-end
-
-function gameplay:applySnapshot(data)
-    Snapshot.apply(self, data)
 end
 
 function gameplay:update(dt)
@@ -163,22 +85,8 @@ function gameplay:update(dt)
         self:respawnPlayer()
     end
 
-    -- Update network systems (only in multiplayer modes)
-    if self.netRole ~= 'offline' then
-        if self.networkManager then
-            self.networkManager:update(dt)
-        end
-        if self.networkServer then
-            self.networkServer:update(dt)
-        end
-
-        -- Initialize prediction module
-        Prediction.initialize(self)
-
-        -- Interpolate remote entities for smooth movement (both client and host)
-        if constants.network.interpolation_enabled and (self.netRole == 'client' or self.netRole == 'host') then
-            Interpolation.updateWorld(self.world, dt)
-        end
+    if UIStateManager.isPaused(self) then
+        return
     end
 
     -- Fixed timestep physics for deterministic multiplayer
@@ -186,8 +94,8 @@ function gameplay:update(dt)
     -- Accumulate frame time and step physics in fixed increments
     local physicsWorld = self.physicsWorld
     if physicsWorld then
-        local FIXED_DT = constants.network.physics_timestep
-        local MAX_STEPS = constants.network.physics_max_steps
+        local FIXED_DT = constants.physics.fixed_timestep or (1/60)
+        local MAX_STEPS = constants.physics.max_steps or 4
         
         self.physicsAccumulator = (self.physicsAccumulator or 0) + dt
         
@@ -201,13 +109,6 @@ function gameplay:update(dt)
         -- Cap accumulator to prevent runaway accumulation
         if self.physicsAccumulator > FIXED_DT * MAX_STEPS then
             self.physicsAccumulator = 0
-        end
-    end
-
-    if constants.network.client_prediction_enabled and self.netRole == 'client' then
-        local ship = PlayerManager.getCurrentShip(self)
-        if ship then
-            Prediction.recordState(self, ship)
         end
     end
 
@@ -314,11 +215,10 @@ function gameplay:updateCamera()
 end
 
 function gameplay:keypressed(key)
-    if MultiplayerWindow.keypressed(self, key) then
-        return
-    end
-
-    if ChatWindow.keypressed(self, key) then
+    if UIStateManager.isPauseUIVisible(self) then
+        if key == "escape" or key == "return" or key == "kpenter" then
+            UIStateManager.hidePauseUI(self)
+        end
         return
     end
 
@@ -326,6 +226,11 @@ function gameplay:keypressed(key)
         if key == "return" or key == "space" then
             UIStateManager.requestRespawn(self)
         end
+        return
+    end
+
+    if key == "escape" then
+        UIStateManager.showPauseUI(self)
         return
     end
 

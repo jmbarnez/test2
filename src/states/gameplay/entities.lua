@@ -1,6 +1,10 @@
 local loader = require("src.blueprints.loader")
 local constants = require("src.constants.game")
 local PlayerManager = require("src.player.manager")
+local Items = require("src.items.registry")
+
+---@diagnostic disable-next-line: undefined-global
+local love = love
 
 local Entities = {}
 
@@ -130,12 +134,23 @@ function Entities.clearNonLocalEntities(state)
 
     local world = state.world
     local localShip = PlayerManager.getCurrentShip(state)
+    local keepers = {}
+    if localShip then
+        keepers[localShip] = true
+    end
+    if state.players then
+        for _, pentity in pairs(state.players) do
+            if pentity then
+                keepers[pentity] = true
+            end
+        end
+    end
 
     local toRemove = {}
     local entities = world.entities or {}
     for i = 1, #entities do
         local entity = entities[i]
-        if entity and entity ~= localShip then
+        if entity and not keepers[entity] then
             toRemove[#toRemove + 1] = entity
         end
     end
@@ -150,7 +165,7 @@ function Entities.clearNonLocalEntities(state)
 
     if state.entitiesById then
         for id, entity in pairs(state.entitiesById) do
-            if entity ~= localShip then
+            if not keepers[entity] then
                 state.entitiesById[id] = nil
             end
         end
@@ -158,11 +173,74 @@ function Entities.clearNonLocalEntities(state)
 
     if state.players then
         for playerId, entity in pairs(state.players) do
-            if entity ~= localShip then
-                state.players[playerId] = nil
-            end
+            -- preserve all players (local and remote) on first sync
+            -- pruning of missing players is handled by Snapshot.apply later
         end
     end
+end
+
+function Entities.spawnLootPickup(state, drop)
+    if not (state and state.world and drop and drop.position) then
+        return nil
+    end
+
+    local item = drop.item
+    if not item and drop.id then
+        local instantiated = Items.instantiate(drop.id, {
+            quantity = drop.quantity,
+            name = drop.name,
+        })
+        if instantiated then
+            item = instantiated
+        end
+    end
+
+    if not item then
+        return nil
+    end
+
+    local quantity = drop.quantity or item.quantity or 1
+    item.quantity = quantity
+
+    local position = drop.position
+    local velocity = drop.velocity or {}
+
+    if not (velocity.x or velocity.y) then
+        velocity = {
+            x = (love and love.math and (love.math.random() - 0.5) or 0) * 20,
+            y = (love and love.math and (love.math.random() - 0.5) or 0) * 20,
+        }
+    end
+
+    local entity = {
+        pickup = {
+            item = item,
+            itemId = item.id,
+            quantity = quantity,
+            collectRadius = drop.collectRadius or 48,
+            lifetime = drop.lifetime or 45,
+            age = 0,
+            source = drop.source,
+        },
+        position = {
+            x = position.x or 0,
+            y = position.y or 0,
+        },
+        velocity = {
+            x = velocity.x or 0,
+            y = velocity.y or 0,
+        },
+        drawable = {
+            type = "pickup",
+            icon = item.icon,
+            size = drop.size or 28,
+            spinSpeed = drop.spinSpeed or 0.6,
+            bobAmplitude = drop.bobAmplitude or 4,
+        },
+        rotation = drop.initialRotation or 0,
+    }
+
+    return state.world:add(entity)
 end
 
 return Entities

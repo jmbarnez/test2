@@ -23,19 +23,6 @@ local function createDeathUIState()
     }
 end
 
-local function createMultiplayerUIState()
-    return {
-        visible = false,
-        dragging = false,
-        inputActive = false,
-        addressInput = "",
-        status = "",
-        _hostRequested = false,
-        _joinRequested = false,
-        _was_mouse_down = false,
-    }
-end
-
 local function createPauseUIState()
     return {
         visible = false,
@@ -43,7 +30,7 @@ local function createPauseUIState()
         message = "Take a breather while the galaxy waits.",
         hint = "Press Esc or Enter to resume",
         buttonLabel = "Resume",
-        resumeHovered = false,
+        buttonHovered = false,
         _was_mouse_down = false,
     }
 end
@@ -104,7 +91,6 @@ function UIStateManager.initialize(state)
     -- Initialize UI states
     state.cargoUI = state.cargoUI or createCargoUIState()
     state.deathUI = state.deathUI or createDeathUIState()
-    state.multiplayerUI = state.multiplayerUI or createMultiplayerUIState()
     state.pauseUI = state.pauseUI or createPauseUIState()
     state.chatUI = state.chatUI or createChatUIState()
     
@@ -129,7 +115,6 @@ function UIStateManager.cleanup(state)
 
     state.cargoUI = nil
     state.deathUI = nil
-    state.multiplayerUI = nil
     state.chatUI = nil
     state.pauseUI = nil
     state.uiInput = nil
@@ -232,7 +217,7 @@ local function setPauseVisibility(state, visible)
     end
 
     pauseUI.visible = visible
-    pauseUI.resumeHovered = false
+    pauseUI.buttonHovered = false
     pauseUI._was_mouse_down = love.mouse and love.mouse.isDown and love.mouse.isDown(1) or false
 
     if state.uiInput then

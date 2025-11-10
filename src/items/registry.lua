@@ -105,6 +105,28 @@ function Items.instantiate(id, overrides)
         instance.icon = deep_copy(definition.icon)
     end
 
+    local overrideVolume = overrides and overrides.volume
+    local overrideUnitVolume = overrides and overrides.unitVolume
+    if overrideVolume ~= nil then
+        instance.volume = overrideVolume
+    elseif definition.volume ~= nil then
+        instance.volume = definition.volume
+    elseif overrideUnitVolume ~= nil then
+        instance.volume = overrideUnitVolume
+    elseif definition.unitVolume ~= nil then
+        instance.volume = definition.unitVolume
+    end
+
+    if overrideUnitVolume ~= nil then
+        instance.unitVolume = overrideUnitVolume
+    elseif definition.unitVolume ~= nil then
+        instance.unitVolume = definition.unitVolume
+    end
+
+    if instance.volume == nil and instance.unitVolume ~= nil then
+        instance.volume = instance.unitVolume
+    end
+
     if definition.createInstance then
         definition.createInstance(instance, overrides or {})
     elseif overrides then

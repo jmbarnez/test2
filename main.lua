@@ -2,7 +2,6 @@
 local Gamestate = require("libs.hump.gamestate")
 local constants = require("src.constants.game")
 local gameplay = require("src.states.gameplay")
-local NetworkManager = require("src.network.manager")
 
 local TARGET_FPS = constants.window.max_fps or 60
 local TARGET_FRAME_TIME = 1 / TARGET_FPS
@@ -63,12 +62,6 @@ function love.run()
     end
 end
 
-local function setMultiplayerStatus(status)
-    if gameplay and gameplay.multiplayerUI then
-        gameplay.multiplayerUI.status = status or ""
-    end
-end
-
 function love.load()
     local window = constants.window
     if love.window and window then
@@ -98,26 +91,4 @@ function love.load()
     Gamestate.registerEvents()
     Gamestate.switch(gameplay)
 
-    if gameplay then
-        setMultiplayerStatus("")
-        gameplay.networkManager = NetworkManager.new({
-            state = gameplay,
-            host = constants.network and constants.network.host,
-            port = constants.network and constants.network.port,
-            autoConnect = false,
-            onConnect = function()
-                setMultiplayerStatus("Connected")
-            end,
-            onDisconnect = function(_, code)
-                if code and code ~= 0 then
-                    setMultiplayerStatus(string.format("Disconnected (code %s)", tostring(code)))
-                else
-                    setMultiplayerStatus("Disconnected")
-                end
-            end,
-            onTimeout = function()
-                setMultiplayerStatus("Connection timed out")
-            end,
-        })
-    end
 end
