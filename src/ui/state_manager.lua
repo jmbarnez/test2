@@ -220,6 +220,12 @@ local function setPauseVisibility(state, visible)
     end
 
     local pauseUI = state.pauseUI
+
+    if visible and UIStateManager.isDeathUIVisible(state) then
+        state.isPaused = pauseUI.visible
+        return
+    end
+
     if pauseUI.visible == visible then
         state.isPaused = pauseUI.visible
         return

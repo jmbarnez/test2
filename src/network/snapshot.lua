@@ -158,6 +158,7 @@ function Snapshot.capture(state)
                     rotation = e.rotation or 0,
                     damage = e.projectile.damage or 0,
                     lifetime = e.projectile.lifetime or 0,
+                    ownerPlayerId = e.projectile.ownerPlayerId,
                     drawable = e.drawable and {
                         size = e.drawable.size,
                         color = e.drawable.color,
@@ -329,6 +330,7 @@ function Snapshot.apply(state, snapshot)
     end
 
     for playerId, playerSnapshot in pairs(snapshot.players) do
+        seenPlayers[playerId] = true
         local entity = find_player_entity(state, playerId)
 
         if not entity then
@@ -373,6 +375,7 @@ function Snapshot.apply(state, snapshot)
     end
 
     -- Track seen sets to remove missing entities
+    local seenPlayers = {}
     local seenEnemies = {}
     local seenAsteroids = {}
     local seenProjectiles = {}
@@ -473,6 +476,7 @@ function Snapshot.apply(state, snapshot)
                     projectile = {
                         damage = pSnap.damage or 0,
                         lifetime = pSnap.lifetime or 0,
+                        ownerPlayerId = pSnap.ownerPlayerId,
                     },
                     drawable = {
                         type = drawableSnapshot.type or "projectile",
@@ -516,6 +520,7 @@ function Snapshot.apply(state, snapshot)
                 if entity.projectile then
                     entity.projectile.lifetime = pSnap.lifetime
                     entity.projectile.damage = pSnap.damage or entity.projectile.damage
+                    entity.projectile.ownerPlayerId = pSnap.ownerPlayerId or entity.projectile.ownerPlayerId
                 end
 
                 local drawableSnapshot = pSnap.drawable or {}
@@ -537,7 +542,17 @@ function Snapshot.apply(state, snapshot)
     end
 
     -- Remove entities not present in snapshot (clients only)
-    if not state.networkServer and state.entitiesById then
+    if not state.networkServer then
+        if state.players then
+            for playerId, entity in pairs(state.players) do
+                if entity and not seenPlayers[playerId] then
+                    remove_entity(state, entity)
+                    state.players[playerId] = nil
+                end
+            end
+        end
+
+        if state.entitiesById then
         for id, entity in pairs(state.entitiesById) do
             if entity and entity.enemy and not seenEnemies[id] then
                 remove_entity(state, entity)
@@ -549,6 +564,7 @@ function Snapshot.apply(state, snapshot)
                 remove_entity(state, entity)
                 state.entitiesById[id] = nil
             end
+        end
         end
     end
 end
