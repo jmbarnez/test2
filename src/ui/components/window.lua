@@ -69,6 +69,17 @@ function window.draw_frame(options)
         height = top_bar_height,
     }
 
+    local bottom_bar_rect
+    if bottom_bar_height > 0 then
+        local bar_y = y + height - bottom_bar_height
+        bottom_bar_rect = {
+            x = x,
+            y = bar_y,
+            width = width,
+            height = bottom_bar_height,
+        }
+    end
+
     local close_clicked = false
     local close_hovered = false
 
@@ -128,6 +139,29 @@ function window.draw_frame(options)
     love.graphics.setLineWidth(2)
     love.graphics.line(x + 1, y + top_bar_height + 1, x + width - 1, y + top_bar_height + 1)
 
+    -- Bottom bar
+    if bottom_bar_rect then
+        set_color(colors.bottom_bar or colors.background)
+        love.graphics.rectangle(
+            "fill",
+            x + 1,
+            bottom_bar_rect.y + 1,
+            math.max(0, width - 2),
+            math.max(0, bottom_bar_height - 2)
+        )
+
+        set_color(colors.accent)
+        love.graphics.setLineWidth(2)
+        love.graphics.line(x + 1, bottom_bar_rect.y, x + width - 1, bottom_bar_rect.y)
+
+        bottom_bar_rect.inner = {
+            x = x + padding,
+            y = bottom_bar_rect.y + 2,
+            width = math.max(0, width - padding * 2),
+            height = math.max(0, bottom_bar_height - 4),
+        }
+    end
+
     -- Title text (with glow)
     if title then
         love.graphics.setFont(fonts.title)
@@ -163,6 +197,15 @@ function window.draw_frame(options)
     local inner_width = math.max(0, width - padding * 2)
     local inner_height = math.max(0, content_height - padding * 2)
 
+    if bottom_bar_rect and not bottom_bar_rect.inner then
+        bottom_bar_rect.inner = {
+            x = x + padding,
+            y = bottom_bar_rect.y + 2,
+            width = math.max(0, width - padding * 2),
+            height = math.max(0, bottom_bar_height - 4),
+        }
+    end
+
     return {
         padding = padding,
         top_bar_height = top_bar_height,
@@ -179,6 +222,7 @@ function window.draw_frame(options)
             width = width,
             height = content_height,
         },
+        bottom_bar = bottom_bar_rect,
         close_button = close_button_rect,
         top_bar = top_bar_rect,
         close_clicked = close_clicked,

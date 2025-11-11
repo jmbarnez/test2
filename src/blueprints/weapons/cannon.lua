@@ -1,26 +1,15 @@
 local constants = require("src.constants.game")
+local table_util = require("src.util.table")
 
 local weapon_defaults = (constants.weapons and constants.weapons.cannon) or {}
 
-local function clone_array(values)
-    if type(values) ~= "table" then
-        return values
-    end
-
-    local copy = {}
-    for i = 1, #values do
-        copy[i] = values[i]
-    end
-    return copy
-end
-
 local function with_default(values, default)
-    local copy = clone_array(values)
+    local copy = table_util.clone_array(values)
     if copy then
         return copy
     end
     if type(default) == "table" then
-        return clone_array(default)
+        return table_util.clone_array(default)
     end
     return default
 end

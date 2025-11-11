@@ -1,7 +1,7 @@
 ---@diagnostic disable: undefined-global
 local theme = require("src.ui.theme")
-local window = require("src.ui.window")
-local tooltip = require("src.ui.tooltip")
+local window = require("src.ui.components.window")
+local tooltip = require("src.ui.components.tooltip")
 local PlayerManager = require("src.player.manager")
 local Items = require("src.items.registry")
 local loader = require("src.blueprints.loader")
@@ -765,65 +765,62 @@ function cargo_window.draw(context)
     state._was_mouse_down = is_mouse_down
 
     -- Bottom bar / capacity display
-    local bottomY = window_y + window_height - bottomBarHeight
-    set_color(window_colors.bottom_bar or window_colors.background)
-    love.graphics.rectangle("fill", window_x + 1, bottomY, window_width - 2, bottomBarHeight - 1)
+    local bottomBar = frame.bottom_bar
+    if bottomBar then
+        local inner = bottomBar.inner or bottomBar
+        local innerHeight = math.max(0, inner.height)
+        local innerWidth = math.max(0, inner.width)
+        local barHeight = math.max(6, math.floor(innerHeight * 0.55))
+        local barWidth = math.max(80, math.floor(innerWidth * 0.42))
+        local barX = inner.x
+        local barY = inner.y + (innerHeight - barHeight) * 0.5
 
-    set_color(window_colors.accent or { 0.2, 0.55, 0.95, 1 })
-    love.graphics.setLineWidth(2)
-    love.graphics.line(window_x + 1, bottomY, window_x + window_width - 1, bottomY)
+        if barHeight > 0 and barWidth > 0 then
+            set_color(window_colors.progress_background or { 0.03, 0.03, 0.05, 1 })
+            love.graphics.rectangle("fill", barX, barY, barWidth, barHeight, 3, 3)
 
-    local progressMarginX = padding
-    local barHeight = math.max(6, math.floor(bottomBarHeight * 0.35))
-    local barWidth = math.max(80, math.floor((window_width - progressMarginX * 2) * 0.42))
-    local barX = window_x + progressMarginX
-    local barY = bottomY + (bottomBarHeight - barHeight) * 0.5
+            local fillWidth = math.floor(barWidth * percentFull + 0.5)
+            if fillWidth > 0 then
+                local fillColor = window_colors.progress_fill or { 0.2, 0.55, 0.95, 1 }
+                set_color(fillColor)
+                love.graphics.rectangle("fill", barX, barY, fillWidth, barHeight, 3, 3)
+            end
 
-    if barHeight > 0 and barWidth > 0 then
-        set_color(window_colors.progress_background or { 0.03, 0.03, 0.05, 1 })
-        love.graphics.rectangle("fill", barX, barY, barWidth, barHeight, 3, 3)
+            set_color(window_colors.border or { 0.08, 0.08, 0.12, 0.8 })
+            love.graphics.setLineWidth(1)
+            love.graphics.rectangle("line", barX + 0.5, barY + 0.5, barWidth - 1, barHeight - 1, 3, 3)
 
-        local fillWidth = math.floor(barWidth * percentFull + 0.5)
-        if fillWidth > 0 then
-            local fillColor = window_colors.progress_fill or { 0.2, 0.55, 0.95, 1 }
-            set_color(fillColor)
-            love.graphics.rectangle("fill", barX, barY, fillWidth, barHeight, 3, 3)
+            local percentText
+            if capacityVolume and capacityVolume > 0 then
+                percentText = string.format("%d%%", math.floor(percentFull * 100 + 0.5))
+            else
+                percentText = "--"
+            end
+
+            if percentText ~= "--" then
+                local labelFont = fonts.small or fonts.body
+                love.graphics.setFont(labelFont)
+                set_color(window_colors.title_text or window_colors.text or { 1, 1, 1, 1 })
+                love.graphics.printf(percentText, barX, barY + (barHeight - labelFont:getHeight()) * 0.5, barWidth, "center")
+            end
         end
 
-        set_color(window_colors.border or { 0.08, 0.08, 0.12, 0.8 })
-        love.graphics.setLineWidth(1)
-        love.graphics.rectangle("line", barX + 0.5, barY + 0.5, barWidth - 1, barHeight - 1, 3, 3)
+        local currencyFont = fonts.small or fonts.body
+        love.graphics.setFont(currencyFont)
+        set_color(window_colors.text)
+        local currencyAreaX = barX + barWidth + 16
+        local currencyAreaWidth = math.max(60, inner.x + innerWidth - currencyAreaX)
+        local iconSize = math.max(14, math.min(innerHeight - 10, currencyFont:getHeight() + 6))
+        local iconX = currencyAreaX
+        local iconY = inner.y + (innerHeight - iconSize) * 0.5
 
-        local percentText
-        if capacityVolume and capacityVolume > 0 then
-            percentText = string.format("%d%%", math.floor(percentFull * 100 + 0.5))
-        else
-            percentText = "--"
-        end
+        draw_currency_icon(iconX, iconY, iconSize)
 
-        if percentText ~= "--" then
-            local labelFont = fonts.small or fonts.body
-            love.graphics.setFont(labelFont)
-            set_color(window_colors.title_text or window_colors.text or { 1, 1, 1, 1 })
-            love.graphics.printf(percentText, barX, barY + (barHeight - labelFont:getHeight()) * 0.5, barWidth, "center")
-        end
+        local amountX = iconX + iconSize + 8
+        local amountY = inner.y + (innerHeight - currencyFont:getHeight()) * 0.5
+        local amountWidth = math.max(20, currencyAreaWidth - (amountX - currencyAreaX))
+        love.graphics.printf(currencyAmountText, amountX, amountY, amountWidth, "left")
     end
-
-    local currencyFont = fonts.small or fonts.body
-    love.graphics.setFont(currencyFont)
-    set_color(window_colors.text)
-    local currencyAreaX = barX + barWidth + 16
-    local currencyAreaWidth = math.max(60, window_x + window_width - currencyAreaX - progressMarginX)
-    local iconSize = math.max(14, math.min(bottomBarHeight - 10, currencyFont:getHeight() + 6))
-    local iconX = currencyAreaX
-    local iconY = bottomY + (bottomBarHeight - iconSize) * 0.5
-
-    draw_currency_icon(iconX, iconY, iconSize)
-
-    local amountX = iconX + iconSize + 8
-    local amountY = bottomY + (bottomBarHeight - currencyFont:getHeight()) * 0.5
-    local amountWidth = math.max(20, currencyAreaWidth - (amountX - currencyAreaX))
-    love.graphics.printf(currencyAmountText, amountX, amountY, amountWidth, "left")
 
     if frame.close_clicked then
         state.visible = false

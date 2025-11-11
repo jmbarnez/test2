@@ -8,6 +8,8 @@ local notifications = require("src.ui.notifications")
 local FloatingText = require("src.effects.floating_text")
 
 local deep_copy = table_util.deep_copy
+local random_range = math_util.random_int_range
+local random_float_range = math_util.random_float_range
 
 ---@diagnostic disable-next-line: undefined-global
 local love = love
@@ -73,39 +75,6 @@ local function award_mining_xp(entity, destruction_context)
             })
         end
     end
-end
-
-local function random_range(range, default)
-    if type(range) == "table" then
-        local min = range.min or range[1] or default or 0
-        local max = range.max or range[2] or min
-        if min > max then
-            min, max = max, min
-        end
-        min = math.floor(min + 0.5)
-        max = math.floor(max + 0.5)
-        return love.math.random(min, max)
-    elseif type(range) == "number" then
-        return range
-    end
-    return default
-end
-
-local function random_float_range(range, default)
-    if type(range) == "table" then
-        local min = range.min or range[1] or default or 0
-        local max = range.max or range[2] or min
-        if min > max then
-            min, max = max, min
-        end
-        if min == max then
-            return min
-        end
-        return min + love.math.random() * (max - min)
-    elseif type(range) == "number" then
-        return range
-    end
-    return default
 end
 
 local function build_polygon(radius, sides, scale_range)

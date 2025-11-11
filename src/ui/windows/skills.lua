@@ -1,5 +1,5 @@
 local theme = require("src.ui.theme")
-local window = require("src.ui.window")
+local window = require("src.ui.components.window")
 local UIStateManager = require("src.ui.state_manager")
 local PlayerManager = require("src.player.manager")
 

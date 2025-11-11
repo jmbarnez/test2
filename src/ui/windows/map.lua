@@ -1,5 +1,5 @@
 local theme = require("src.ui.theme")
-local window = require("src.ui.window")
+local window = require("src.ui.components.window")
 local UIStateManager = require("src.ui.state_manager")
 local UIButton = require("src.ui.components.button")
 local PlayerManager = require("src.player.manager")
@@ -332,9 +332,9 @@ function map_window.draw(context)
             just_pressed = justPressed,
         },
         show_close = true,
-        bottom_bar_height = 0,
     }
 
+    local bottomBar = frame and frame.bottom_bar
     local contentFrame = frame and (frame.content_full or frame.content)
     local rect = get_map_rect(contentFrame)
     if not rect then
@@ -424,31 +424,34 @@ function map_window.draw(context)
 
     draw_legend(rect, fonts, colors)
 
-    local buttonWidth = 150
-    local buttonHeight = 36
-    local buttonRect = {
-        x = rect.x + 20,
-        y = rect.y + rect.height - buttonHeight - 20,
-        width = buttonWidth,
-        height = buttonHeight,
-    }
+    if bottomBar and bottomBar.inner then
+        local bar = bottomBar.inner
+        local buttonWidth = math.max(120, math.min(160, bar.width * 0.3))
+        local buttonHeight = math.min(36, math.max(28, bar.height - 8))
+        local buttonRect = {
+            x = bar.x + bar.width - buttonWidth,
+            y = bar.y + (bar.height - buttonHeight) * 0.5,
+            width = buttonWidth,
+            height = buttonHeight,
+        }
 
-    local buttonResult = UIButton.render {
-        rect = buttonRect,
-        label = "Reset View",
-        fonts = fonts,
-        font = fonts.body,
-        input = {
-            x = mouseX,
-            y = mouseY,
-            is_down = isMouseDown,
-            just_pressed = justPressed,
-        },
-    }
+        local buttonResult = UIButton.render {
+            rect = buttonRect,
+            label = "Reset View",
+            fonts = fonts,
+            font = fonts.body,
+            input = {
+                x = mouseX,
+                y = mouseY,
+                is_down = isMouseDown,
+                just_pressed = justPressed,
+            },
+        }
 
-    if buttonResult.clicked then
-        reset_view(state, context, bounds)
-        clamp_center(state, bounds, rect, baseScale * state.zoom)
+        if buttonResult.clicked then
+            reset_view(state, context, bounds)
+            clamp_center(state, bounds, rect, baseScale * state.zoom)
+        end
     end
 
     local shouldClose = frame and frame.close_clicked

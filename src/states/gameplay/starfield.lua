@@ -7,6 +7,9 @@ local love = love
 
 local Starfield = {}
 
+local random_range = math_util.random_float_range
+local random_int_range = math_util.random_int_range
+
 local nebulaShader = love.graphics.newShader([[
     extern float nebulaSeed;
     extern float time;
@@ -169,30 +172,6 @@ local function generate_stars(count, bounds, sizeRange, alphaRange, colorVariati
     end
 
     return stars
-end
-
-local function random_range(range, default)
-    if not range then
-        return default or 0
-    end
-    local min_val = range[1] or default or 0
-    local max_val = range[2] or min_val
-    if max_val == min_val then
-        return min_val
-    end
-    return min_val + love.math.random() * (max_val - min_val)
-end
-
-local function random_int_range(range, default)
-    if not range then
-        return default or 0
-    end
-    local min_val = math.floor(range[1] or default or 0)
-    local max_val = math.floor(range[2] or min_val)
-    if max_val < min_val then
-        min_val, max_val = max_val, min_val
-    end
-    return love.math.random(min_val, max_val)
 end
 
 local function generate_asteroid_belts(state)

@@ -1,4 +1,4 @@
-local window = require("src.ui.window")
+local window = require("src.ui.components.window")
 local UIStateManager = require("src.ui.state_manager")
 local theme = require("src.ui.theme")
 local UIButton = require("src.ui.components.button")

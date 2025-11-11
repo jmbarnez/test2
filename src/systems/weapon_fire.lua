@@ -21,18 +21,7 @@ local function resolve_damage_multiplier(shooter)
     return 1
 end
 
-local function clone_array(values)
-    if type(values) ~= "table" then
-        return values
-    end
-
-    local copy = {}
-    for i = 1, #values do
-        copy[i] = values[i]
-    end
-    return copy
-end
-
+local clone_array = table_util.clone_array
 local deep_copy = table_util.deep_copy
 
 local function compute_muzzle_origin(entity)
@@ -95,8 +84,8 @@ local function spawn_projectile(tinyWorld, physicsWorld, shooter, startX, startY
 
     local projectileComponent = projectile.projectile or {}
     projectileComponent.lifetime = projectileComponent.lifetime or lifetime
-    local baseDamage = projectileComponent.damage or damage
-    projectileComponent.damage = baseDamage * damageMultiplier
+    local copies = clone_array(projectileComponent.effects) or {}
+    projectileComponent.damage = (projectileComponent.damage or damage) * damageMultiplier
     projectileComponent.owner = shooter
     projectileComponent.ownerPlayerId = shooter and shooter.playerId or nil
     projectileComponent.groupIndex = projectileComponent.groupIndex or PROJECTILE_GROUP_INDEX

@@ -1,6 +1,6 @@
 local tiny = require("libs.tiny")
 local theme = require("src.ui.theme")
-local tooltip = require("src.ui.tooltip")
+local tooltip = require("src.ui.components.tooltip")
 local notifications = require("src.ui.notifications")
 local cargo_window = require("src.ui.windows.cargo")
 local death_window = require("src.ui.windows.death")
