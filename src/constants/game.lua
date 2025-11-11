@@ -30,7 +30,7 @@ constants.love = {
 -- rendering options like VSync and anti-aliasing.
 -- ============================================================================
 constants.window = {
-    title = "Procedural Space",      -- Window title bar text
+    title = "Novus",                 -- Window title bar text
     width = 1600,                    -- Window width in pixels
     height = 900,                   -- Window height in pixels
     fullscreen = false,              -- Start in windowed mode

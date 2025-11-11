@@ -243,7 +243,7 @@ local function initialize_energy(entity)
     energy.regen = math.max(0, tonumber(energy.regen) or 0)
     local defaultDrain = stats.main_thrust or 0
     energy.thrustDrain = math.max(0, tonumber(energy.thrustDrain) or defaultDrain)
-    energy.rechargeDelay = math.max(0, tonumber(energy.rechargeDelay) or 0)
+    energy.rechargeDelay = 0
     energy.rechargeTimer = 0
     energy.isDepleted = energy.current <= 0
     energy.percent = (maxEnergy > 0) and (energy.current / maxEnergy) or 0
@@ -267,7 +267,6 @@ local function update_energy(entity, dt)
     end
 
     local current = tonumber(energy.current) or maxEnergy
-    local rechargeDelay = math.max(0, tonumber(energy.rechargeDelay) or 0)
     local rechargeTimer = math.max(0, tonumber(energy.rechargeTimer) or 0)
     local regenRate = math.max(0, tonumber(energy.regen) or 0)
     local thrustDrain = math.max(0, tonumber(energy.thrustDrain) or maxEnergy)
@@ -287,9 +286,6 @@ local function update_energy(entity, dt)
 
             local drainRate = thrustDrain * thrustRatio
             current = math.max(0, current - drainRate * dt)
-            rechargeTimer = rechargeDelay
-        elseif rechargeTimer > 0 then
-            rechargeTimer = math.max(0, rechargeTimer - dt)
         elseif regenRate > 0 then
             current = math.min(maxEnergy, current + regenRate * dt)
         end

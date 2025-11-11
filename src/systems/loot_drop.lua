@@ -1,34 +1,12 @@
 local tiny = require("libs.tiny")
 local Items = require("src.items.registry")
+local table_util = require("src.util.table")
 
 ---@diagnostic disable-next-line: undefined-global
 local love = love
 local math = math
 
-local function deep_copy(value, cache)
-    if type(value) ~= "table" then
-        return value
-    end
-
-    cache = cache or {}
-    if cache[value] then
-        return cache[value]
-    end
-
-    local copy = {}
-    cache[value] = copy
-
-    for k, v in pairs(value) do
-        copy[deep_copy(k, cache)] = deep_copy(v, cache)
-    end
-
-    local mt = getmetatable(value)
-    if mt then
-        setmetatable(copy, mt)
-    end
-
-    return copy
-end
+local deep_copy = table_util.deep_copy
 
 local function resolve_quantity(spec, default)
     if type(spec) == "table" then

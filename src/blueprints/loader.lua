@@ -1,32 +1,9 @@
+local table_util = require("src.util.table")
+
 local loader = {}
 
 local registry = {}
 local factories = {}
-
-local function deep_copy(value, cache)
-    if type(value) ~= "table" then
-        return value
-    end
-
-    cache = cache or {}
-    if cache[value] then
-        return cache[value]
-    end
-
-    local copy = {}
-    cache[value] = copy
-
-    for k, v in pairs(value) do
-        copy[deep_copy(k, cache)] = deep_copy(v, cache)
-    end
-
-    local mt = getmetatable(value)
-    if mt then
-        setmetatable(copy, mt)
-    end
-
-    return copy
-end
 
 local function module_key(category, id)
     return string.format("%s:%s", category, id)
@@ -61,7 +38,7 @@ end
 
 local function materialize_blueprint(entry, params)
     if entry.kind == "table" then
-        return deep_copy(entry.value)
+        return table_util.deep_copy(entry.value)
     end
 
     local blueprint = entry.value(params)

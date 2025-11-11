@@ -80,7 +80,6 @@ return {
             main_thrust = 75,
             strafe_thrust = 47.5,
             reverse_thrust = 55,
-            rotation_torque = 780,
             max_acceleration = 100,
             max_speed = 160,
             linear_damping = 0.36,
@@ -137,7 +136,6 @@ return {
     physics = {
         body = {
             type = "dynamic",
-            fixedRotation = false,
         },
         fixture = {
             density = 1,

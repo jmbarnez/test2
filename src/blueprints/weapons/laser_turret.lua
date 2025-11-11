@@ -50,6 +50,7 @@ return {
             damage = 44,
             fireRate = 0.4,
             damageType = "laser",
+            energyPerShot = 18,
             projectileLifetime = 5.0,
             projectileSize = 3,
             firing = false,
@@ -63,7 +64,8 @@ return {
                     damage = 44,
                 },
                 physics = {
-                    density = 0.01,
+                    density = 1e-05,
+                    mass = 1e-05,
                     linearDamping = 0.02,
                     gravityScale = 0,
                     sensor = true,

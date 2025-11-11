@@ -1,5 +1,4 @@
--- gameplay.lua
--- Main game state for Procedural Space
+--- Main game state for Novus
 -- Manages the game world, entities, and systems
 -- Handles entity creation, world initialization, and system updates
 -- Uses tiny-ecs for entity-component-system architecture

@@ -5,6 +5,7 @@ local constants = require("src.constants.game")
 local vector = require("src.util.vector")
 local Intent = require("src.input.intent")
 local damage_util = require("src.util.damage")
+local table_util = require("src.util.table")
 
 local love = love
 
@@ -32,18 +33,7 @@ local function clone_array(values)
     return copy
 end
 
-local function deep_copy(value)
-    if type(value) ~= "table" then
-        return value
-    end
-
-    local copy = {}
-    for k, v in pairs(value) do
-        copy[deep_copy(k)] = deep_copy(v)
-    end
-
-    return copy
-end
+local deep_copy = table_util.deep_copy
 
 local function compute_muzzle_origin(entity)
     local weapon = entity.weapon or {}
@@ -244,6 +234,29 @@ local function spawn_beam_sparks(container, x, y, dirX, dirY, beamColor)
     end
 end
 
+local function has_energy(entity, amount)
+    local energy = entity and entity.energy
+    if not energy then
+        return true
+    end
+
+    local current = tonumber(energy.current) or 0
+    local maxEnergy = tonumber(energy.max) or 0
+    local drain = math.max(0, amount)
+    local canSpend = current >= drain - 1e-6
+
+    if canSpend and drain > 0 then
+        energy.current = current - drain
+        if maxEnergy > 0 then
+            energy.percent = math.max(0, energy.current / maxEnergy)
+        end
+        energy.rechargeTimer = energy.rechargeDelay or 0
+        energy.isDepleted = energy.current <= 0
+    end
+
+    return canSpend
+end
+
 local function fire_hitscan(entity, startX, startY, dirX, dirY, weapon, physicsWorld, damageEntity, dt, beams, impacts)
     local weaponConst = constants.weapons or {}
     local beamConst = weaponConst[weapon.constantKey or "laser"] or {}
@@ -251,6 +264,14 @@ local function fire_hitscan(entity, startX, startY, dirX, dirY, weapon, physicsW
     local maxRange = weapon.maxRange or beamConst.max_range or 600
     local endX = startX + dirX * maxRange
     local endY = startY + dirY * maxRange
+
+    if entity and entity.player then
+        local drainPerSecond = weapon.energyPerSecond or weapon.energyDrain or 14
+        local energyCost = math.max(0, drainPerSecond * dt)
+        if not has_energy(entity, energyCost) then
+            return
+        end
+    end
 
     local hitInfo
     if physicsWorld then
@@ -457,15 +478,24 @@ return function(context)
                     if fireMode == "projectile" then
                         -- Only server/offline spawns projectiles; clients receive via snapshots
                         local isClient = context.netRole == 'client'
-                        
-                        if fire and (not weapon.cooldown or weapon.cooldown <= 0) and not isClient then
-                            spawn_projectile(world, physicsWorld, entity, startX, startY, dirX, dirY, weapon)
 
-                            -- Reset cooldown
-                            local fireRate = weapon.fireRate or 0.5
-                            weapon.cooldown = fireRate
+                        if fire and (not weapon.cooldown or weapon.cooldown <= 0) and not isClient then
+                            if entity and entity.player then
+                                local shotCost = weapon.energyPerShot or weapon.energyCost or weapon.energyDrain or weapon.energyPerSecond or 14
+                                if not has_energy(entity, shotCost) then
+                                    fire = false
+                                end
+                            end
+
+                            if fire then
+                                spawn_projectile(world, physicsWorld, entity, startX, startY, dirX, dirY, weapon)
+
+                                -- Reset cooldown
+                                local fireRate = weapon.fireRate or 0.5
+                                weapon.cooldown = fireRate
+                            end
                         end
-                        
+
                         -- Track firing state for visual/audio feedback
                         weapon.firing = fire
 

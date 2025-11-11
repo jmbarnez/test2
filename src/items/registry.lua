@@ -1,3 +1,5 @@
+local table_util = require("src.util.table")
+
 local Items = {}
 
 local definitions = {}
@@ -7,31 +9,6 @@ local builtin_definitions = {
     require("src.items.definitions.resource_rare_crystal"),
     require("src.items.definitions.resource_hull_scrap"),
 }
-
-local function deep_copy(value, cache)
-    if type(value) ~= "table" then
-        return value
-    end
-
-    cache = cache or {}
-    if cache[value] then
-        return cache[value]
-    end
-
-    local copy = {}
-    cache[value] = copy
-
-    for k, v in pairs(value) do
-        copy[deep_copy(k, cache)] = deep_copy(v, cache)
-    end
-
-    local mt = getmetatable(value)
-    if mt then
-        setmetatable(copy, mt)
-    end
-
-    return copy
-end
 
 local function apply_overrides(target, overrides)
     if type(overrides) ~= "table" then
@@ -97,13 +74,13 @@ function Items.instantiate(id, overrides)
         name = overrides and overrides.name or definition.name or id,
         stackable = definition.stackable or false,
         quantity = overrides and overrides.quantity or definition.defaultQuantity or 1,
-        metadata = definition.metadata and deep_copy(definition.metadata) or nil,
+        metadata = definition.metadata and table_util.deep_copy(definition.metadata) or nil,
         blueprintId = definition.blueprintId,
         blueprintCategory = definition.blueprintCategory,
     }
 
     if definition.icon then
-        instance.icon = deep_copy(definition.icon)
+        instance.icon = table_util.deep_copy(definition.icon)
     end
 
     local overrideVolume = overrides and overrides.volume
@@ -160,17 +137,17 @@ function Items.registerWeaponBlueprint(blueprint)
         stackable = false,
         blueprintId = blueprintId,
         blueprintCategory = blueprint.category or "weapons",
-        icon = blueprint.icon and deep_copy(blueprint.icon) or nil,
+        icon = blueprint.icon and table_util.deep_copy(blueprint.icon) or nil,
         createInstance = function(instance, overrides)
             overrides = overrides or {}
             instance.quantity = 1
             instance.installed = overrides.installed or false
             instance.slot = overrides.slot
             if overrides.mount then
-                instance.mount = deep_copy(overrides.mount)
+                instance.mount = table_util.deep_copy(overrides.mount)
             end
             if overrides.overrides then
-                instance.overrides = deep_copy(overrides.overrides)
+                instance.overrides = table_util.deep_copy(overrides.overrides)
             end
         end,
     })
@@ -209,10 +186,10 @@ function Items.createWeaponItem(weaponId, overrides)
                     instance.installed = overrides_.installed or false
                     instance.slot = overrides_.slot
                     if overrides_.mount then
-                        instance.mount = deep_copy(overrides_.mount)
+                        instance.mount = table_util.deep_copy(overrides_.mount)
                     end
                     if overrides_.overrides then
-                        instance.overrides = deep_copy(overrides_.overrides)
+                        instance.overrides = table_util.deep_copy(overrides_.overrides)
                     end
                 end,
             })

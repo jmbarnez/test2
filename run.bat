@@ -2,7 +2,7 @@
 setlocal enabledelayedexpansion
 
 set "ROOT=%~dp0"
-set "GAME_NAME=ProceduralSpace"
+set "GAME_NAME=Novus"
 set "LOG_DIR=%ROOT%logs"
 
 echo Setting up directories...

@@ -75,7 +75,7 @@ function FloatingText.add(state, position, text, opts)
 
     local color = opts.color or theme.colors.toast and theme.colors.toast.accent or { 0.7, 0.9, 1.0, 1.0 }
 
-    container[#container + 1] = {
+    local entry = {
         x = x + (opts.offsetX or 0),
         y = y - offsetY,
         vx = (opts.vx or 0) + (love.math.random() - 0.5) * HORIZONTAL_DRIFT,
@@ -91,7 +91,11 @@ function FloatingText.add(state, position, text, opts)
         duration = duration,
         shadow = opts.shadow ~= false,
         scale = opts.scale or 1,
+        __alive = true,
     }
+    container[#container + 1] = entry
+
+    return entry
 end
 
 function FloatingText.update(state, dt)
@@ -105,6 +109,7 @@ function FloatingText.update(state, dt)
         local entry = container[index]
         entry.age = entry.age + dt
         if entry.age >= entry.duration then
+            entry.__alive = false
             table.remove(container, index)
         else
             entry.x = entry.x + entry.vx * dt

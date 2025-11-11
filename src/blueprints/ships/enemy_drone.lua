@@ -110,7 +110,6 @@ return {
             main_thrust = 110,
             strafe_thrust = 80,
             reverse_thrust = 70,
-            rotation_torque = 680,
             max_acceleration = 160,
             max_speed = 260,
             linear_damping = 0.34,

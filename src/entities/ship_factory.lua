@@ -3,56 +3,12 @@ local constants = require("src.constants.game")
 local ShipRuntime = require("src.ships.runtime")
 local ShipCargo = require("src.ships.cargo")
 local ShipWreckage = require("src.effects.ship_wreckage")
+local table_util = require("src.util.table")
 ---@diagnostic disable-next-line: undefined-global
 local love = love
 
 local ship_factory = {}
 
-local function deep_copy(value, cache)
-    if type(value) ~= "table" then
-        return value
-    end
-
-    cache = cache or {}
-    if cache[value] then
-        return cache[value]
-    end
-
-    local copy = {}
-    cache[value] = copy
-
-    for k, v in pairs(value) do
-        copy[deep_copy(k, cache)] = deep_copy(v, cache)
-    end
-
-    local mt = getmetatable(value)
-    if mt then
-        setmetatable(copy, mt)
-    end
-
-    return copy
-end
-
-local function deep_merge(target, source)
-    if type(target) ~= "table" or type(source) ~= "table" then
-        return target
-    end
-
-    for key, value in pairs(source) do
-        if type(value) == "table" then
-            local existing = target[key]
-            if type(existing) ~= "table" then
-                existing = {}
-                target[key] = existing
-            end
-            deep_merge(existing, value)
-        else
-            target[key] = value
-        end
-    end
-
-    return target
-end
 
 local function apply_body_settings(body, body_config, stats)
     if body_config.damping then
@@ -113,12 +69,12 @@ local function instantiate_weapons(entity, blueprint, context)
 
                 local overrides = {}
                 if type(definition.overrides) == "table" then
-                    deep_merge(overrides, definition.overrides)
+                    table_util.deep_merge(overrides, definition.overrides)
                 end
 
                 local context_override = override_by_id and override_by_id[weapon_id]
                 if type(context_override) == "table" then
-                    deep_merge(overrides, context_override)
+                    table_util.deep_merge(overrides, context_override)
                 end
 
                 if next(overrides) then
@@ -130,7 +86,7 @@ local function instantiate_weapons(entity, blueprint, context)
         if weapon_id and instantiate_context then
             local mount = instantiate_context.mount
             if mount then
-                local mount_copy = deep_copy(mount)
+                local mount_copy = table_util.deep_copy(mount)
                 ShipRuntime.resolve_mount_anchor(mount_copy, entity)
                 instantiate_context.mount = mount_copy
             end

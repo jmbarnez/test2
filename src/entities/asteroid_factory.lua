@@ -1,10 +1,13 @@
 local loader = require("src.blueprints.loader")
 local constants = require("src.constants.game")
 local math_util = require("src.util.math")
+local table_util = require("src.util.table")
 local Entities = require("src.states.gameplay.entities")
 local PlayerManager = require("src.player.manager")
 local notifications = require("src.ui.notifications")
 local FloatingText = require("src.effects.floating_text")
+
+local deep_copy = table_util.deep_copy
 
 ---@diagnostic disable-next-line: undefined-global
 local love = love
@@ -70,31 +73,6 @@ local function award_mining_xp(entity, destruction_context)
             })
         end
     end
-end
-
-local function deep_copy(value, cache)
-    if type(value) ~= "table" then
-        return value
-    end
-
-    cache = cache or {}
-    if cache[value] then
-        return cache[value]
-    end
-
-    local copy = {}
-    cache[value] = copy
-
-    for k, v in pairs(value) do
-        copy[deep_copy(k, cache)] = deep_copy(v, cache)
-    end
-
-    local mt = getmetatable(value)
-    if mt then
-        setmetatable(copy, mt)
-    end
-
-    return copy
 end
 
 local function random_range(range, default)

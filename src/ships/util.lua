@@ -1,3 +1,5 @@
+local table_util = require("src.util.table")
+
 local util = {}
 
 function util.sanitize_positive_number(value)
@@ -6,28 +8,7 @@ function util.sanitize_positive_number(value)
 end
 
 function util.deep_copy(value, cache)
-    if type(value) ~= "table" then
-        return value
-    end
-
-    cache = cache or {}
-    if cache[value] then
-        return cache[value]
-    end
-
-    local copy = {}
-    cache[value] = copy
-
-    for k, v in pairs(value) do
-        copy[util.deep_copy(k, cache)] = util.deep_copy(v, cache)
-    end
-
-    local mt = getmetatable(value)
-    if mt then
-        setmetatable(copy, mt)
-    end
-
-    return copy
+    return table_util.deep_copy(value, cache)
 end
 
 function util.instantiate_initial_item(descriptor, loader, Items)

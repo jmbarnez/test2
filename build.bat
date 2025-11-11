@@ -2,7 +2,7 @@
 setlocal
 
 set "ROOT=%~dp0"
-set "GAME_NAME=ProceduralSpace"
+set "GAME_NAME=Novus"
 set "DIST_DIR=%ROOT%dist"
 pushd "%ROOT%" >nul
 
