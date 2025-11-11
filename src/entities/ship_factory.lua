@@ -2,6 +2,7 @@ local loader = require("src.blueprints.loader")
 local constants = require("src.constants.game")
 local ShipRuntime = require("src.ships.runtime")
 local ShipCargo = require("src.ships.cargo")
+local ShipWreckage = require("src.effects.ship_wreckage")
 ---@diagnostic disable-next-line: undefined-global
 local love = love
 
@@ -273,6 +274,14 @@ function ship_factory.instantiate(blueprint, context)
     if entity.cargo and entity.weapons then
         ShipCargo.add_weapon_items(entity.cargo, entity.weapons, context)
         ShipCargo.refresh_if_needed(entity.cargo)
+    end
+
+    local previous_on_destroyed = entity.onDestroyed
+    entity.onDestroyed = function(self, destruction_context)
+        ShipWreckage.spawn(self, destruction_context)
+        if type(previous_on_destroyed) == "function" then
+            previous_on_destroyed(self, destruction_context)
+        end
     end
 
     return entity

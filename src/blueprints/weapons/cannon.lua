@@ -28,7 +28,7 @@ end
 return {
     category = "weapons",
     id = "cannon",
-    name = "Plasma Cannon",
+    name = "Cannon",
     assign = "weapon",
     icon = {
         kind = "weapon",
@@ -49,8 +49,9 @@ return {
         weapon = {
             fireMode = "projectile",
             projectileSpeed = 450,
-            damage = 45,
+            damage = 90,
             fireRate = 0.5,
+            damageType = "kinetic",
             projectileLifetime = 2.0,
             projectileSize = 6,
             firing = false,
@@ -61,7 +62,8 @@ return {
             projectileBlueprint = {
                 projectile = {
                     lifetime = 2.0,
-                    damage = 45,
+                    damage = 90,
+                    damageType = "kinetic",
                 },
                 drawable = {
                     type = "projectile",

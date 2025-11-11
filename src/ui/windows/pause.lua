@@ -96,8 +96,7 @@ function pause_window.draw(context)
 
     local buttons = {
         { label = "Resume Game", action = "resume" },
-        { label = "Options (Placeholder)", action = "placeholder" },
-        { label = "Controls (Placeholder)", action = "placeholder" },
+        { label = "Options", action = "options" },
         { label = "Exit to Menu (Placeholder)", action = "placeholder" },
     }
 
@@ -122,6 +121,8 @@ function pause_window.draw(context)
         if hovered and justPressed then
             if button.action == "resume" then
                 UIStateManager.hidePauseUI(context)
+            elseif button.action == "options" then
+                UIStateManager.showOptionsUI(context, "pause")
             else
                 placeholderMessage = string.format("%s is not available yet.", button.label:gsub("%s*%(Placeholder%)", ""))
             end

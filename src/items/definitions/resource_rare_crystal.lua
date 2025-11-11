@@ -6,7 +6,7 @@ local definition = {
     name = "Rare Crystal",
     stackable = true,
     defaultQuantity = 1,
-    volume = 0.05,
+    volume = 0.01,
     icon = {
         layers = {
             {

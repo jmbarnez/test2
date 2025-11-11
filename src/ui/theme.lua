@@ -3,23 +3,25 @@ local constants = require("src.constants.game")
 local love = love
 
 local palette = {
-    shadow = { 0, 0, 0, 0.98 },
-    overlay = { 0, 0, 0, 0.88 },
-    surface_deep = { 0.008, 0.008, 0.012, 1 },
-    surface_subtle = { 0.015, 0.015, 0.02, 1 },
-    surface_top = { 0.006, 0.008, 0.012, 1 },
-    border = { 0.18, 0.22, 0.28, 1 },
-    accent = { 0.18, 0.58, 0.88, 1 },
-    accent_glow = { 0.18, 0.58, 0.88, 0.12 },
-    accent_warning = { 0.88, 0.28, 0.28, 1 },
-    button_base = { 0.035, 0.045, 0.065, 1 },
-    button_hover = { 0.065, 0.095, 0.14, 1 },
-    text_heading = { 0.92, 0.95, 1, 1 },
-    text_body = { 0.75, 0.78, 0.82, 1 },
-    text_muted = { 0.42, 0.45, 0.5, 1 },
-    tooltip_background = { 0.012, 0.015, 0.022, 0.99 },
-    tooltip_border = { 0.18, 0.58, 0.88, 0.95 },
-    tooltip_shadow = { 0, 0, 0, 0.6 },
+    shadow = { 0, 0, 0, 0.82 },
+    overlay = { 0.02, 0.03, 0.05, 0.78 },
+    surface_deep = { 0.04, 0.05, 0.07, 0.97 },
+    surface_subtle = { 0.08, 0.09, 0.12, 0.95 },
+    surface_top = { 0.12, 0.14, 0.18, 0.96 },
+    border = { 0.22, 0.28, 0.36, 0.88 },
+    accent = { 0.46, 0.64, 0.72, 1 },
+    accent_alt = { 0.38, 0.52, 0.58, 1 },
+    accent_glow = { 0.3, 0.54, 0.6, 0.14 },
+    accent_warning = { 0.85, 0.42, 0.38, 1 },
+    button_base = { 0.16, 0.2, 0.26, 1 },
+    button_hover = { 0.22, 0.27, 0.34, 1 },
+    button_active = { 0.28, 0.34, 0.42, 1 },
+    text_heading = { 0.85, 0.89, 0.93, 1 },
+    text_body = { 0.7, 0.76, 0.8, 1 },
+    text_muted = { 0.46, 0.52, 0.58, 1 },
+    tooltip_background = { 0.08, 0.09, 0.12, 0.94 },
+    tooltip_border = { 0.32, 0.44, 0.52, 0.9 },
+    tooltip_shadow = { 0, 0, 0, 0.5 },
 }
 
 local typography = {
@@ -32,19 +34,19 @@ local typography = {
 }
 
 local spacing = {
-    window_margin = 50,
-    window_padding = 20,
-    window_corner_radius = 0,
-    window_shadow_offset = 3,
-    window_glow_extra = 2,
-    slot_size = 56,
-    slot_padding = 6,
+    window_margin = 48,
+    window_padding = 24,
+    window_corner_radius = 8,
+    window_shadow_offset = 6,
+    window_glow_extra = 4,
+    slot_size = 58,
+    slot_padding = 8,
     slot_text_height = 16,
-    tooltip_padding = 10,
-    tooltip_max_width = 240,
+    tooltip_padding = 12,
+    tooltip_max_width = 260,
     tooltip_offset_x = 18,
-    tooltip_offset_y = 16,
-    tooltip_shadow_offset = 5,
+    tooltip_offset_y = 18,
+    tooltip_shadow_offset = 6,
     tooltip_line_spacing = 3,
 }
 
@@ -59,25 +61,32 @@ local components = {
             title_text = palette.text_heading,
             text = palette.text_body,
             muted = palette.text_muted,
-            row_alternate = { 0.015, 0.02, 0.03, 0.3 },
-            row_hover = { 0.06, 0.08, 0.12, 0.2 },
+            row_alternate = { 0.09, 0.11, 0.14, 0.32 },
+            row_hover = { 0.2, 0.26, 0.32, 0.28 },
             progress_background = palette.surface_subtle,
-            progress_fill = { 0.12, 0.48, 0.78, 1 },
+            progress_fill = palette.accent,
             warning = palette.accent_warning,
             accent = palette.accent,
+            accent_secondary = palette.accent_alt,
             button = palette.button_base,
             button_hover = palette.button_hover,
-            icon_background = { 0.015, 0.015, 0.025, 0.95 },
-            icon_border = { 0.15, 0.2, 0.28, 0.75 },
-            slot_background = { 0.012, 0.015, 0.022, 0.98 },
-            slot_border = { 0.12, 0.16, 0.24, 0.65 },
-            close_button = { 0.48, 0.52, 0.58, 1 },
+            button_active = palette.button_active,
+            icon_background = { 0.09, 0.11, 0.16, 0.96 },
+            icon_border = { 0.32, 0.46, 0.68, 0.75 },
+            slot_background = { 0.06, 0.07, 0.1, 0.98 },
+            slot_border = { 0.26, 0.38, 0.56, 0.7 },
+            close_button = { 0.24, 0.34, 0.52, 1 },
             close_button_hover = palette.accent_warning,
             glow = palette.accent_glow,
-            input_background = { 0.06, 0.07, 0.1, 1 },
+            input_background = { 0.12, 0.15, 0.22, 0.96 },
+            caret = palette.accent,
+            currency_icon_base = palette.accent,
+            currency_icon_highlight = palette.accent_alt,
+            currency_icon_border = palette.border,
+            currency_icon_symbol = palette.text_heading,
         },
         metrics = {
-            top_bar_height = 26,
+            top_bar_height = 28,
             bottom_bar_height = 28,
             close_button_size = 12,
         },
@@ -88,19 +97,32 @@ local components = {
             body = palette.text_body,
             muted = palette.text_muted,
             warning = palette.accent_warning,
+            accent = palette.accent,
         },
     },
     hud = {
         colors = {
-            health_border = { 0, 0, 0, 1 },
-            health_fill = { 0.12, 0.68, 0.42, 0.94 },
-            minimap_background = { 0, 0, 0, 0.88 },
-            minimap_border = { 0.15, 0.2, 0.28, 1 },
-            minimap_player = { 0, 0.88, 0.32, 1 },
-            minimap_teammate = { 0.18, 0.58, 0.98, 1 },
-            minimap_asteroid = { 0.4, 0.38, 0.35, 0.78 },
-            minimap_ship = { 0.88, 0.22, 0.22, 1 },
-            diagnostics = { 0.68, 0.72, 0.78, 1 },
+            health_border = { 0.04, 0.08, 0.12, 1 },
+            health_fill = { 0.2, 0.78, 0.54, 0.94 },
+            minimap_background = { 0.05, 0.05, 0.1, 0.94 },
+            minimap_border = { 0.32, 0.46, 0.68, 1 },
+            minimap_player = palette.accent,
+            minimap_teammate = palette.accent_alt,
+            minimap_asteroid = { 0.58, 0.58, 0.68, 0.78 },
+            minimap_ship = { 0.98, 0.36, 0.36, 1 },
+            diagnostics = { 0.68, 0.78, 0.92, 1 },
+            status_panel = { 0.03, 0.04, 0.07, 0.92 },
+            status_shadow = { 0, 0, 0, 0.45 },
+            status_border = { 0.15, 0.22, 0.32, 0.92 },
+            status_bar_background = { 0.05, 0.07, 0.1, 0.94 },
+            status_text = palette.text_body,
+            status_muted = palette.text_muted,
+            hull_fill = { 0.82, 0.42, 0.36, 0.96 },
+            hull_glow = { 0.85, 0.45, 0.38, 0.28 },
+            shield_fill = { 0.32, 0.62, 0.95, 0.96 },
+            shield_glow = { 0.32, 0.62, 0.95, 0.3 },
+            energy_fill = { 0.32, 0.76, 0.54, 0.96 },
+            energy_glow = { 0.32, 0.76, 0.54, 0.28 },
         },
     },
     tooltip = {
@@ -109,7 +131,7 @@ local components = {
             border = palette.tooltip_border,
             shadow = palette.tooltip_shadow,
             heading = palette.text_heading,
-            text = { 0.75, 0.78, 0.85, 1 },
+            text = palette.text_body,
         },
     },
 }
@@ -243,8 +265,8 @@ function theme.draw_modal_window(state, fonts, options)
     local overlayColor = options.overlay_color or options.overlayColor or { 0, 0, 0, 0.88 }
     local padding = options.padding or spacing.window_padding or 20
     local cornerRadius = 0
-    local buttonHeight = options.button_height or options.buttonHeight or 44
-    local buttonWidthMax = options.button_width or options.buttonWidth or 220
+    local buttonHeight = options.button_height or options.buttonHeight or 28
+    local buttonWidthMax = options.button_width or options.buttonWidth or 100
 
     local defaultTitle = options.defaultTitle or options.title or state and state.title or ""
     local title = options.title or defaultTitle
@@ -302,25 +324,33 @@ function theme.draw_modal_window(state, fonts, options)
         love.graphics.rectangle("fill", panelX + 2, panelY + 2, panelWidth, panelHeight)
     end
 
-    love.graphics.setColor(windowColors.background or { 0.008, 0.008, 0.012, 1 })
+    love.graphics.setColor(windowColors.background or { 0.067, 0.067, 0.067, 1 })
     love.graphics.rectangle("fill", panelX, panelY, panelWidth, panelHeight)
 
-    love.graphics.setColor(windowColors.border or { 0.18, 0.22, 0.28, 1 })
+    love.graphics.setColor({ 0.75, 0.75, 0.75, 1 })
+    love.graphics.setLineWidth(2)
+    love.graphics.rectangle("line", panelX + 1, panelY + 1, panelWidth - 2, panelHeight - 2)
+    
+    love.graphics.setColor({ 0.25, 0.25, 0.25, 1 })
     love.graphics.setLineWidth(1)
-    love.graphics.rectangle("line", panelX + 0.5, panelY + 0.5, panelWidth - 1, panelHeight - 1)
+    love.graphics.rectangle("line", panelX + 2.5, panelY + 2.5, panelWidth - 5, panelHeight - 5)
+
+    local titleBarHeight = 26
+    love.graphics.setColor(windowColors.top_bar or { 0, 0, 0.5, 1 })
+    love.graphics.rectangle("fill", panelX + 3, panelY + 3, panelWidth - 6, titleBarHeight)
 
     local textAreaX = panelX + (panelWidth - innerWidth) * 0.5
     local currentY = panelY + padding
 
     love.graphics.setFont(fonts.title)
-    love.graphics.setColor(windowColors.title_text or textColors.heading or { 0.92, 0.95, 1, 1 })
+    love.graphics.setColor(windowColors.title_text or { 1, 1, 1, 1 })
     love.graphics.printf(title, textAreaX, currentY, innerWidth, "center")
     currentY = currentY + titleHeight
 
     if hasMessage and messageHeight > 0 then
         currentY = currentY + 14
         love.graphics.setFont(fonts.body)
-        love.graphics.setColor(windowColors.text or textColors.body or { 0.75, 0.78, 0.82, 1 })
+        love.graphics.setColor(windowColors.text or { 0.75, 0.75, 0.75, 1 })
         love.graphics.printf(message, textAreaX, currentY, innerWidth, "center")
         currentY = currentY + messageHeight
     end
@@ -360,9 +390,9 @@ function theme.draw_modal_window(state, fonts, options)
             buttonActivated = true
         end
 
-        local buttonColor = windowColors.button or { 0.035, 0.045, 0.065, 1 }
+        local buttonColor = windowColors.button or { 0.75, 0.75, 0.75, 1 }
         if buttonHovered then
-            buttonColor = windowColors.button_hover or { 0.065, 0.095, 0.14, 1 }
+            buttonColor = windowColors.button_hover or { 0.85, 0.85, 0.85, 1 }
         end
 
         love.graphics.setColor(buttonColor)
@@ -371,29 +401,6 @@ function theme.draw_modal_window(state, fonts, options)
         love.graphics.setColor(windowColors.border or { 0.18, 0.22, 0.28, 1 })
         love.graphics.setLineWidth(1)
         love.graphics.rectangle("line", buttonX + 0.5, buttonY + 0.5, buttonWidth - 1, buttonHeight - 1)
-
-        if buttonHovered and windowColors.accent then
-            love.graphics.setColor(windowColors.accent)
-            love.graphics.setLineWidth(1)
-            love.graphics.rectangle("line", buttonX + 1.5, buttonY + 1.5, buttonWidth - 3, buttonHeight - 3)
-        end
-
-        love.graphics.setFont(fonts.body)
-        love.graphics.setColor(windowColors.title_text or textColors.heading or { 0.92, 0.95, 1, 1 })
-        love.graphics.printf(baseButtonLabel, buttonX, buttonY + (buttonHeight - fonts.body:getHeight()) * 0.5, buttonWidth, "center")
-
-        currentY = currentY + buttonHeight
-    else
-        if state then
-            state._was_mouse_down = love.mouse and love.mouse.isDown and love.mouse.isDown(1) or false
-        end
-    end
-
-    if hasHint and hintHeight > 0 then
-        currentY = currentY + 12
-        love.graphics.setFont(fonts.small)
-        love.graphics.setColor(windowColors.muted or textColors.muted or { 0.42, 0.45, 0.5, 1 })
-        love.graphics.printf(hint, textAreaX, currentY, innerWidth, "center")
     end
 
     love.graphics.pop()

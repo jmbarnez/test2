@@ -4,10 +4,20 @@ local tiny = require("libs.tiny")
 local constants = require("src.constants.game")
 local vector = require("src.util.vector")
 local Intent = require("src.input.intent")
+local damage_util = require("src.util.damage")
+
+local love = love
 
 local DEFAULT_PROJECTILE_COLOR = { 0.2, 0.8, 1.0 }
 local DEFAULT_PROJECTILE_GLOW = { 0.5, 0.9, 1.0 }
 local DEFAULT_WEAPON_OFFSET = 30
+
+local function resolve_damage_multiplier(shooter)
+    if shooter and shooter.enemy then
+        return 0.5
+    end
+    return 1
+end
 
 local function clone_array(values)
     if type(values) ~= "table" then
@@ -77,6 +87,7 @@ local function spawn_projectile(tinyWorld, physicsWorld, shooter, startX, startY
     local lifetime = weapon.projectileLifetime or 2.0
     local size = weapon.projectileSize or 6
     local damage = weapon.damage or 45
+    local damageMultiplier = resolve_damage_multiplier(shooter)
 
     local blueprint = weapon.projectileBlueprint
     local projectile = blueprint and deep_copy(blueprint) or {}
@@ -93,9 +104,15 @@ local function spawn_projectile(tinyWorld, physicsWorld, shooter, startX, startY
 
     local projectileComponent = projectile.projectile or {}
     projectileComponent.lifetime = projectileComponent.lifetime or lifetime
-    projectileComponent.damage = projectileComponent.damage or damage
+    local baseDamage = projectileComponent.damage or damage
+    projectileComponent.damage = baseDamage * damageMultiplier
     projectileComponent.owner = shooter
     projectileComponent.ownerPlayerId = shooter and shooter.playerId or nil
+    if not projectileComponent.damageType then
+        projectileComponent.damageType = weapon.damageType
+            or (constants.damage and constants.damage.defaultDamageType)
+            or "default"
+    end
     projectile.projectile = projectileComponent
 
     local drawable = projectile.drawable or {}
@@ -106,6 +123,7 @@ local function spawn_projectile(tinyWorld, physicsWorld, shooter, startX, startY
     projectile.drawable = drawable
 
     local projectileSize = drawable.size or size
+    local physicsConfig = projectile.physics or weapon.projectilePhysics
 
     -- Copy faction from shooter for friend/foe identification
     if shooter.faction then
@@ -120,19 +138,58 @@ local function spawn_projectile(tinyWorld, physicsWorld, shooter, startX, startY
     
     -- Create physics body for projectile
     if physicsWorld then
-        local body = love.physics.newBody(physicsWorld, startX, startY, "dynamic")
-        body:setBullet(true) -- Enable continuous collision detection
+        local bodyType = (physicsConfig and physicsConfig.type) or "dynamic"
+        local body = love.physics.newBody(physicsWorld, startX, startY, bodyType)
+        local bulletEnabled = true
+        if physicsConfig and physicsConfig.bullet ~= nil then
+            bulletEnabled = physicsConfig.bullet
+        end
+        body:setBullet(bulletEnabled)
         body:setLinearVelocity(dirX * speed, dirY * speed)
         body:setAngle(math.atan2(dirY, dirX) + math.pi * 0.5)
+        if physicsConfig then
+            if physicsConfig.linearDamping or physicsConfig.damping then
+                body:setLinearDamping(physicsConfig.linearDamping or physicsConfig.damping)
+            end
+            if physicsConfig.angularDamping then
+                body:setAngularDamping(physicsConfig.angularDamping)
+            end
+            if physicsConfig.gravityScale then
+                body:setGravityScale(physicsConfig.gravityScale)
+            end
+            if physicsConfig.fixedRotation ~= nil then
+                body:setFixedRotation(physicsConfig.fixedRotation)
+            end
+        end
         
         local shape = love.physics.newCircleShape(projectileSize * 0.5)
-        local fixture = love.physics.newFixture(body, shape)
-        fixture:setSensor(true) -- Projectiles don't collide physically, just detect hits
+        local defaultDensity = weapon.projectileDensity or 1
+        local density = defaultDensity
+        if physicsConfig and physicsConfig.density then
+            density = physicsConfig.density
+        end
+        local fixture = love.physics.newFixture(body, shape, density)
+        if physicsConfig and physicsConfig.friction then
+            fixture:setFriction(physicsConfig.friction)
+        end
+        if physicsConfig and physicsConfig.restitution then
+            fixture:setRestitution(physicsConfig.restitution)
+        end
+        local sensor = true
+        if physicsConfig and physicsConfig.sensor ~= nil then
+            sensor = physicsConfig.sensor
+        end
+        fixture:setSensor(sensor)
         fixture:setUserData({ 
             entity = projectile, 
             type = "projectile",
             collider = "projectile"
         })
+        if physicsConfig and physicsConfig.mass then
+            body:setMassData(physicsConfig.mass, physicsConfig.massCenterX or 0, physicsConfig.massCenterY or 0, physicsConfig.inertia or body:getInertia())
+        else
+            body:resetMassData()
+        end
         
         projectile.body = body
         projectile.fixture = fixture
@@ -142,7 +199,47 @@ local function spawn_projectile(tinyWorld, physicsWorld, shooter, startX, startY
     return projectile
 end
 
-local function fire_hitscan(entity, startX, startY, dirX, dirY, weapon, physicsWorld, damageEntity, dt, beams)
+local function spawn_beam_sparks(container, x, y, dirX, dirY, beamColor)
+    if not container then
+        return
+    end
+
+    local baseAngle = math.atan2(dirY, dirX) + math.pi
+    local primaryColor = {
+        (beamColor[1] or 0.7) * 1.1,
+        (beamColor[2] or 0.85) * 1.05,
+        (beamColor[3] or 1.0) * 1.05,
+        1.0,
+    }
+
+    for _ = 1, 12 do
+        local jitter = (love.math.random() - 0.5) * math.pi * 0.6
+        local angle = baseAngle + jitter
+        local speed = love.math.random(140, 240)
+        local lifetime = 0.2 + love.math.random() * 0.18
+
+        local spark = {
+            x = x + (love.math.random() - 0.5) * 3,
+            y = y + (love.math.random() - 0.5) * 3,
+            vx = math.cos(angle) * speed,
+            vy = math.sin(angle) * speed,
+            lifetime = lifetime,
+            maxLifetime = lifetime,
+            size = love.math.random() * 2 + 1.2,
+            baseSize = nil,
+            color = {
+                math.min(1, primaryColor[1]),
+                math.min(1, primaryColor[2]),
+                math.min(1, primaryColor[3]),
+                1.0,
+            },
+        }
+        spark.baseSize = spark.size
+        container[#container + 1] = spark
+    end
+end
+
+local function fire_hitscan(entity, startX, startY, dirX, dirY, weapon, physicsWorld, damageEntity, dt, beams, impacts)
     local weaponConst = constants.weapons or {}
     local beamConst = weaponConst[weapon.constantKey or "laser"] or {}
     
@@ -168,6 +265,8 @@ local function fire_hitscan(entity, startX, startY, dirX, dirY, weapon, physicsW
                         collider = user.collider,
                         fraction = fraction,
                         type = user.type,
+                        nx = xn,
+                        ny = yn,
                     }
                 end
                 return fraction
@@ -193,9 +292,16 @@ local function fire_hitscan(entity, startX, startY, dirX, dirY, weapon, physicsW
 
         if shouldDamage and damageEntity and target then
             local dps = weapon.damagePerSecond or beamConst.damage_per_second or 0
+            dps = dps * resolve_damage_multiplier(entity)
             local damage = dps * dt
             if damage > 0 then
-                damageEntity(target, damage)
+                local damageType = weapon.damageType
+                local armorType = target.armorType
+                local multiplier = damage_util.resolve_multiplier(damageType, armorType)
+                damage = damage * multiplier
+                if damage > 0 then
+                    damageEntity(target, damage)
+                end
             end
         end
     end
@@ -204,6 +310,10 @@ local function fire_hitscan(entity, startX, startY, dirX, dirY, weapon, physicsW
 
     local beamColor = weapon.color or beamConst.color or { 0.6, 0.85, 1.0 }
     local beamGlow = weapon.glowColor or beamConst.glow_color or { 1.0, 0.8, 0.6 }
+
+    if hitInfo and impacts then
+        spawn_beam_sparks(impacts, endX, endY, dirX, dirY, beamColor)
+    end
 
     beams[#beams + 1] = {
         x1 = startX,
@@ -225,6 +335,7 @@ return function(context)
         filter = tiny.requireAll("weapon", "position"),
         init = function(self)
             self.active_beams = {}
+            self.beamImpacts = {}
         end,
         update = function(self, dt)
             local world = self.world
@@ -237,6 +348,7 @@ return function(context)
             local localPlayerId = intentHolder and intentHolder.localPlayerId
             local localPlayerEntity = intentHolder and (intentHolder.player or intentHolder.playerShip)
             local beams = self.active_beams
+            local beamImpacts = self.beamImpacts
             for i = 1, #beams do
                 beams[i] = nil
             end
@@ -373,7 +485,7 @@ return function(context)
                         end
 
                         if beamActive then
-                            fire_hitscan(entity, startX, startY, dirX, dirY, weapon, physicsWorld, damageEntity, dt, beams)
+                            fire_hitscan(entity, startX, startY, dirX, dirY, weapon, physicsWorld, damageEntity, dt, beams, beamImpacts)
                         end
 
                         if usesBurst and weapon.beamTimer then
@@ -387,6 +499,24 @@ return function(context)
                     else
                         weapon.firing = fire
                     end
+                end
+            end
+
+            for index = #beamImpacts, 1, -1 do
+                local spark = beamImpacts[index]
+                spark.lifetime = spark.lifetime - dt
+                if spark.lifetime <= 0 then
+                    table.remove(beamImpacts, index)
+                else
+                    spark.x = spark.x + spark.vx * dt
+                    spark.y = spark.y + spark.vy * dt
+                    spark.vx = spark.vx * 0.88
+                    spark.vy = spark.vy * 0.88
+                    local ratio = spark.maxLifetime > 0 and (spark.lifetime / spark.maxLifetime) or 0
+                    if spark.baseSize then
+                        spark.size = spark.baseSize * math.max(ratio, 0)
+                    end
+                    spark.color[4] = math.max(0, ratio)
                 end
             end
         end,
@@ -441,7 +571,16 @@ return function(context)
 
                 love.graphics.pop()
             end
-            
+
+            local beamImpacts = self.beamImpacts
+            if beamImpacts then
+                for i = 1, #beamImpacts do
+                    local spark = beamImpacts[i]
+                    love.graphics.setColor(spark.color)
+                    love.graphics.circle("fill", spark.x, spark.y, spark.size)
+                end
+            end
+
             love.graphics.pop()
         end,
     }

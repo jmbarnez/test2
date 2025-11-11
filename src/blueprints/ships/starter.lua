@@ -189,10 +189,10 @@ return {
             },
         },
         magnet = {
-            radius = 220,
-            strength = 220,
-            falloff = 0.65,
-            collectRadius = 24,
+            radius = 260,
+            strength = 360,
+            falloff = 0.55,
+            collectRadius = 28,
         },
         hull = {
             max = 95,

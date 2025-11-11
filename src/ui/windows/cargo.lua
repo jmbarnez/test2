@@ -33,7 +33,12 @@ local function format_currency(value)
         end
     until absValue == 0
 
-    local formatted = table.concat(chunks, ",", #chunks, 1)
+    local ordered = {}
+    for index = #chunks, 1, -1 do
+        ordered[#ordered + 1] = chunks[index]
+    end
+
+    local formatted = table.concat(ordered, ",")
     if rounded < 0 then
         formatted = "-" .. formatted
     end
@@ -195,8 +200,8 @@ local function get_dimensions()
     local screenHeight = love.graphics.getHeight()
     local margin = theme_spacing.window_margin
 
-    local width = math.min(720, screenWidth - margin * 2)
-    local height = math.min(580, screenHeight - margin * 2)
+    local width = math.min(640, screenWidth - margin * 2)
+    local height = math.min(520, screenHeight - margin * 2)
     local x = (screenWidth - width) * 0.5
     local y = (screenHeight - height) * 0.5
 
@@ -250,6 +255,31 @@ local function draw_item_in_slot(item, slotX, slotY, slotSize, fonts)
         local placeholderRadius = iconSize * 0.25
         love.graphics.setLineWidth(1.25)
         love.graphics.circle("line", iconX + iconSize * 0.5, iconY + iconSize * 0.5, placeholderRadius)
+    end
+
+    -- Draw quantity badge in bottom-right of slot
+    if item.quantity ~= nil then
+        local quantityFont = fonts.small_bold or fonts.small or fonts.body
+        love.graphics.setFont(quantityFont)
+        local quantityText = tostring(item.quantity)
+        local quantityWidth = quantityFont:getWidth(quantityText)
+        local quantityHeight = quantityFont:getHeight()
+        local badgePaddingX = 4
+        local badgePaddingY = 2
+        local badgeWidth = quantityWidth + badgePaddingX * 2
+        local badgeHeight = quantityHeight + badgePaddingY * 2
+        local badgeX = slotX + slotSize - badgeWidth - 4
+        local badgeY = slotY + slotSize - badgeHeight - 4
+
+        set_color(window_colors.slot_quantity_background or { 0, 0, 0, 0.65 })
+        love.graphics.rectangle("fill", badgeX, badgeY, badgeWidth, badgeHeight, 3, 3)
+
+        set_color(window_colors.slot_quantity_border or window_colors.border or { 0.08, 0.08, 0.12, 0.8 })
+        love.graphics.setLineWidth(1)
+        love.graphics.rectangle("line", badgeX + 0.5, badgeY + 0.5, badgeWidth - 1, badgeHeight - 1, 3, 3)
+
+        set_color(window_colors.slot_quantity_text or window_colors.text or { 0.85, 0.85, 0.9, 1 })
+        love.graphics.print(quantityText, badgeX + badgePaddingX, badgeY + badgePaddingY - 1)
     end
 
     -- Draw item name with text wrapping
@@ -522,9 +552,13 @@ function cargo_window.draw(context)
     set_color(window_colors.bottom_bar or window_colors.background)
     love.graphics.rectangle("fill", window_x + 1, bottomY, window_width - 2, bottomBarHeight - 1)
 
+    set_color(window_colors.accent or { 0.2, 0.55, 0.95, 1 })
+    love.graphics.setLineWidth(2)
+    love.graphics.line(window_x + 1, bottomY, window_x + window_width - 1, bottomY)
+
     local progressMarginX = padding
-    local barHeight = math.max(6, math.floor(bottomBarHeight * 0.45))
-    local barWidth = math.max(80, math.floor((window_width - progressMarginX * 2) * 0.5))
+    local barHeight = math.max(6, math.floor(bottomBarHeight * 0.35))
+    local barWidth = math.max(80, math.floor((window_width - progressMarginX * 2) * 0.42))
     local barX = window_x + progressMarginX
     local barY = bottomY + (bottomBarHeight - barHeight) * 0.5
 
@@ -534,10 +568,7 @@ function cargo_window.draw(context)
 
         local fillWidth = math.floor(barWidth * percentFull + 0.5)
         if fillWidth > 0 then
-            local fillColor = window_colors.progress_fill or { 0.15, 0.4, 0.6, 1 }
-            if percentFull >= 0.95 and window_colors.warning then
-                fillColor = window_colors.warning
-            end
+            local fillColor = window_colors.progress_fill or { 0.2, 0.55, 0.95, 1 }
             set_color(fillColor)
             love.graphics.rectangle("fill", barX, barY, fillWidth, barHeight, 3, 3)
         end
@@ -545,6 +576,20 @@ function cargo_window.draw(context)
         set_color(window_colors.border or { 0.08, 0.08, 0.12, 0.8 })
         love.graphics.setLineWidth(1)
         love.graphics.rectangle("line", barX + 0.5, barY + 0.5, barWidth - 1, barHeight - 1, 3, 3)
+
+        local percentText
+        if capacityVolume and capacityVolume > 0 then
+            percentText = string.format("%d%%", math.floor(percentFull * 100 + 0.5))
+        else
+            percentText = "--"
+        end
+
+        if percentText ~= "--" then
+            local labelFont = fonts.small or fonts.body
+            love.graphics.setFont(labelFont)
+            set_color(window_colors.title_text or window_colors.text or { 1, 1, 1, 1 })
+            love.graphics.printf(percentText, barX, barY + (barHeight - labelFont:getHeight()) * 0.5, barWidth, "center")
+        end
     end
 
     local currencyFont = fonts.small or fonts.body
@@ -619,6 +664,10 @@ function cargo_window.keypressed(context, key, scancode, isrepeat)
         end
     end
 
+    return false
+end
+
+function cargo_window.wheelmoved(context, x, y)
     return false
 end
 

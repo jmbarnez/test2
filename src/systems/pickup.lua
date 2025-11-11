@@ -16,6 +16,7 @@ return function(context)
     local defaultBobSpeed = context.bobSpeed or 2.1
     local defaultMagnetStrength = context.magnetStrength or 150
     local defaultMagnetFalloff = context.magnetFalloff or 1
+    local overflowRepelStrength = context.overflowRepelStrength or 120
     local collectorBuffer = context.collectorBuffer or {}
     local collectorSeen = context.collectorSeen or {}
     context.collectorBuffer = collectorBuffer
@@ -115,8 +116,20 @@ return function(context)
                     local dy = (ship.position.y or 0) - pos.y
                     local distSq = vector.length_squared(dx, dy)
 
+                    local cargoComponent = ship.cargo
+                    local skipCollect = false
+                    local requiredVolume = 0
+                    if cargoComponent and pickup.item then
+                        local quantity = pickup.quantity or pickup.item.quantity or 1
+                        local perVolume = pickup.item.volume or pickup.item.unitVolume or 0
+                        requiredVolume = math.max(0, perVolume * quantity)
+                        if cargoComponent.canFit and requiredVolume > 0 and not cargoComponent:canFit(requiredVolume) then
+                            skipCollect = true
+                        end
+                    end
+
                     local magnet = ship.magnet
-                    if magnet and magnet.radius and magnet.radius > 0 and vel then
+                    if not skipCollect and magnet and magnet.radius and magnet.radius > 0 and vel then
                         local magnetRadius = magnet.radius
                         local magnetRadiusSq = magnetRadius * magnetRadius
                         if distSq <= magnetRadiusSq then
@@ -126,8 +139,13 @@ return function(context)
                             local normalized = 1 - math.min(1, dist / magnetRadius)
                             local influence = normalized > 0 and (normalized ^ falloff) or 0
                             if influence > 0 then
-                                vel.x = (vel.x or 0) + dirX * strength * influence * dt
-                                vel.y = (vel.y or 0) + dirY * strength * influence * dt
+                                if cargoComponent and requiredVolume > 0 and not cargoComponent:canFit(requiredVolume) then
+                                    vel.x = (vel.x or 0) - dirX * overflowRepelStrength * dt
+                                    vel.y = (vel.y or 0) - dirY * overflowRepelStrength * dt
+                                else
+                                    vel.x = (vel.x or 0) + dirX * strength * influence * dt
+                                    vel.y = (vel.y or 0) + dirY * strength * influence * dt
+                                end
                             end
                         end
                     end
@@ -141,8 +159,12 @@ return function(context)
                     end
                     local collectRadiusSq = collectRadius * collectRadius
 
-                    if ship.cargo and distSq <= collectRadiusSq then
-                        local cargoComponent = ship.cargo
+                    if skipCollect and vel then
+                        local dirX, dirY = vector.normalize(dx, dy)
+                        vel.x = (vel.x or 0) - dirX * overflowRepelStrength * dt
+                        vel.y = (vel.y or 0) - dirY * overflowRepelStrength * dt
+                    elseif ship.cargo and distSq <= collectRadiusSq then
+                        local cargoComponent = cargoComponent or ship.cargo
                         local tryAdd = cargoComponent.tryAddItem
                             or (cargoComponent.try_add_item and function(component, descriptor, quantity)
                                 return cargoComponent:try_add_item(descriptor, quantity)

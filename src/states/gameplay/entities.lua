@@ -205,6 +205,17 @@ function Entities.spawnLootPickup(state, drop)
     local position = drop.position
     local velocity = drop.velocity or {}
 
+    local function scaled_size(value)
+        if type(value) ~= "number" then
+            return nil
+        end
+        local scaled = value / 3
+        if scaled <= 0 then
+            scaled = value
+        end
+        return scaled
+    end
+
     if not (velocity.x or velocity.y) then
         velocity = {
             x = (love and love.math and (love.math.random() - 0.5) or 0) * 20,
@@ -233,7 +244,7 @@ function Entities.spawnLootPickup(state, drop)
         drawable = {
             type = "pickup",
             icon = item.icon,
-            size = drop.size or 28,
+            size = scaled_size(drop.size or 28) or 28,
             spinSpeed = drop.spinSpeed or 0.6,
             bobAmplitude = drop.bobAmplitude or 4,
         },

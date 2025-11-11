@@ -11,6 +11,7 @@ local PlayerManager = require("src.player.manager")
 local PlayerWeapons = require("src.player.weapons")
 local UIStateManager = require("src.ui.state_manager")
 local cargo_window = require("src.ui.windows.cargo")
+local options_window = require("src.ui.windows.options")
 require("src.entities.ship_factory")
 require("src.entities.asteroid_factory")
 require("src.entities.weapon_factory")
@@ -32,6 +33,16 @@ local function resolveSectorId(config)
     end
 
     return nil
+end
+
+function gameplay:wheelmoved(x, y)
+    if UIStateManager.isOptionsUIVisible(self) then
+        if options_window.wheelmoved(self, x, y) then
+            return
+        end
+    end
+
+    cargo_window.wheelmoved(self, x, y)
 end
 
 function gameplay:getLocalPlayer()
@@ -220,6 +231,12 @@ end
 function gameplay:keypressed(key)
     if cargo_window.keypressed(self, key) then
         return
+    end
+
+    if UIStateManager.isOptionsUIVisible(self) then
+        if options_window.keypressed(self, key) then
+            return
+        end
     end
 
     if UIStateManager.isPauseUIVisible(self) then

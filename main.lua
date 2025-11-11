@@ -2,6 +2,7 @@
 local Gamestate = require("libs.hump.gamestate")
 local constants = require("src.constants.game")
 local gameplay = require("src.states.gameplay")
+local start_menu = require("src.states.start_menu")
 
 local TARGET_FPS = constants.window.max_fps or 60
 local TARGET_FRAME_TIME = 1 / TARGET_FPS
@@ -77,6 +78,10 @@ function love.load()
         USE_FRAME_LIMIT = not VSYNC_ENABLED
     end
 
+    if love.graphics and love.graphics.setDefaultFilter then
+        love.graphics.setDefaultFilter("nearest", "nearest", 1)
+    end
+
     local physics = constants.physics
     if love.physics and physics then
         love.physics.setMeter(physics.meter_scale or 64)
@@ -89,6 +94,6 @@ function love.load()
     end
 
     Gamestate.registerEvents()
-    Gamestate.switch(gameplay)
+    Gamestate.switch(start_menu)
 
 end

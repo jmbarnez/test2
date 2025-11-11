@@ -195,10 +195,15 @@ local function random_int_range(range, default)
     return love.math.random(min_val, max_val)
 end
 
-local function generate_asteroid_belts(bounds)
+local function generate_asteroid_belts(state)
     local background_props = constants.stars.background_props or {}
     local config = background_props.asteroid_belts
     if not config then
+        return {}
+    end
+
+    local bounds = state.worldBounds
+    if not bounds then
         return {}
     end
 
@@ -211,6 +216,31 @@ local function generate_asteroid_belts(bounds)
     local count = math.max(0, random_int_range(config.count, 0))
     local base_color = config.color or { 0.6, 0.55, 0.5 }
     local highlight_color = config.highlight or { 0.9, 0.85, 0.8 }
+
+    local cam = state.camera
+    local viewport = state.viewport
+    local margin = config.spawn_margin or 0
+    local marginX = margin
+    local marginY = margin
+
+    local function clamp_to_bounds(value, min_val, max_val)
+        if value < min_val then
+            return min_val
+        elseif value > max_val then
+            return max_val
+        end
+        return value
+    end
+
+    local centerX = bounds.x + bounds.width * 0.5
+    local centerY = bounds.y + bounds.height * 0.5
+
+    if cam and viewport then
+        local camCenterX = cam.x + (cam.width or viewport.width) * 0.5
+        local camCenterY = cam.y + (cam.height or viewport.height) * 0.5
+        centerX = camCenterX
+        centerY = camCenterY
+    end
 
     for _ = 1, count do
         local parallax = random_range(config.parallax_range, 0.012)
@@ -227,8 +257,14 @@ local function generate_asteroid_belts(bounds)
         local alpha_range = config.alpha_range or { 0.25, 0.4 }
         local flicker_range = config.flicker_speed or { 0.6, 1.2 }
 
-        local center_x = bounds.x + love.math.random() * bounds.width
-        local center_y = bounds.y + love.math.random() * bounds.height
+        local spawnRadiusX = math.max(marginX, radius + thickness * 0.5)
+        local spawnRadiusY = math.max(marginY, (radius + thickness * 0.5) * squash)
+
+        local offsetX = (love.math.random() * 2 - 1) * spawnRadiusX
+        local offsetY = (love.math.random() * 2 - 1) * spawnRadiusY
+
+        local center_x = clamp_to_bounds(centerX + offsetX, bounds.x, bounds.x + bounds.width)
+        local center_y = clamp_to_bounds(centerY + offsetY, bounds.y, bounds.y + bounds.height)
 
         local segments = {}
         for i = 1, segment_count do

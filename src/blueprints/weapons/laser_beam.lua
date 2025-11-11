@@ -28,7 +28,7 @@ end
 return {
     category = "weapons",
     id = "laser_beam",
-    name = "Beam Laser Cannon",
+    name = "Laser Beam",
     assign = "weapon",
     icon = {
         kind = "weapon",
@@ -46,6 +46,7 @@ return {
         weapon = {
             fireMode = "hitscan",
             constantKey = "laser",
+            damageType = "laser",
             width = weapon_defaults.width or 1.2,
             fadeDuration = weapon_defaults.fade_time or 0.08,
             fade = 0,

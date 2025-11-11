@@ -127,21 +127,21 @@ constants.stars = {
         -- Far background layer (slowest parallax)
         {
             parallax = 0.003,        -- Parallax multiplier (lower = slower, farther away)
-            count = 780,             -- Number of stars in this layer
+            count = 78000,             -- Number of stars in this layer
             size_range = { 0.7, 1.4 }, -- Min/max star size for this layer
             alpha_range = { 0.45, 0.7 }, -- Min/max opacity for this layer
         },
         -- Middle layer (moderate parallax)
         {
             parallax = 0.018,        -- Medium parallax speed
-            count = 660,             -- Star count for middle layer
+            count = 2000,             -- Star count for middle layer
             size_range = { 1.0, 2.0 }, -- Slightly larger stars
             alpha_range = { 0.6, 0.85 }, -- More visible than background
         },
         -- Foreground layer (fastest parallax)
         {
             parallax = 0.055,        -- Fastest parallax (closest to camera)
-            count = 600,             -- Foreground star count
+            count = 6000,             -- Foreground star count
             size_range = { 1.4, 2.8 }, -- Largest stars for depth effect
             alpha_range = { 0.75, 1.0 }, -- Most visible/brightest stars
         },
@@ -180,17 +180,18 @@ constants.stars = {
             tail_color = { 0.6, 0.8, 1.0 },
         },
         asteroid_belts = {
-            spawn_chance = 0.65,               -- Probability that belts appear in a playthrough
+            spawn_chance = 1.0,                -- Probability that belts appear in a playthrough
             count = { 1, 2 },                  -- Range of belts to create when spawned
             parallax_range = { 0.008, 0.024 }, -- Parallax multiplier for belt movement
             arc_span = { 0.45, 0.85 },         -- Fraction of full circle covered by the belt arc
-            radius_range = { 420, 820 },       -- Distance from belt center to arc midpoint
-            thickness_range = { 60, 140 },     -- Radial thickness of the belt
-            squash_range = { 0.6, 0.85 },      -- Vertical squash factor to make ellipses
-            segment_count = { 70, 140 },       -- Number of rubble segments composing the belt
-            segment_size = { 3, 9 },           -- Visual radius of each rubble segment
-            alpha_range = { 0.22, 0.42 },      -- Opacity range for belt segments
+            radius_range = { 260, 520 },       -- Distance from belt center to arc midpoint
+            thickness_range = { 120, 200 },    -- Radial thickness of the belt
+            squash_range = { 0.7, 0.95 },      -- Vertical squash factor to make ellipses
+            segment_count = { 90, 160 },       -- Number of rubble segments composing the belt
+            segment_size = { 4, 11 },          -- Visual radius of each rubble segment
+            alpha_range = { 0.35, 0.6 },       -- Opacity range for belt segments
             flicker_speed = { 0.6, 1.4 },      -- Speed of subtle flicker animation
+            spawn_margin = 1400,               -- Radius around the camera to place belt centers
             color = { 0.55, 0.5, 0.48 },       -- Base rock color
             highlight = { 0.9, 0.85, 0.8 },    -- Highlight tint for inner glow
         },
@@ -212,8 +213,8 @@ constants.asteroids = {
         angular = 0.12,              -- Angular velocity damping (rotation slowdown)
     },
     durability = {
-        min = 120,                   -- Minimum asteroid health points
-        max = 220,                   -- Maximum asteroid health points
+        min = 360,                   -- Minimum asteroid health points
+        max = 660,                   -- Maximum asteroid health points
     },
     color = { 0.7, 0.65, 0.6 },      -- Base color (RGB, grayish-brown rock)
     health_bar = {
@@ -236,6 +237,26 @@ constants.asteroids = {
             },
         },
     },
+    chunks = {
+        enabled = true,
+        max_levels = 1,
+        count = { min = 2, max = 5 }, -- Random chunk count per split
+        size_scale = { min = 0.35, max = 0.55 },
+        health_scale = { min = 0.25, max = 0.4 },
+        speed = { min = 90, max = 160 },
+        offset = { min = 6, max = 24 },
+        angular_velocity = { min = -2.5, max = 2.5 },
+        min_radius = 12,
+        min_health = 30,
+        inherit_loot = true,
+        loot_drop = {
+            id = "resource:ore_chunk",
+            count = { min = 2, max = 5 },
+            quantity = { min = 1, max = 2 },
+            scatter = { min = 12, max = 42 },
+            velocity = { min = 140, max = 280 },
+        },
+    },
     field = {
         count = { min = 30, max = 50 }, -- Number of asteroids to spawn in a field
     },
@@ -251,7 +272,7 @@ constants.weapons = {
     laser = {
         max_range = 720,             -- Maximum laser beam distance in pixels
         width = 1.2,                 -- Laser beam width in pixels
-        damage_per_second = 32,      -- Damage dealt per second of continuous fire
+        damage_per_second = 64,      -- Damage dealt per second of continuous fire
         fade_time = 0.08,            -- Beam fade-out duration in seconds
         color = { 1, 0.3, 0.6 },     -- Primary laser color (RGB, pink-red)
         glow_color = { 1, 0.7, 0.9 }, -- Glow/highlight color for visual effect
@@ -260,12 +281,26 @@ constants.weapons = {
         projectile_speed = 840,      -- Speed of each pulse projectile (pixels/sec)
         projectile_lifetime = 0.28,  -- Lifetime to approximate short beam reach
         projectile_size = 5,         -- Visual size of the bolt
-        damage = 22,                 -- Damage per pulse hit
+        damage = 44,                 -- Damage per pulse hit
         fire_rate = 0.32,            -- Time between pulses (seconds)
         color = { 1, 0.45, 0.3 },    -- Warmer turret bolt color
         glow_color = { 1, 0.8, 0.6 }, -- Glow color to match
         offset = 26,                 -- Default muzzle offset
         forward = 28,                -- Default mount forward offset
+    },
+}
+
+constants.damage = {
+    defaultDamageType = "default",
+    defaultArmorType = "default",
+    multipliers = {
+        default = {
+            default = 1.0,
+        },
+        laser = {
+            default = 0.6,
+            rock = 1.5,
+        },
     },
 }
 

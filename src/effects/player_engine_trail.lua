@@ -13,55 +13,64 @@ local function withCanvas(canvas, drawFunc)
     love.graphics.pop()
 end
 
--- Create enhanced particle system texture with more detailed glow
+-- Create stunning particle texture with radial gradient and bright core
 local function createTrailTexture()
-    local canvas = love.graphics.newCanvas(16, 16)
+    local canvas = love.graphics.newCanvas(24, 24)
     withCanvas(canvas, function()
-        local cx, cy = 8, 8
-        -- Enhanced concentric circles for better glow effect
-        love.graphics.setColor(0.2, 0.5, 1.0, 0.1)
+        local cx, cy = 12, 12
+        -- Outer soft glow layers
+        love.graphics.setColor(0.1, 0.4, 1.0, 0.05)
+        love.graphics.circle("fill", cx, cy, 12)
+        love.graphics.setColor(0.15, 0.5, 1.0, 0.1)
+        love.graphics.circle("fill", cx, cy, 10)
+        love.graphics.setColor(0.2, 0.6, 1.0, 0.15)
         love.graphics.circle("fill", cx, cy, 8)
-        love.graphics.setColor(0.3, 0.6, 1.0, 0.3)
+        -- Mid-tone energy rings
+        love.graphics.setColor(0.3, 0.7, 1.0, 0.3)
         love.graphics.circle("fill", cx, cy, 6)
-        love.graphics.setColor(0.4, 0.7, 1.0, 0.6)
-        love.graphics.circle("fill", cx, cy, 4)
-        love.graphics.setColor(0.5, 0.8, 1.0, 0.8)
+        love.graphics.setColor(0.4, 0.8, 1.0, 0.5)
+        love.graphics.circle("fill", cx, cy, 4.5)
+        love.graphics.setColor(0.5, 0.85, 1.0, 0.7)
         love.graphics.circle("fill", cx, cy, 3)
-        love.graphics.setColor(0.7, 0.9, 1.0, 0.95)
+        -- Bright inner core
+        love.graphics.setColor(0.7, 0.9, 1.0, 0.9)
         love.graphics.circle("fill", cx, cy, 2)
-        love.graphics.setColor(0.9, 0.95, 1.0, 1.0)
-        love.graphics.circle("fill", cx, cy, 1)
+        love.graphics.setColor(0.85, 0.95, 1.0, 0.95)
+        love.graphics.circle("fill", cx, cy, 1.2)
+        love.graphics.setColor(1.0, 1.0, 1.0, 1.0)
+        love.graphics.circle("fill", cx, cy, 0.8)
     end)
     return canvas
 end
 
--- Configure enhanced particle system with more dynamic behavior
+-- Configure gorgeous particle system with cinematic behavior
 local function createParticleSystem()
     if not (love and love.graphics and love.graphics.newParticleSystem) then
         return nil
     end
     local texture = createTrailTexture()
-    local ps = love.graphics.newParticleSystem(texture, 400)
-    ps:setParticleLifetime(0.4, 0.8)
-    ps:setSpeed(60, 120)
-    ps:setLinearAcceleration(-20, -60, 20, 40)
-    ps:setLinearDamping(0.6)
-    ps:setSizes(1.2, 0.8, 0.3, 0.05)
-    ps:setSizeVariation(0.5)
-    ps:setSpin(-2.0, 2.0, 0.4)
-    ps:setSpread(math.rad(35))
+    local ps = love.graphics.newParticleSystem(texture, 600)
+    ps:setParticleLifetime(0.5, 1.2)
+    ps:setSpeed(80, 180)
+    ps:setLinearAcceleration(-30, -80, 30, 60)
+    ps:setLinearDamping(0.8)
+    ps:setSizes(0.9, 0.6, 0.3, 0.08, 0)
+    ps:setSizeVariation(0.6)
+    ps:setSpin(-3.0, 3.0, 0.5)
+    ps:setSpread(math.rad(30))
     ps:setRelativeRotation(true)
     ps:setRotation(0, math_util.TAU)
-    ps:setRadialAcceleration(-15, 15)
-    ps:setTangentialAcceleration(-30, 30)
+    ps:setRadialAcceleration(-25, 25)
+    ps:setTangentialAcceleration(-45, 45)
     ps:setEmissionRate(0)
-    -- Enhanced color progression with more vibrant blues
+    -- Stunning color progression: bright cyan to deep blue with shimmer
     ps:setColors(
-        0.6, 0.85, 1.0, 0.9,
-        0.4, 0.7, 1.0, 0.7,
+        0.7, 0.9, 1.0, 1.0,
+        0.5, 0.8, 1.0, 0.9,
+        0.3, 0.65, 1.0, 0.7,
         0.2, 0.5, 0.95, 0.4,
-        0.1, 0.3, 0.8, 0.1,
-        0.05, 0.15, 0.5, 0
+        0.1, 0.35, 0.85, 0.15,
+        0.05, 0.2, 0.6, 0
     )
     ps:start()
     return ps
@@ -132,7 +141,7 @@ function PlayerEngineTrail:updateFromPlayer()
     self.position.x = pos.x + cosR * offsetX - sinR * offsetY
     self.position.y = pos.y + sinR * offsetX + cosR * offsetY
 
-    -- Enhanced thrust strength calculation
+    -- Enhanced thrust strength calculation with shimmer
     local thrusting = self.player.isThrusting
     local thrust = self.player.currentThrust or 0
     local maxThrust = self.player.maxThrust or thrust
@@ -145,8 +154,11 @@ function PlayerEngineTrail:updateFromPlayer()
         else
             strength = thrust > 0 and 1 or 0.6
         end
-        -- Add variation for more dynamic feel
-        strength = strength * (0.9 + 0.1 * math.sin(love.timer.getTime() * 8))
+        -- Add shimmer and pulse for gorgeous effect
+        local time = love.timer.getTime()
+        local shimmer = 0.92 + 0.08 * math.sin(time * 12)
+        local pulse = 0.95 + 0.05 * math.sin(time * 6)
+        strength = strength * shimmer * pulse
     end
     
     self.thrustStrength = strength
@@ -160,31 +172,29 @@ function PlayerEngineTrail:update(dt)
     local targetEmissionRate = 0
     
     if self.active and self.thrustStrength > 0 then
-        -- Enhanced emission rate with more dramatic scaling
-        local baseRate = 150
-        local thrustMultiplier = 0.2 + 0.8 * (self.thrustStrength ^ 1.5)
+        -- Dramatic emission rate for gorgeous trails
+        local baseRate = 250
+        local thrustMultiplier = 0.3 + 0.7 * (self.thrustStrength ^ 1.3)
         targetEmissionRate = baseRate * thrustMultiplier
         
         self.system:setDirection(self.direction)
         self.system:setPosition(self.position.x, self.position.y)
         
-        -- Dynamic spread based on thrust
-        local spread = math.rad(25 + 15 * (1 - self.thrustStrength))
+        -- Dynamic spread for visual interest
+        local spread = math.rad(20 + 20 * (1 - self.thrustStrength))
         self.system:setSpread(spread)
         
         self.fadeTime = 0
         self.stopTimer = 0
     else
-        -- Immediately stop emission when not thrusting
         targetEmissionRate = 0
         self.stopTimer = self.stopTimer + dt
     end
     
     -- Smooth emission rate transitions
-    local lerpFactor = 1 - math.exp(-dt * 20)
+    local lerpFactor = 1 - math.exp(-dt * 25)
     self.lastEmissionRate = self.lastEmissionRate + (targetEmissionRate - self.lastEmissionRate) * lerpFactor
     
-    -- Force emission to zero if not actively thrusting
     if self.stopTimer > 0.02 or not self.active then
         self.lastEmissionRate = 0
     end
@@ -198,11 +208,9 @@ function PlayerEngineTrail:emitBurst(count, sizeMultiplier)
     if not (self.system and count and count > 0) then return end
     
     if sizeMultiplier and sizeMultiplier > 1 then
-        -- Temporarily increase particle sizes for burst
-        self.system:setSizes(1.5 * sizeMultiplier, 1.0 * sizeMultiplier, 0.4 * sizeMultiplier, 0.1)
+        self.system:setSizes(1.0 * sizeMultiplier, 0.7 * sizeMultiplier, 0.35 * sizeMultiplier, 0.1)
         self.system:emit(count)
-        -- Restore normal sizes
-        self.system:setSizes(1.2, 0.8, 0.3, 0.05)
+        self.system:setSizes(0.9, 0.6, 0.3, 0.08, 0)
     else
         self.system:emit(count)
     end
@@ -214,9 +222,10 @@ function PlayerEngineTrail:draw()
     love.graphics.push("all")
     love.graphics.setBlendMode("add")
     
-    -- Add slight color modulation based on thrust strength
-    local intensity = 0.8 + 0.2 * self.thrustStrength
-    love.graphics.setColor(intensity, intensity, intensity, 1)
+    -- Enhanced color modulation with brightness boost
+    local intensity = 0.9 + 0.1 * self.thrustStrength
+    local tint = 0.95 + 0.05 * math.sin(love.timer.getTime() * 8)
+    love.graphics.setColor(intensity * tint, intensity, intensity, 1)
     love.graphics.draw(self.system)
     
     love.graphics.pop()

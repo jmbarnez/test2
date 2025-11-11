@@ -11,6 +11,13 @@ local function createCargoUIState()
     }
 end
 
+local function any_modal_visible(state)
+    return (state.pauseUI and state.pauseUI.visible)
+        or (state.deathUI and state.deathUI.visible)
+        or (state.cargoUI and state.cargoUI.visible)
+        or (state.optionsUI and state.optionsUI.visible)
+end
+
 local function createDeathUIState()
     return {
         visible = false,
@@ -32,6 +39,17 @@ local function createPauseUIState()
         buttonLabel = "Resume",
         buttonHovered = false,
         _was_mouse_down = false,
+    }
+end
+
+local function createOptionsUIState()
+    return {
+        visible = false,
+        title = "Options",
+        message = "Adjust the experience to your liking.",
+        returnTo = nil,
+        _was_mouse_down = false,
+        syncPending = false,
     }
 end
 
@@ -80,6 +98,7 @@ function UIStateManager.initialize(state)
     state.cargoUI = state.cargoUI or createCargoUIState()
     state.deathUI = state.deathUI or createDeathUIState()
     state.pauseUI = state.pauseUI or createPauseUIState()
+    state.optionsUI = state.optionsUI or createOptionsUIState()
     
     -- Initialize input state
     state.uiInput = state.uiInput or {
@@ -103,6 +122,7 @@ function UIStateManager.cleanup(state)
     state.cargoUI = nil
     state.deathUI = nil
     state.pauseUI = nil
+    state.optionsUI = nil
     state.uiInput = nil
     state.respawnRequested = nil
     state.isPaused = nil
@@ -198,6 +218,62 @@ end
 
 function UIStateManager.isPauseUIVisible(state)
     return state and state.pauseUI and state.pauseUI.visible
+end
+
+function UIStateManager.showOptionsUI(state, source)
+    if not (state and state.optionsUI) then
+        return
+    end
+
+    local optionsUI = state.optionsUI
+    optionsUI.visible = true
+    optionsUI.returnTo = source
+    optionsUI.syncPending = true
+    optionsUI.activeSlider = nil
+    optionsUI._was_mouse_down = love.mouse and love.mouse.isDown and love.mouse.isDown(1) or false
+
+    if source == "pause" and state.pauseUI and state.pauseUI.visible then
+        state.pauseUI.visible = false
+    end
+
+    if state.uiInput then
+        state.uiInput.mouseCaptured = true
+        state.uiInput.keyboardCaptured = true
+    end
+
+    state.isPaused = true
+end
+
+function UIStateManager.hideOptionsUI(state)
+    if not (state and state.optionsUI) then
+        return
+    end
+
+    local optionsUI = state.optionsUI
+    local returnTo = optionsUI.returnTo
+    optionsUI.visible = false
+    optionsUI.dragging = false
+    optionsUI.activeSlider = nil
+    optionsUI.syncPending = false
+    optionsUI.returnTo = nil
+
+    if returnTo == "pause" then
+        UIStateManager.showPauseUI(state)
+    end
+
+    if state.uiInput then
+        local keepCaptured = any_modal_visible(state)
+        state.uiInput.mouseCaptured = not not keepCaptured
+        state.uiInput.keyboardCaptured = not not keepCaptured
+    end
+
+    if not any_modal_visible(state) then
+        state.isPaused = false
+    end
+end
+
+function UIStateManager.isOptionsUIVisible(state)
+    return state and state.optionsUI and state.optionsUI.visible
 end
 
 function UIStateManager.isPaused(state)

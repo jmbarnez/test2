@@ -1,5 +1,6 @@
 local tiny = require("libs.tiny")
 local love = love
+local damage_util = require("src.util.damage")
 
 local function create_projectile_shape(drawable, size)
     local shape = drawable.shape or drawable.form or "orb"
@@ -43,9 +44,10 @@ local function create_impact_particles(x, y, projectile, target)
         -- Create cone of particles spreading from impact direction
         local spreadAngle = impactAngle + math.pi + (math.random() - 0.5) * math.pi * 0.8
         local speed = math.random(80, 200)
-        local size = math.random(1, 4)
-        local lifetime = math.random(0.2, 0.6)
-        
+        local lifetime = math.random(0.22, 0.45)
+        local size = 0.9 + math.random() * 1.4
+        local tintShift = 0.2 + math.random() * 0.3
+
         particles[i] = {
             x = x + math.random(-2, 2),
             y = y + math.random(-2, 2),
@@ -55,11 +57,12 @@ local function create_impact_particles(x, y, projectile, target)
             maxSize = size,
             lifetime = lifetime,
             maxLifetime = lifetime,
+            baseAlpha = 0.85 + math.random() * 0.15,
             color = {
-                desaturatedColor[1],
-                desaturatedColor[2],
-                desaturatedColor[3],
-                0.8
+                math.min(1, desaturatedColor[1] + tintShift * 0.4),
+                math.min(1, desaturatedColor[2] + tintShift * 0.2),
+                math.min(1, desaturatedColor[3] + tintShift),
+                0.9
             }
         }
     end
@@ -135,14 +138,6 @@ return function(context)
                 return
             end
             
-            -- Freeze projectile rotation and velocity on impact
-            if projectile.body and not projectile.body:isDestroyed() then
-                projectile.body:setLinearVelocity(0, 0)
-                projectile.body:setAngularVelocity(0)
-                -- Keep the rotation from just before impact
-                projectile.frozenRotation = projectile.rotation or projectile.body:getAngle()
-            end
-            
             -- Create impact particles at collision point
             local x, y = projectile.position.x, projectile.position.y
             local particles = create_impact_particles(x, y, projectile, target)
@@ -150,9 +145,14 @@ return function(context)
                 table.insert(self.impactParticles, particles[i])
             end
             
+            if projectile.body and not projectile.body:isDestroyed() then
+                projectile.body:destroy()
+                projectile.body = nil
+            end
+            projectile.pendingDestroy = true
+            
             -- Don't hit boundaries
             if targetData.type == "boundary" then
-                projectile.pendingDestroy = true
                 return
             end
             
@@ -170,9 +170,16 @@ return function(context)
             
             -- Apply damage
             if shouldDamage and damageEntity and target then
-                local damage = projectile.projectile.damage or 0
+                local damageComponent = projectile.projectile or {}
+                local damage = damageComponent.damage or 0
                 if damage > 0 then
-                    damageEntity(target, damage)
+                    local damageType = damageComponent.damageType
+                    local armorType = target.armorType
+                    local multiplier = damage_util.resolve_multiplier(damageType, armorType)
+                    damage = damage * multiplier
+                    if damage > 0 then
+                        damageEntity(target, damage)
+                    end
                 end
             end
             
@@ -221,11 +228,13 @@ return function(context)
                     particle.y = particle.y + particle.vy * dt
                     particle.vx = particle.vx * 0.92  -- friction
                     particle.vy = particle.vy * 0.92 + 50 * dt  -- slight gravity
-                    
-                    -- Fade out and shrink
-                    local lifeRatio = particle.lifetime / particle.maxLifetime
-                    particle.size = particle.maxSize * lifeRatio
-                    particle.color[4] = lifeRatio * 0.8
+
+                    local lifeRatio = math.max(0, particle.lifetime / particle.maxLifetime)
+                    local baseAlpha = particle.baseAlpha or 0.9
+                    if particle.maxSize then
+                        particle.size = particle.maxSize * (lifeRatio ^ 0.4)
+                    end
+                    particle.color[4] = baseAlpha * lifeRatio
                 end
             end
             
@@ -271,6 +280,16 @@ return function(context)
             -- Clean up physics body
             if entity.body and not entity.body:isDestroyed() then
                 entity.body:destroy()
+                entity.body = nil
+            end
+            if entity.fixture and not entity.fixture:isDestroyed() then
+                entity.fixture:destroy()
+                entity.fixture = nil
+            end
+            for i = #self.impactParticles, 1, -1 do
+                if self.impactParticles[i].source == entity then
+                    table.remove(self.impactParticles, i)
+                end
             end
         end,
         
@@ -281,10 +300,14 @@ return function(context)
             
             for i = 1, #self.impactParticles do
                 local particle = self.impactParticles[i]
-                love.graphics.setColor(particle.color)
-                love.graphics.circle("fill", particle.x, particle.y, particle.size)
+                local alpha = particle.color[4]
+                if alpha and alpha > 0 and particle.size and particle.size > 0 then
+                    love.graphics.setColor(particle.color)
+                    love.graphics.setPointSize(math.max(1, particle.size))
+                    love.graphics.points(particle.x, particle.y)
+                end
             end
-            
+
             love.graphics.pop()
         end,
     }

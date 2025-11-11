@@ -25,29 +25,65 @@ function asteroid_renderer.draw(entity)
     love.graphics.setLineWidth(6)
     love.graphics.polygon("line", vertices)
 
-    -- Base fill
-    love.graphics.setColor(baseColor[1] * 0.6, baseColor[2] * 0.6, baseColor[3] * 0.6, baseColor[4] or 1)
+    -- Base fill with darker tone
+    love.graphics.setColor(baseColor[1] * 0.5, baseColor[2] * 0.5, baseColor[3] * 0.5, baseColor[4] or 1)
     love.graphics.polygon("fill", vertices)
 
-    -- Inner accent
+    -- Texture layer 1: Mid-tone patches
     love.graphics.push()
-    love.graphics.scale(0.7, 0.7)
+    love.graphics.scale(0.85, 0.85)
+    love.graphics.rotate(0.3)
     love.graphics.setColor(
-        math.min(1, baseColor[1] * 1.2),
-        math.min(1, baseColor[2] * 1.2),
-        math.min(1, baseColor[3] * 1.2),
+        baseColor[1] * 0.7,
+        baseColor[2] * 0.7,
+        baseColor[3] * 0.7,
+        (baseColor[4] or 1) * 0.6
+    )
+    love.graphics.polygon("fill", vertices)
+    love.graphics.pop()
+
+    -- Texture layer 2: Lighter inner region
+    love.graphics.push()
+    love.graphics.scale(0.65, 0.65)
+    love.graphics.rotate(-0.2)
+    love.graphics.setColor(
+        math.min(1, baseColor[1] * 1.1),
+        math.min(1, baseColor[2] * 1.1),
+        math.min(1, baseColor[3] * 1.1),
         (baseColor[4] or 1) * 0.5
     )
     love.graphics.polygon("fill", vertices)
     love.graphics.pop()
 
-    -- Outline
-    love.graphics.setColor(baseColor[1] * 0.4, baseColor[2] * 0.4, baseColor[3] * 0.4, 0.9)
+    -- Texture layer 3: Bright highlights
+    love.graphics.push()
+    love.graphics.scale(0.4, 0.4)
+    love.graphics.rotate(0.5)
+    love.graphics.setColor(
+        math.min(1, baseColor[1] * 1.4),
+        math.min(1, baseColor[2] * 1.4),
+        math.min(1, baseColor[3] * 1.4),
+        (baseColor[4] or 1) * 0.4
+    )
+    love.graphics.polygon("fill", vertices)
+    love.graphics.pop()
+
+    -- Shadow crevices
+    love.graphics.push()
+    love.graphics.scale(0.75, 0.75)
+    love.graphics.rotate(-0.4)
+    love.graphics.setColor(baseColor[1] * 0.2, baseColor[2] * 0.2, baseColor[3] * 0.2, 0.4)
+    love.graphics.setLineWidth(3)
+    love.graphics.polygon("line", vertices)
+    love.graphics.pop()
+
+    -- Main outline
+    love.graphics.setColor(baseColor[1] * 0.3, baseColor[2] * 0.3, baseColor[3] * 0.3, 0.9)
     love.graphics.setLineWidth(2)
     love.graphics.polygon("line", vertices)
 
-    -- Thin bright edge
-    love.graphics.setColor(1, 1, 1, 0.3)
+    -- Bright edge highlight
+    love.graphics.setColor(1, 1, 1, 0.25)
     love.graphics.setLineWidth(1)
     love.graphics.polygon("line", vertices)
 

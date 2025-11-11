@@ -4,7 +4,7 @@ local definition = {
     name = "Ore Chunk",
     stackable = true,
     defaultQuantity = 1,
-    volume = 0.2,
+    volume = 0.01,
     icon = {
         layers = {
             {

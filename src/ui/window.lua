@@ -185,15 +185,26 @@ function window.draw_frame(options)
 
     love.graphics.setFont(previous_font)
 
+    local content_y = y + top_bar_height
+    local content_height = math.max(0, height - top_bar_height - bottom_bar_height)
+    local inner_width = math.max(0, width - padding * 2)
+    local inner_height = math.max(0, content_height - padding * 2)
+
     return {
         padding = padding,
         top_bar_height = top_bar_height,
         bottom_bar_height = bottom_bar_height,
         content = {
             x = x + padding,
-            y = y + top_bar_height + padding,
-            width = width - padding * 2,
-            height = height - top_bar_height - bottom_bar_height - padding * 2,
+            y = content_y + padding,
+            width = inner_width,
+            height = inner_height,
+        },
+        content_full = {
+            x = x,
+            y = content_y,
+            width = width,
+            height = content_height,
         },
         close_button = close_button_rect,
         top_bar = top_bar_rect,
