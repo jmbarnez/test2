@@ -12,6 +12,7 @@ local PlayerWeapons = require("src.player.weapons")
 local UIStateManager = require("src.ui.state_manager")
 local cargo_window = require("src.ui.windows.cargo")
 local options_window = require("src.ui.windows.options")
+local map_window = require("src.ui.windows.map")
 require("src.entities.ship_factory")
 require("src.entities.asteroid_factory")
 require("src.entities.weapon_factory")
@@ -38,6 +39,12 @@ end
 function gameplay:wheelmoved(x, y)
     if UIStateManager.isOptionsUIVisible(self) then
         if options_window.wheelmoved(self, x, y) then
+            return
+        end
+    end
+
+    if UIStateManager.isMapUIVisible(self) then
+        if map_window.wheelmoved(self, x, y) then
             return
         end
     end
@@ -233,6 +240,12 @@ function gameplay:keypressed(key)
         return
     end
 
+    if UIStateManager.isMapUIVisible(self) then
+        if map_window.keypressed(self, key) then
+            return
+        end
+    end
+
     if UIStateManager.isOptionsUIVisible(self) then
         if options_window.keypressed(self, key) then
             return
@@ -276,6 +289,11 @@ function gameplay:keypressed(key)
 
     if key == "tab" then
         UIStateManager.toggleCargoUI(self)
+        return
+    end
+
+    if key == "m" then
+        UIStateManager.toggleMapUI(self)
         return
     end
 end

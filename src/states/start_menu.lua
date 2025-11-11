@@ -1,8 +1,8 @@
 local Gamestate = require("libs.hump.gamestate")
 local constants = require("src.constants.game")
 local theme = require("src.ui.theme")
+local UIButton = require("src.ui.components.button")
 local Starfield = require("src.states.gameplay.starfield")
-local gameplay = require("src.states.gameplay")
 
 ---@diagnostic disable-next-line: undefined-global
 local love = love
@@ -25,11 +25,17 @@ local function load_font(size)
 end
 
 local function point_in_rect(x, y, rect)
-    return rect
-        and x >= rect.x
-        and x <= rect.x + rect.w
+    if not rect then
+        return false
+    end
+
+    local width = rect.w or rect.width or 0
+    local height = rect.h or rect.height or 0
+
+    return x >= rect.x
+        and x <= rect.x + width
         and y >= rect.y
-        and y <= rect.y + rect.h
+        and y <= rect.y + height
 end
 
 function start_menu:start_game()
@@ -37,76 +43,59 @@ function start_menu:start_game()
         return
     end
     self.transitioning = true
+    local gameplay = require("src.states.gameplay")
     Gamestate.switch(gameplay)
-end
-
-local function draw_primary_button(x, y, width, height, label, hovered, font)
-    local window_colors = theme.colors.window or {}
-    local fill_base = { 0.1, 0.2, 0.14, 1 }
-    local fill_hover = { 0.18, 0.34, 0.24, 1 }
-    local border = { 0.22, 0.38, 0.28, 1 }
-    local text_color = { 0.82, 0.96, 0.86, 1 }
-    local glow_color = { 0.36, 0.85, 0.58, 0.42 }
-
-    local fill = fill_base
-    local radius = 6
-
-    love.graphics.push("all")
-
-    -- Base fill
-    love.graphics.setColor(fill)
-    love.graphics.rectangle("fill", x, y, width, height, radius, radius)
-
-    -- Border
-    love.graphics.setColor(border)
-    love.graphics.setLineWidth(1.5)
-    love.graphics.rectangle("line", x + 0.5, y + 0.5, width - 1, height - 1, radius, radius)
-
-    -- Label
-    love.graphics.setFont(font)
-    love.graphics.setColor(text_color)
-    love.graphics.print(
-        label,
-        x + (width - font:getWidth(label)) * 0.5,
-        y + (height - font:getHeight()) * 0.5
-    )
-
-    love.graphics.pop()
 end
 
 local function build_aurora_shader()
     return love.graphics.newShader([[ 
         extern float time;
         extern float intensity;
+
         vec4 effect(vec4 color, Image tex, vec2 texture_coords, vec2 screen_coords) {
             vec4 sample = Texel(tex, texture_coords);
             float x = texture_coords.x;
             float y = texture_coords.y;
-            float wave = sin(x * 18.0 + time * 1.6) * 0.08;
-            float band = clamp(1.0 - smoothstep(0.0, 0.45, abs(y - 0.5) - wave), 0.0, 1.0);
-            float shimmer = 0.65 + 0.35 * sin(time * 2.8 + x * 8.5);
-            float ripple = 0.5 + 0.5 * sin(time * 1.3 + y * 6.0 + x * 3.0);
-            float mixFactor = clamp(band * shimmer * ripple, 0.0, 1.0);
-            vec3 base = vec3(0.18, 0.52, 0.92);
-            vec3 mid = vec3(0.42, 0.9, 0.78);
-            vec3 highlight = vec3(1.0, 0.96, 0.82);
-            vec3 aurora = mix(base, mid, mixFactor);
-            aurora = mix(aurora, highlight, smoothstep(0.6, 1.0, mixFactor));
-            float baseAlpha = 0.35;
-            float alpha = clamp(baseAlpha + mixFactor * intensity * 0.75, 0.0, 1.0) * sample.a;
-            return vec4(aurora * sample.rgb, alpha);
+            
+            // Only render aurora inside the letters
+            if (sample.a < 0.1) {
+                return vec4(0.0, 0.0, 0.0, 0.0);
+            }
+            
+            // Enhanced multi-layer noise for more dynamic aurora
+            float noise1 = sin(x * 12.0 + time * 1.2) * 0.5 + 0.5;
+            float noise2 = sin(y * 10.0 + time * 0.9) * 0.5 + 0.5;
+            float noise3 = sin((x + y) * 8.0 + time * 1.5) * 0.5 + 0.5;
+            float combinedNoise = (noise1 + noise2 + noise3) / 3.0;
+            
+            // Flowing aurora waves
+            float wave1 = sin(x * 6.0 + time * 0.8 + y * 4.0) * 0.5 + 0.5;
+            float wave2 = cos(y * 8.0 + time * 1.1 + x * 3.0) * 0.5 + 0.5;
+            float drift = wave1 * wave2 * combinedNoise;
+            
+            // Dynamic color palette with more vibrant aurora colors
+            vec3 color1 = vec3(0.2, 0.8, 0.4); // Green aurora
+            vec3 color2 = vec3(0.4, 0.6, 0.9); // Blue aurora
+            vec3 color3 = vec3(0.8, 0.4, 0.8); // Purple aurora
+            
+            float colorShift = sin(time * 0.5 + x * 2.0) * 0.5 + 0.5;
+            vec3 auroraColor = mix(color1, color2, colorShift);
+            auroraColor = mix(auroraColor, color3, smoothstep(0.6, 1.0, drift));
+            
+            return vec4(auroraColor * intensity, sample.a);
         }
     ]])
 end
 
 function start_menu:enter()
-    self.titleFont = load_font(72)
-    self.fonts = theme.get_fonts()
-    self.buttonFont = self.fonts.body
+    self.titleFont = load_font(132)
+    self.fonts = theme.get_fonts() or {}
+    self.buttonFont = self.fonts.body or load_font(24)
     self.buttonRect = nil
     self.buttonHovered = false
     self.transitioning = false
     self.time = 0
+    self._was_mouse_down = love.mouse and love.mouse.isDown and love.mouse.isDown(1) or false
 
     local width, height = love.graphics.getWidth(), love.graphics.getHeight()
     local worldBounds = constants.world and constants.world.bounds or { x = 0, y = 0, width = width, height = height }
@@ -140,17 +129,6 @@ function start_menu:enter()
     Starfield.initialize(self)
 
     self.titleText = "Novus"
-    local titleWidth = math.ceil(self.titleFont:getWidth(self.titleText))
-    local titleHeight = math.ceil(self.titleFont:getHeight())
-    self.titleCanvas = love.graphics.newCanvas(titleWidth, titleHeight)
-    love.graphics.push("all")
-    love.graphics.setCanvas(self.titleCanvas)
-    love.graphics.clear(0, 0, 0, 0)
-    love.graphics.setFont(self.titleFont)
-    love.graphics.setColor(1, 1, 1, 1)
-    love.graphics.print(self.titleText, 0, 0)
-    love.graphics.setCanvas()
-    love.graphics.pop()
 
     self.auroraShader = build_aurora_shader()
     self._center_camera = center_camera
@@ -182,40 +160,62 @@ function start_menu:draw()
 
     love.graphics.push("all")
 
-    if self.auroraShader and self.titleCanvas then
+    if self.auroraShader and self.titleFont then
         love.graphics.setShader(self.auroraShader)
         self.auroraShader:send("time", self.time)
         self.auroraShader:send("intensity", 1.0)
     end
 
-    if self.titleCanvas then
-        local titleX = (width - self.titleCanvas:getWidth()) * 0.5
-        local titleY = height * 0.26 - self.titleCanvas:getHeight() * 0.5
+    if self.titleFont and self.titleText then
+        love.graphics.setFont(self.titleFont)
+        local titleWidth = self.titleFont:getWidth(self.titleText)
+        local titleHeight = self.titleFont:getHeight()
+        local titleX = (width - titleWidth) * 0.5
+        local titleY = height * 0.22 - titleHeight * 0.5
         love.graphics.setColor(1, 1, 1, 1)
-        love.graphics.draw(self.titleCanvas, titleX, titleY)
+        love.graphics.print(self.titleText, titleX, titleY)
     end
 
     love.graphics.setShader()
 
-    local button_width = math.min(240, width * 0.28)
-    local button_height = 52
+    local button_width = math.min(120, width * 0.14)
+    local button_height = 32
     local button_x = (width - button_width) * 0.5
-    local button_y = height * 0.6
+    local button_y = height * 0.56
 
     local mouse_x, mouse_y = love.mouse.getPosition()
     local button_rect = {
         x = button_x,
         y = button_y,
+        width = button_width,
+        height = button_height,
         w = button_width,
         h = button_height,
     }
     self.buttonRect = button_rect
 
-    local hovered = point_in_rect(mouse_x, mouse_y, button_rect)
-    self.buttonHovered = hovered
+    local is_mouse_down = love.mouse and love.mouse.isDown and love.mouse.isDown(1) or false
+    local just_pressed = is_mouse_down and not self._was_mouse_down
+    self._was_mouse_down = is_mouse_down
 
     local button_label = "New Game"
-    draw_primary_button(button_x, button_y, button_width, button_height, button_label, hovered, self.buttonFont)
+    local result = UIButton.render {
+        rect = button_rect,
+        label = button_label,
+        font = self.buttonFont,
+        input = {
+            x = mouse_x,
+            y = mouse_y,
+            is_down = is_mouse_down,
+            just_pressed = just_pressed,
+        },
+    }
+
+    self.buttonHovered = result.hovered
+
+    if result.clicked then
+        self:start_game()
+    end
 
     love.graphics.pop()
 end

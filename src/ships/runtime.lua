@@ -220,6 +220,89 @@ function runtime.decrement_health_timer(entity, dt)
     end
 end
 
+local function initialize_energy(entity)
+    local energy = entity.energy
+    if type(energy) ~= "table" then
+        return
+    end
+
+    local stats = entity.stats or {}
+    local candidateMax = energy.max or energy.capacity or energy.limit or energy.current or stats.main_thrust or 0
+    local maxEnergy = math.max(0, tonumber(candidateMax) or 0)
+
+    energy.max = maxEnergy
+
+    if maxEnergy > 0 then
+        local current = tonumber(energy.current)
+        if current == nil then current = maxEnergy end
+        energy.current = math.min(maxEnergy, math.max(0, current))
+    else
+        energy.current = 0
+    end
+
+    energy.regen = math.max(0, tonumber(energy.regen) or 0)
+    local defaultDrain = stats.main_thrust or 0
+    energy.thrustDrain = math.max(0, tonumber(energy.thrustDrain) or defaultDrain)
+    energy.rechargeDelay = math.max(0, tonumber(energy.rechargeDelay) or 0)
+    energy.rechargeTimer = 0
+    energy.isDepleted = energy.current <= 0
+    energy.percent = (maxEnergy > 0) and (energy.current / maxEnergy) or 0
+end
+
+local function update_energy(entity, dt)
+    local energy = entity.energy
+    if type(energy) ~= "table" then
+        return
+    end
+
+    local maxEnergy = math.max(0, tonumber(energy.max) or 0)
+    energy.max = maxEnergy
+
+    if maxEnergy <= 0 then
+        energy.current = 0
+        energy.percent = 0
+        energy.isDepleted = true
+        energy.rechargeTimer = 0
+        return
+    end
+
+    local current = tonumber(energy.current) or maxEnergy
+    local rechargeDelay = math.max(0, tonumber(energy.rechargeDelay) or 0)
+    local rechargeTimer = math.max(0, tonumber(energy.rechargeTimer) or 0)
+    local regenRate = math.max(0, tonumber(energy.regen) or 0)
+    local thrustDrain = math.max(0, tonumber(energy.thrustDrain) or maxEnergy)
+
+    if entity.player then
+        local isThrusting = not not entity.isThrusting
+
+        if isThrusting and thrustDrain > 0 then
+            local maxThrust = tonumber(entity.maxThrust) or (entity.stats and entity.stats.main_thrust) or 0
+            local currentThrust = tonumber(entity.currentThrust) or 0
+            local thrustRatio
+            if maxThrust > 0 then
+                thrustRatio = math.min(1, math.max(0, currentThrust / maxThrust))
+            else
+                thrustRatio = 1
+            end
+
+            local drainRate = thrustDrain * thrustRatio
+            current = math.max(0, current - drainRate * dt)
+            rechargeTimer = rechargeDelay
+        elseif rechargeTimer > 0 then
+            rechargeTimer = math.max(0, rechargeTimer - dt)
+        elseif regenRate > 0 then
+            current = math.min(maxEnergy, current + regenRate * dt)
+        end
+    else
+        current = math.min(maxEnergy, current)
+    end
+
+    energy.current = current
+    energy.rechargeTimer = rechargeTimer
+    energy.percent = (maxEnergy > 0) and (current / maxEnergy) or 0
+    energy.isDepleted = current <= 0
+end
+
 function runtime.initialize(entity, constants, context)
     entity.shipRuntime = true
 
@@ -228,13 +311,19 @@ function runtime.initialize(entity, constants, context)
     end
 
     runtime.initialize_health(entity, constants)
+    initialize_energy(entity)
     populate_weapon_inventory(entity, context or {})
     ShipCargo.refresh_if_needed(entity.cargo)
+
+    if entity.stats and entity.stats.main_thrust then
+        entity.maxThrust = entity.stats.main_thrust
+    end
 end
 
 function runtime.update(entity, dt)
     ShipCargo.refresh_if_needed(entity.cargo)
     runtime.decrement_health_timer(entity, dt)
+    update_energy(entity, dt)
 end
 
 function runtime.serialize(entity)
@@ -275,6 +364,10 @@ function runtime.serialize(entity)
             current = entity.currentThrust or 0,
             max = entity.maxThrust or (entity.stats and entity.stats.main_thrust),
         },
+        energy = entity.energy and {
+            current = entity.energy.current,
+            max = entity.energy.max,
+        } or nil,
         stats = entity.stats and ship_util.deep_copy(entity.stats) or nil,
         cargo = entity.cargo and {
             used = entity.cargo.used,
@@ -339,6 +432,12 @@ function runtime.applySnapshot(entity, snapshot)
         entity.isThrusting = not not snapshot.thrust.isThrusting
         entity.currentThrust = snapshot.thrust.current or entity.currentThrust
         entity.maxThrust = snapshot.thrust.max or entity.maxThrust
+    end
+
+    if snapshot.energy then
+        entity.energy = entity.energy or {}
+        entity.energy.current = snapshot.energy.current or entity.energy.current
+        entity.energy.max = snapshot.energy.max or entity.energy.max
     end
 
     if snapshot.weapons and type(entity.weapons) == "table" then

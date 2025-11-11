@@ -4,9 +4,6 @@ local Util = require("src.hud.util")
 ---@diagnostic disable-next-line: undefined-global
 local love = love
 
-local hud_colors = theme.colors.hud
-local set_color = theme.utils.set_color
-
 local function extract_level_value(levelData)
     if type(levelData) == "number" then
         return levelData
@@ -72,36 +69,33 @@ function StatusPanel.draw(player)
     
     local x, y = 15, 15
     local width = 300
-    local padding = 8
+    local spacing = theme.spacing or {}
+    local padding = spacing.window_padding and math.min(12, spacing.window_padding) or 8
     local level_width = 80
-    local gap = 12
+    local gap = spacing.status_gap or spacing.small or 12
     local hull_height = 18
     local energy_height = 8
     
     local fonts = theme.get_fonts()
-    local small_font = fonts.small or love.graphics.getFont()
-    local tiny_font = fonts.tiny or small_font
-    local title_font = fonts.title or small_font
+    local hud_colors = theme.colors.hud
+    local set_color = theme.utils.set_color
     
     local content_height = 0
-    if has_hull then content_height = content_height + small_font:getHeight() + 4 + hull_height end
-    if has_hull and has_energy then content_height = content_height + 8 end
-    if has_energy then content_height = content_height + tiny_font:getHeight() + 2 + energy_height end
+    if has_hull then content_height = content_height + fonts.small:getHeight() + 4 + hull_height end
+    if has_hull and has_energy then content_height = content_height + gap end
+    if has_energy then content_height = content_height + fonts.tiny:getHeight() + 2 + energy_height end
     
     local panel_height = padding * 2 + math.max(content_height, level_width + 4)
     local bar_x = x + padding + level_width + gap
     local bar_width = width - padding - level_width - gap * 2
     
     -- Panel background
-    set_color(hud_colors.status_shadow)
-    love.graphics.rectangle("fill", x, y + 2, width, panel_height, 8, 8)
-    
     set_color(hud_colors.status_panel)
-    love.graphics.rectangle("fill", x, y, width, panel_height, 8, 8)
+    love.graphics.rectangle("fill", x, y, width, panel_height)
     
     set_color(hud_colors.status_border)
     love.graphics.setLineWidth(1)
-    love.graphics.rectangle("line", x + 0.5, y + 0.5, width - 1, panel_height - 1, 8, 8)
+    love.graphics.rectangle("line", x + 0.5, y + 0.5, width - 1, panel_height - 1)
     
     -- Level section with experience circle
     local level_center_x = x + padding + level_width / 2
@@ -121,24 +115,19 @@ function StatusPanel.draw(player)
         set_color(hud_colors.energy_fill)
         love.graphics.setLineWidth(4)
         love.graphics.arc("line", "open", level_center_x, level_center_y, circle_radius, -math.pi/2, -math.pi/2 + arc_length)
-        
-        -- Experience glow
-        set_color(hud_colors.energy_glow)
-        love.graphics.setLineWidth(2)
-        love.graphics.arc("line", "open", level_center_x, level_center_y, circle_radius, -math.pi/2, -math.pi/2 + arc_length)
     end
     
     -- Level text
-    love.graphics.setFont(title_font)
+    love.graphics.setFont(fonts.title)
     set_color(hud_colors.status_text)
-    local level_text_width = title_font:getWidth(level_text)
-    love.graphics.print(level_text, level_center_x - level_text_width/2, level_center_y - title_font:getHeight()/2)
+    local level_text_width = fonts.title:getWidth(level_text)
+    love.graphics.print(level_text, level_center_x - level_text_width/2, level_center_y - fonts.title:getHeight()/2)
     
     -- LVL label
-    love.graphics.setFont(tiny_font)
+    love.graphics.setFont(fonts.tiny)
     set_color(hud_colors.status_muted)
-    local lvl_width = tiny_font:getWidth("LVL")
-    love.graphics.print("LVL", level_center_x - lvl_width/2, level_center_y + title_font:getHeight()/2 + 2)
+    local lvl_width = fonts.tiny:getWidth("LVL")
+    love.graphics.print("LVL", level_center_x - lvl_width/2, level_center_y + fonts.title:getHeight()/2 + 2)
     
     -- Separator
     local sep_x = bar_x - gap * 0.5
@@ -149,21 +138,21 @@ function StatusPanel.draw(player)
     local current_y = y + padding
     
     if has_hull then
-        love.graphics.setFont(small_font)
+        love.graphics.setFont(fonts.small)
         local hull_text = Util.format_resource(hull_current, hull_max)
         local shield_text = shield_max and shield_max > 0 and Util.format_resource(shield_current, shield_max) or ""
         
         set_color(hud_colors.status_text)
         love.graphics.print("Hull", bar_x, current_y)
-        love.graphics.print(hull_text, bar_x + bar_width - small_font:getWidth(hull_text), current_y)
+        love.graphics.print(hull_text, bar_x + bar_width - fonts.small:getWidth(hull_text), current_y)
         
         -- Shield text if present
         if shield_text ~= "" then
             set_color(hud_colors.status_muted)
-            love.graphics.print("Shield: " .. shield_text, bar_x, current_y + small_font:getHeight())
-            current_y = current_y + small_font:getHeight() * 2 + 4
+            love.graphics.print("Shield: " .. shield_text, bar_x, current_y + fonts.small:getHeight())
+            current_y = current_y + fonts.small:getHeight() * 2 + 4
         else
-            current_y = current_y + small_font:getHeight() + 4
+            current_y = current_y + fonts.small:getHeight() + 4
         end
         
         local hull_pct = Util.clamp01(hull_current / hull_max)
@@ -171,24 +160,20 @@ function StatusPanel.draw(player)
         
         -- Hull bar background
         set_color(hud_colors.status_bar_background)
-        love.graphics.rectangle("fill", bar_x, current_y, bar_width, hull_height, 4, 4)
+        love.graphics.rectangle("fill", bar_x, current_y, bar_width, hull_height)
         
         -- Hull fill
         if hull_pct > 0 then
             local hull_w = (bar_width - 2) * hull_pct
             set_color(hud_colors.hull_fill)
-            love.graphics.rectangle("fill", bar_x + 1, current_y + 1, hull_w, hull_height - 2, 4, 4)
-            set_color(hud_colors.hull_glow)
-            love.graphics.rectangle("fill", bar_x + 1, current_y + 1, hull_w, (hull_height - 2) * 0.4, 4, 4)
+            love.graphics.rectangle("fill", bar_x + 1, current_y + 1, hull_w, hull_height - 2)
         end
         
         -- Shield overlay
         if shield_pct > 0 then
             local shield_w = (bar_width - 2) * shield_pct
             set_color(hud_colors.shield_fill)
-            love.graphics.rectangle("fill", bar_x + 1, current_y + hull_height/2, shield_w, hull_height/2 - 1, 4, 4)
-            set_color(hud_colors.shield_glow)
-            love.graphics.rectangle("fill", bar_x + 1, current_y + hull_height/2, shield_w, (hull_height/2 - 1) * 0.6, 4, 4)
+            love.graphics.rectangle("fill", bar_x + 1, current_y + hull_height/2, shield_w, hull_height/2 - 1)
         end
         
         -- Divider line between hull and shield
@@ -202,26 +187,24 @@ function StatusPanel.draw(player)
     end
     
     if has_energy then
-        love.graphics.setFont(tiny_font)
+        love.graphics.setFont(fonts.tiny)
         local energy_text = Util.format_resource(energy_current, energy_max)
         
         set_color(hud_colors.status_muted)
         love.graphics.print("Energy", bar_x, current_y)
-        love.graphics.print(energy_text, bar_x + bar_width - tiny_font:getWidth(energy_text), current_y)
+        love.graphics.print(energy_text, bar_x + bar_width - fonts.tiny:getWidth(energy_text), current_y)
         
-        current_y = current_y + tiny_font:getHeight() + 2
+        current_y = current_y + fonts.tiny:getHeight() + 2
         
         local energy_pct = Util.clamp01(energy_current / energy_max)
         
         set_color(hud_colors.status_bar_background)
-        love.graphics.rectangle("fill", bar_x, current_y, bar_width, energy_height, 3, 3)
+        love.graphics.rectangle("fill", bar_x, current_y, bar_width, energy_height)
         
         if energy_pct > 0 then
             local energy_w = (bar_width - 2) * energy_pct
             set_color(hud_colors.energy_fill)
-            love.graphics.rectangle("fill", bar_x + 1, current_y + 1, energy_w, energy_height - 2, 3, 3)
-            set_color(hud_colors.energy_glow)
-            love.graphics.rectangle("fill", bar_x + 1, current_y + 1, energy_w, (energy_height - 2) * 0.5, 3, 3)
+            love.graphics.rectangle("fill", bar_x + 1, current_y + 1, energy_w, energy_height - 2)
         end
     end
     

@@ -16,6 +16,7 @@ local function any_modal_visible(state)
         or (state.deathUI and state.deathUI.visible)
         or (state.cargoUI and state.cargoUI.visible)
         or (state.optionsUI and state.optionsUI.visible)
+        or (state.mapUI and state.mapUI.visible)
 end
 
 local function createDeathUIState()
@@ -50,6 +51,20 @@ local function createOptionsUIState()
         returnTo = nil,
         _was_mouse_down = false,
         syncPending = false,
+    }
+end
+
+local function createMapUIState()
+    return {
+        visible = false,
+        zoom = 1,
+        min_zoom = 0.35,
+        max_zoom = 6,
+        centerX = nil,
+        centerY = nil,
+        dragging = false,
+        _was_mouse_down = false,
+        _just_opened = false,
     }
 end
 
@@ -99,6 +114,7 @@ function UIStateManager.initialize(state)
     state.deathUI = state.deathUI or createDeathUIState()
     state.pauseUI = state.pauseUI or createPauseUIState()
     state.optionsUI = state.optionsUI or createOptionsUIState()
+    state.mapUI = state.mapUI or createMapUIState()
     
     -- Initialize input state
     state.uiInput = state.uiInput or {
@@ -123,6 +139,7 @@ function UIStateManager.cleanup(state)
     state.deathUI = nil
     state.pauseUI = nil
     state.optionsUI = nil
+    state.mapUI = nil
     state.uiInput = nil
     state.respawnRequested = nil
     state.isPaused = nil
@@ -216,6 +233,46 @@ function UIStateManager.togglePauseUI(state)
     setPauseVisibility(state, not state.pauseUI.visible)
 end
 
+local function setMapVisibility(state, visible)
+    if not (state and state.mapUI) then
+        return
+    end
+
+    local mapUI = state.mapUI
+    if mapUI.visible == visible then
+        return
+    end
+
+    mapUI.visible = visible
+    mapUI.dragging = false
+    mapUI._just_opened = visible
+
+    if not visible then
+        mapUI._was_mouse_down = love.mouse and love.mouse.isDown and love.mouse.isDown(1) or false
+    end
+
+    if state.uiInput then
+        state.uiInput.mouseCaptured = visible
+        state.uiInput.keyboardCaptured = visible
+    end
+end
+
+function UIStateManager.showMapUI(state)
+    setMapVisibility(state, true)
+end
+
+function UIStateManager.hideMapUI(state)
+    setMapVisibility(state, false)
+end
+
+function UIStateManager.toggleMapUI(state)
+    if not (state and state.mapUI) then
+        return
+    end
+
+    setMapVisibility(state, not state.mapUI.visible)
+end
+
 function UIStateManager.isPauseUIVisible(state)
     return state and state.pauseUI and state.pauseUI.visible
 end
@@ -274,6 +331,10 @@ end
 
 function UIStateManager.isOptionsUIVisible(state)
     return state and state.optionsUI and state.optionsUI.visible
+end
+
+function UIStateManager.isMapUIVisible(state)
+    return state and state.mapUI and state.mapUI.visible
 end
 
 function UIStateManager.isPaused(state)

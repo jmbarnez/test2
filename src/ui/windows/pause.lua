@@ -1,34 +1,14 @@
 local window = require("src.ui.window")
 local UIStateManager = require("src.ui.state_manager")
 local theme = require("src.ui.theme")
+local UIButton = require("src.ui.components.button")
+local Gamestate = require("libs.hump.gamestate")
+local start_menu = require("src.states.start_menu")
 
 ---@diagnostic disable-next-line: undefined-global
 local love = love
 
 local pause_window = {}
-
-local function draw_button(fonts, rect, label, hovered)
-    local windowColors = theme.colors.window or {}
-    local borderColor = windowColors.border or { 0.1, 0.1, 0.15, 0.8 }
-    local fillColor = hovered and (windowColors.button_hover or { 0.08, 0.08, 0.12, 1 })
-        or (windowColors.button or { 0.05, 0.05, 0.08, 1 })
-    local textColor = windowColors.title_text or { 0.85, 0.85, 0.9, 1 }
-
-    love.graphics.setColor(fillColor)
-    love.graphics.rectangle("fill", rect.x, rect.y, rect.w, rect.h, 6, 6)
-
-    love.graphics.setColor(borderColor)
-    love.graphics.setLineWidth(1.5)
-    love.graphics.rectangle("line", rect.x, rect.y, rect.w, rect.h, 6, 6)
-
-    love.graphics.setFont(fonts.body)
-    love.graphics.setColor(textColor)
-    love.graphics.print(
-        label,
-        rect.x + (rect.w - fonts.body:getWidth(label)) * 0.5,
-        rect.y + (rect.h - fonts.body:getHeight()) * 0.5
-    )
-end
 
 function pause_window.draw(context)
     local state = context and context.pauseUI
@@ -97,7 +77,7 @@ function pause_window.draw(context)
     local buttons = {
         { label = "Resume Game", action = "resume" },
         { label = "Options", action = "options" },
-        { label = "Exit to Menu (Placeholder)", action = "placeholder" },
+        { label = "Exit to Menu", action = "exit_to_menu" },
     }
 
     local buttonWidth = math.min(300, content.width)
@@ -105,34 +85,53 @@ function pause_window.draw(context)
     local buttonSpacing = 12
     local buttonX = content.x + (content.width - buttonWidth) * 0.5
     local buttonY = textY
-    local placeholderMessage
+    state.buttonHovered = false
+    local exitRequested = false
 
     for _, button in ipairs(buttons) do
         local rect = {
             x = buttonX,
             y = buttonY,
+            width = buttonWidth,
+            height = buttonHeight,
             w = buttonWidth,
             h = buttonHeight,
         }
 
-        local hovered = mouseX >= rect.x and mouseX <= rect.x + rect.w and mouseY >= rect.y and mouseY <= rect.y + rect.h
-        draw_button(fonts, rect, button.label, hovered)
+        local result = UIButton.render {
+            rect = rect,
+            label = button.label,
+            font = fonts.body,
+            fonts = fonts,
+            input = {
+                x = mouseX,
+                y = mouseY,
+                is_down = isMouseDown,
+                just_pressed = justPressed,
+            },
+        }
 
-        if hovered and justPressed then
+        state.buttonHovered = state.buttonHovered or result.hovered
+
+        if result.clicked then
             if button.action == "resume" then
                 UIStateManager.hidePauseUI(context)
             elseif button.action == "options" then
                 UIStateManager.showOptionsUI(context, "pause")
-            else
-                placeholderMessage = string.format("%s is not available yet.", button.label:gsub("%s*%(Placeholder%)", ""))
+            elseif button.action == "exit_to_menu" then
+                exitRequested = true
+                break
             end
         end
 
         buttonY = buttonY + buttonHeight + buttonSpacing
     end
 
-    if placeholderMessage then
-        state.statusMessage = placeholderMessage
+    if exitRequested then
+        love.graphics.pop()
+        UIStateManager.hidePauseUI(context)
+        Gamestate.switch(start_menu)
+        return true
     end
 
     if state.statusMessage and state.statusMessage ~= "" then
@@ -143,10 +142,6 @@ function pause_window.draw(context)
 
     if frame.close_clicked then
         UIStateManager.hidePauseUI(context)
-    end
-
-    if not placeholderMessage and state.statusMessage then
-        state.statusMessage = ""
     end
 
     love.graphics.pop()

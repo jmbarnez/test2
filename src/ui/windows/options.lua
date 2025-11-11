@@ -298,6 +298,7 @@ function options_window.draw(context)
         local sliderWidth = columnWidth
 
         local function add_slider(label, key)
+            cursorY = cursorY + fonts.body:getHeight() + 6
             if mode == "draw" then
                 draw_slider(fonts, label, {
                     x = viewportX,
@@ -306,7 +307,7 @@ function options_window.draw(context)
                     h = sliderHeight,
                 }, settings[key], params.sliderRects)
             end
-            cursorY = cursorY + sliderHeight + 46
+            cursorY = cursorY + sliderHeight + 40
         end
 
         heading("Audio")

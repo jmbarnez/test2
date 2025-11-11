@@ -14,6 +14,7 @@ local createProjectileSystem = require("src.systems.projectile")
 local createShipSystem = require("src.systems.ship")
 local createHudSystem = require("src.systems.hud")
 local createUiSystem = require("src.systems.ui")
+local createTargetingSystem = require("src.systems.targeting")
 local createDestructionSystem = require("src.systems.destruction")
 local createLootDropSystem = require("src.systems.loot_drop")
 local createPickupSystem = require("src.systems.pickup")
@@ -78,6 +79,11 @@ function Systems.initialize(state, damageCallback)
     state.enemyAISystem = state.world:addSystem(createEnemyAISystem(state))
 
     state.renderSystem = state.world:addSystem(createRenderSystem(state))
+    state.targetingSystem = state.world:addSystem(createTargetingSystem({
+        state = state,
+        camera = state.camera,
+        uiInput = state.uiInput,
+    }))
     state.hudSystem = state.world:addSystem(createHudSystem(state))
     state.uiSystem = state.world:addSystem(createUiSystem(state))
 end
@@ -93,6 +99,7 @@ function Systems.teardown(state)
     state.projectileSystem = nil
     state.lootDropSystem = nil
     state.enemyAISystem = nil
+    state.targetingSystem = nil
     state.hudSystem = nil
     state.uiSystem = nil
     state.damageEntity = nil

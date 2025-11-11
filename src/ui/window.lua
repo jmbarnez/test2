@@ -36,9 +36,6 @@ function window.draw_frame(options)
     local corner_radius = options.corner_radius or spacing.window_corner_radius
     local top_bar_height = options.top_bar_height or metrics.top_bar_height
     local bottom_bar_height = options.bottom_bar_height or metrics.bottom_bar_height
-    local glow_extra = spacing.window_glow_extra
-    local shadow_offset = spacing.window_shadow_offset
-
     local fonts = options.fonts or theme.get_fonts()
     local previous_font = love.graphics.getFont()
 
@@ -112,30 +109,6 @@ function window.draw_frame(options)
             close_hovered = point_in_rect(mouse_x, mouse_y, close_button_rect)
         end
     end
-
-    -- Outer glow
-    set_color(colors.glow)
-    love.graphics.rectangle(
-        "fill",
-        x - glow_extra * 0.5,
-        y - glow_extra * 0.5,
-        width + glow_extra,
-        height + glow_extra,
-        corner_radius + 2,
-        corner_radius + 2
-    )
-
-    -- Drop shadow
-    set_color(colors.shadow)
-    love.graphics.rectangle(
-        "fill",
-        x + shadow_offset,
-        y + shadow_offset,
-        width,
-        height,
-        corner_radius - 1,
-        corner_radius - 1
-    )
 
     -- Main window background
     set_color(colors.background)

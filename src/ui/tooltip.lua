@@ -208,9 +208,6 @@ function tooltip.draw(mouse_x, mouse_y, fonts)
     love.graphics.push("all")
     love.graphics.origin()
 
-    set_color(colors.shadow or { 0, 0, 0, 0.4 })
-    love.graphics.rectangle("fill", x + shadow_offset, y + shadow_offset, total_width, total_height, corner_radius + 2, corner_radius + 2)
-
     set_color(colors.background or { 0.1, 0.1, 0.1, 0.95 })
     love.graphics.rectangle("fill", x, y, total_width, total_height, corner_radius, corner_radius)
 

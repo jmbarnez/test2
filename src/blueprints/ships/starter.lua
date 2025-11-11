@@ -181,6 +181,13 @@ return {
             linear_damping = 0.65,
             angular_damping = 0.18,
         },
+        energy = {
+            max = 140,
+            current = 140,
+            regen = 55,
+            rechargeDelay = 0.8,
+            thrustDrain = 42,
+        },
         cargo = {
             capacity = 5,
             items = {
