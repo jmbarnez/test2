@@ -267,7 +267,7 @@ function Entities.spawnPlayer(state, shipIdOrConfig, overrides)
     return shipEntity
 end
 
-function Entities.damage(entity, amount, source)
+function Entities.damage(entity, amount, source, context)
     if not entity or not entity.health then
         return
     end
@@ -308,7 +308,18 @@ function Entities.damage(entity, amount, source)
             or (source and source.damageContext)
             or (source and source.state)
             or entity.state
-        damage_numbers.push(contextHost, entity, amount)
+        local impactPosition
+        if context then
+            if context.position then
+                impactPosition = context.position
+            elseif context.x and context.y then
+                impactPosition = { x = context.x, y = context.y }
+            end
+        end
+
+        damage_numbers.push(contextHost, entity, amount, {
+            position = impactPosition,
+        })
     end
 end
 

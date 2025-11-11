@@ -308,7 +308,10 @@ local function fire_hitscan(entity, startX, startY, dirX, dirY, weapon, physicsW
                 local multiplier = damage_util.resolve_multiplier(damageType, armorType)
                 damage = damage * multiplier
                 if damage > 0 then
-                    damageEntity(target, damage, entity)
+                    damageEntity(target, damage, entity, {
+                        x = hitInfo.x,
+                        y = hitInfo.y,
+                    })
                 end
             end
         end

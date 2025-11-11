@@ -179,7 +179,10 @@ return function(context)
                     damage = damage * multiplier
                     if damage > 0 then
                         local owner = damageComponent.owner or projectile.projectile.owner
-                        damageEntity(target, damage, owner or projectile)
+                        damageEntity(target, damage, owner or projectile, {
+                            x = x,
+                            y = y,
+                        })
                     end
                 end
             end
