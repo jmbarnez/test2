@@ -18,13 +18,18 @@ function damage_numbers.push(state, entity, amount, options)
         return
     end
 
+    local position = options.position or entity.position
+    if not position then
+        return
+    end
+
     local radius = options.radius
         or (entity.drawable and entity.drawable.radius)
         or entity.radius
         or 24
 
-    FloatingText.add(host, entity.position, string.format("-%d", math.floor(amount + 0.5)), {
-        offsetY = radius,
+    FloatingText.add(host, position, string.format("-%d", math.floor(amount + 0.5)), {
+        offsetY = options.position and 0 or radius,
         color = options.color or DEFAULT_COLOR,
         rise = options.rise or DEFAULT_RISE,
         duration = options.duration or DEFAULT_DURATION,

@@ -96,23 +96,13 @@ local function draw_skill_entry(skill, x, y, width, fonts, alternate)
     skill = skill or {}
 
     local name_font = fonts.body
-    local info_font = fonts.small or fonts.body
-    local meta_font = fonts.tiny or info_font
+    local meta_font = fonts.tiny or fonts.small or fonts.body
 
-    local row_padding = 10
-    local bar_height = 10
-    local spacing_large = 8
+    local row_padding = 12
+    local bar_height = 12
+    local spacing_small = 8
 
-    local has_description = type(skill.description) == "string" and skill.description ~= ""
-    local has_next_unlock = type(skill.nextUnlock) == "string" and skill.nextUnlock ~= ""
-
-    local row_height = row_padding * 2 + name_font:getHeight() + spacing_large + bar_height
-    if has_description then
-        row_height = row_height + info_font:getHeight() + 4
-    end
-    if has_next_unlock then
-        row_height = row_height + meta_font:getHeight() + 2
-    end
+    local row_height = row_padding * 2 + name_font:getHeight() + spacing_small + bar_height
 
     if alternate and window_colors.row_alternate then
         set_color(window_colors.row_alternate)
@@ -120,7 +110,6 @@ local function draw_skill_entry(skill, x, y, width, fonts, alternate)
     end
 
     local text_color = window_colors.text or { 0.75, 0.78, 0.82, 1 }
-    local muted_color = window_colors.muted or { 0.42, 0.46, 0.52, 1 }
 
     local cursor_y = y + row_padding
     local inner_width = math.max(0, width - row_padding * 2)
@@ -132,25 +121,7 @@ local function draw_skill_entry(skill, x, y, width, fonts, alternate)
     local level_text = string.format("Lv %d", math.max(1, math.floor((skill.level or 1) + 0.5)))
     love.graphics.printf(level_text, x + row_padding, cursor_y, inner_width, "right")
 
-    cursor_y = cursor_y + name_font:getHeight()
-
-    if has_description then
-        cursor_y = cursor_y + 4
-        love.graphics.setFont(info_font)
-        set_color(muted_color)
-        love.graphics.printf(skill.description, x + row_padding, cursor_y, inner_width, "left")
-        cursor_y = cursor_y + info_font:getHeight()
-    end
-
-    if has_next_unlock then
-        cursor_y = cursor_y + 2
-        love.graphics.setFont(meta_font)
-        set_color(window_colors.accent or text_color)
-        love.graphics.printf(skill.nextUnlock, x + row_padding, cursor_y, inner_width, "left")
-        cursor_y = cursor_y + meta_font:getHeight()
-    end
-
-    cursor_y = cursor_y + spacing_large
+    cursor_y = cursor_y + name_font:getHeight() + spacing_small
 
     local xp = math.max(0, skill.xp or 0)
     local required = math.max(1, skill.xpRequired or 1)
@@ -172,12 +143,10 @@ local function draw_skill_entry(skill, x, y, width, fonts, alternate)
     love.graphics.setLineWidth(1)
     love.graphics.rectangle("line", bar_x + 0.5, cursor_y + 0.5, bar_width - 1, bar_height - 1, 2, 2)
 
-    love.graphics.setFont(meta_font)
     set_color(text_color)
+    love.graphics.setFont(meta_font)
     local xp_text = string.format("%d / %d XP", math.floor(xp + 0.5), math.floor(required + 0.5))
-    love.graphics.printf(xp_text, bar_x, cursor_y - meta_font:getHeight() - 2, bar_width, "right")
-
-    cursor_y = cursor_y + bar_height
+    love.graphics.printf(xp_text, bar_x, cursor_y + (bar_height - meta_font:getHeight()) * 0.5, bar_width, "center")
 
     return row_height
 end
