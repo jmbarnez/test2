@@ -156,6 +156,15 @@ components.tooltip = {
     },
 }
 
+components.toast = {
+    colors = {
+        background = palette.surface_subtle,
+        border = palette.border,
+        text = palette.text_heading,
+        accent = palette.accent,
+    },
+}
+
 local theme = {
     palette = palette,
     typography = typography,
@@ -170,6 +179,7 @@ theme.colors = {
     hud = components.hud.colors,
     tooltip = components.tooltip.colors,
     map = components.map.colors,
+    toast = components.toast.colors,
 }
 theme.window = components.window.metrics
 

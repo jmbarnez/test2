@@ -178,7 +178,8 @@ return function(context)
                     local multiplier = damage_util.resolve_multiplier(damageType, armorType)
                     damage = damage * multiplier
                     if damage > 0 then
-                        damageEntity(target, damage)
+                        local owner = damageComponent.owner or projectile.projectile.owner
+                        damageEntity(target, damage, owner or projectile)
                     end
                 end
             end

@@ -48,7 +48,7 @@ return {
             fireMode = "projectile",
             projectileSpeed = 840,
             damage = 44,
-            fireRate = 0.32,
+            fireRate = 0.4,
             damageType = "laser",
             projectileLifetime = 5.0,
             projectileSize = 3,

@@ -88,6 +88,21 @@ function WeaponPanel.draw(context, player)
     if not entry then return end
     
     local total = #slots.list
+    local weaponInstance = entry.weaponInstance
+    local weaponComponent = (weaponInstance and weaponInstance.weapon) or player.weapon
+    if type(weaponComponent) ~= "table" then
+        weaponComponent = nil
+    end
+
+    local cooldownFraction = 0
+    local hasCooldown = false
+    local fireRate = weaponComponent and weaponComponent.fireRate
+    if weaponComponent and type(fireRate) == "number" and fireRate > 0 then
+        local remaining = math.max(weaponComponent.cooldown or 0, 0)
+        cooldownFraction = math.min(remaining / fireRate, 1)
+        hasCooldown = true
+    end
+
     local screenWidth, screenHeight = love.graphics.getWidth(), love.graphics.getHeight()
     local slotSize = (theme_spacing and theme_spacing.slot_size) or 48
     local padding = 8
@@ -127,6 +142,27 @@ function WeaponPanel.draw(context, player)
     set_color(window_colors.text or { 0.8, 0.8, 0.85, 1 })
     love.graphics.print(name, textX, iconY + 2)
     
+
+    if hasCooldown then
+        local barX = textX
+        local barY = iconY + 28
+        local barWidth = math.max(panelWidth - (barX - x) - padding, 0)
+        local barHeight = 6
+        if barWidth > 0 then
+            love.graphics.push("all")
+            set_color(window_colors.progress_background or window_colors.surface_subtle or { 0.08, 0.09, 0.12, 0.9 })
+            love.graphics.rectangle("fill", barX, barY, barWidth, barHeight)
+            if cooldownFraction > 0 then
+                set_color(window_colors.progress_fill or window_colors.accent or { 0.3, 0.6, 0.8, 1 })
+                love.graphics.rectangle("fill", barX, barY, barWidth * cooldownFraction, barHeight)
+            end
+            set_color(window_colors.border or { 0.22, 0.28, 0.36, 0.88 })
+            love.graphics.setLineWidth(1)
+            love.graphics.rectangle("line", barX, barY, barWidth, barHeight)
+            love.graphics.pop()
+        end
+    end
+
     love.graphics.setFont(fonts.small)
     set_color(window_colors.muted or { 0.6, 0.6, 0.65, 1 })
     love.graphics.print(countText, textX, iconY + slotSize - 16)

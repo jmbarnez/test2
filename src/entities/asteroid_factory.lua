@@ -2,6 +2,9 @@ local loader = require("src.blueprints.loader")
 local constants = require("src.constants.game")
 local math_util = require("src.util.math")
 local Entities = require("src.states.gameplay.entities")
+local PlayerManager = require("src.player.manager")
+local notifications = require("src.ui.notifications")
+local FloatingText = require("src.effects.floating_text")
 
 ---@diagnostic disable-next-line: undefined-global
 local love = love
@@ -11,6 +14,63 @@ local unpack = table.unpack or unpack
 local asteroid_factory = {}
 
 local asteroid_constants = constants.asteroids or {}
+local mining_xp_config = asteroid_constants.mining_xp or {}
+local BASE_MINING_XP = mining_xp_config.base or 20
+local CHUNK_MINING_XP = mining_xp_config.chunk or math.max(4, math.floor(BASE_MINING_XP * 0.4 + 0.5))
+
+local function award_mining_xp(entity, destruction_context)
+    if not (entity and destruction_context and BASE_MINING_XP > 0) then
+        return
+    end
+
+    local state = destruction_context
+    local playerId = entity.lastDamagePlayerId
+
+    if not playerId then
+        local source = entity.lastDamageSource
+        if source then
+            playerId = source.playerId
+                or source.ownerPlayerId
+                or (source.owner and source.owner.playerId)
+        end
+    end
+
+    if not playerId then
+        return
+    end
+
+    local chunkLevel = entity.chunkLevel or 0
+    local xpAward
+
+    if chunkLevel <= 0 then
+        xpAward = BASE_MINING_XP
+    else
+        local chunkBase = CHUNK_MINING_XP
+        local attenuation = math.max(0.25, 0.5 ^ chunkLevel)
+        xpAward = math.max(2, math.floor(chunkBase * attenuation + 0.5))
+    end
+
+    if xpAward > 0 then
+        PlayerManager.addSkillXP(state, "industry", "mining", xpAward, playerId)
+
+        if notifications and state then
+            notifications.push(state, {
+                text = string.format("+%d Mining XP", xpAward),
+                icon = "mining",
+                accent = { 0.42, 0.68, 0.94, 1 },
+            })
+        end
+
+        if FloatingText and state and entity.position then
+            FloatingText.add(state, entity.position, string.format("+%d XP", xpAward), {
+                offsetY = (entity.drawable and entity.drawable.radius or entity.radius or 28) * 0.5,
+                color = { 0.42, 0.78, 1.0, 1 },
+                rise = 42,
+                duration = 1.4,
+            })
+        end
+    end
+end
 
 local function deep_copy(value, cache)
     if type(value) ~= "table" then
@@ -435,6 +495,7 @@ function asteroid_factory.instantiate(blueprint, context)
 
     local previous_on_destroyed = entity.onDestroyed or destroy_body
     entity.onDestroyed = function(self, destruction_context)
+        award_mining_xp(self, destruction_context)
         spawn_chunks(self, destruction_context)
         if previous_on_destroyed then
             previous_on_destroyed(self, destruction_context)

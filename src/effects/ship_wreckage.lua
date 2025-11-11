@@ -156,6 +156,26 @@ local function compute_reference_area(entity, radius)
     return math.pi * radius * radius
 end
 
+local function build_scrap_loot(piece_radius)
+    local min_quantity = math.max(1, math.floor(piece_radius * 0.08 + 0.5))
+    local max_quantity = math.max(min_quantity, math.floor(piece_radius * 0.12 + 1))
+
+    return {
+        rolls = 1,
+        entries = {
+            {
+                id = "resource:hull_scrap",
+                quantity = {
+                    min = min_quantity,
+                    max = max_quantity,
+                },
+                chance = 1,
+                scatter = piece_radius * 0.35,
+            },
+        },
+    }
+end
+
 local function create_wreckage_piece(context, params)
     local position = params.position
     local polygon = params.polygon
@@ -179,10 +199,18 @@ local function create_wreckage_piece(context, params)
     fixture:setFriction(0.85)
     fixture:setRestitution(0.08)
 
+    local radius = params.pieceRadius or 12
+    local baseHealth = clamp((radius * 0.9) + 12, 18, 140)
+    local health = params.health or baseHealth
+
     local entity = {
         position = { x = position.x, y = position.y },
         velocity = { x = params.velocity.x, y = params.velocity.y },
         rotation = rotation,
+        health = {
+            current = health,
+            max = health,
+        },
         drawable = {
             type = "wreckage",
             polygon = polygon,
@@ -197,6 +225,9 @@ local function create_wreckage_piece(context, params)
             age = 0,
             alpha = 1,
         },
+        loot = params.loot,
+        armorType = "wreckage",
+        mass = params.density or 0.5,
         body = body,
         shape = shape,
         fixture = fixture,
@@ -204,6 +235,19 @@ local function create_wreckage_piece(context, params)
 
     body:setUserData(entity)
     fixture:setUserData({ type = "wreckage", entity = entity })
+
+    entity.onDamaged = function(target, amount)
+        if not target.health then
+            return
+        end
+        target.health.current = math.max(0, (target.health.current or target.health.max or 0) - amount)
+        if target.health.current <= 0 then
+            target.pendingDestroy = true
+        end
+    end
+
+    entity.onDestroyed = function(target)
+    end
 
     context.world:add(entity)
 end
@@ -270,6 +314,8 @@ function ShipWreckage.spawn(ship, context)
 
         local density = clamp(piece_radius * 0.12, 0.08, 4)
 
+        local pieceHealth = clamp((piece_radius * 1.25) + 24, 30, 200)
+
         create_wreckage_piece(context, {
             position = { x = px, y = py },
             polygon = polygon,
@@ -284,6 +330,9 @@ function ShipWreckage.spawn(ship, context)
             fillColor = fill_color,
             outlineColor = outline_color,
             lineWidth = clamp(piece_radius * 0.12, 1.2, 2.4),
+            pieceRadius = piece_radius,
+            health = pieceHealth,
+            loot = build_scrap_loot(piece_radius),
         })
     end
 end

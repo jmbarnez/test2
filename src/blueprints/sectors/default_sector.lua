@@ -22,4 +22,13 @@ return {
         width = 20000,
         height = 20000,
     },
+    stations = {
+        {
+            id = "hub_station",
+            position = {
+                x = 10000,
+                y = 10000,
+            },
+        },
+    },
 }

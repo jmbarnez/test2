@@ -1,9 +1,41 @@
 local PlayerWeapons = require("src.player.weapons")
 local constants = require("src.constants.game")
 
+---@diagnostic disable-next-line: undefined-global
+local love = love
+
 local STARTING_CURRENCY = (constants.player and constants.player.starting_currency) or 0
 
 local PlayerManager = {}
+
+local DEFAULT_SKILLS = {
+    industry = {
+        order = 30,
+        label = "Industry",
+        skills = {
+            mining = {
+                order = 10,
+                label = "Mining",
+                level = 1,
+                xp = 25,
+                xpRequired = 120,
+                xpRate = 0,
+                description = "Improves resource extraction yield and mining laser efficiency.",
+                nextUnlock = "Level 2: +10% ore yield",
+            },
+            salvaging = {
+                order = 20,
+                label = "Salvaging",
+                level = 1,
+                xp = 40,
+                xpRequired = 140,
+                xpRate = 0,
+                description = "Speeds up recovery of wreckage and boosts rare component chances.",
+                nextUnlock = "Level 2: +12% salvage speed",
+            },
+        },
+    },
+}
 
 local function copy_table(source)
     if type(source) ~= "table" then
@@ -35,6 +67,230 @@ local function normalize_level(levelData)
     return nil
 end
 
+local function extract_currency_from_entity(entity)
+    if not entity then
+        return nil
+    end
+
+    local wallet = entity.wallet
+    if type(wallet) == "table" then
+        if type(wallet.balance) == "number" then
+            return wallet.balance
+        elseif type(wallet.credits) == "number" then
+            return wallet.credits
+        end
+    elseif type(wallet) == "number" then
+        return wallet
+    end
+
+    local currency = entity.currency
+    if type(currency) == "number" then
+        return currency
+    end
+
+    local credits = entity.credits
+    if type(credits) == "number" then
+        return credits
+    end
+
+    return nil
+end
+
+local function apply_currency_to_entity(state, entity)
+    if not (state and entity) then
+        return
+    end
+
+    local currency = state.playerCurrency
+    entity.currency = currency
+    entity.credits = currency
+
+    local wallet = entity.wallet
+    if type(wallet) ~= "table" then
+        wallet = {}
+        entity.wallet = wallet
+    end
+
+    wallet.balance = currency
+    wallet.credits = currency
+end
+
+local function ensure_player_currency(state, entity, defaultValue)
+    if not state then
+        return
+    end
+
+    if state.playerCurrency == nil then
+        local derived = extract_currency_from_entity(entity)
+            or defaultValue
+        if derived == nil then
+            derived = STARTING_CURRENCY
+        end
+        state.playerCurrency = derived
+    end
+
+    if entity then
+        apply_currency_to_entity(state, entity)
+    end
+end
+
+local function resolve_state_reference(context)
+    if not context then
+        return nil
+    end
+
+    if type(context.state) == "table" then
+        return context.state
+    end
+
+    return context
+end
+
+function PlayerManager.getCurrency(context)
+    local state = resolve_state_reference(context)
+    if not state then
+        return nil
+    end
+
+    if state.playerCurrency == nil then
+        local ship = PlayerManager.getCurrentShip(state)
+        if ship then
+            ensure_player_currency(state, ship, nil)
+        end
+    end
+
+    return state.playerCurrency
+end
+
+function PlayerManager.setCurrency(context, amount)
+    local state = resolve_state_reference(context)
+    if not state then
+        return nil
+    end
+
+    local numericAmount = tonumber(amount)
+    if not numericAmount then
+        return state.playerCurrency
+    end
+
+    state.playerCurrency = numericAmount
+    apply_currency_to_entity(state, PlayerManager.getCurrentShip(state))
+
+    return numericAmount
+end
+
+function PlayerManager.adjustCurrency(context, delta)
+    local state = resolve_state_reference(context)
+    if not state then
+        return nil
+    end
+
+    local change = tonumber(delta)
+    if not change then
+        return state.playerCurrency
+    end
+
+    local current = state.playerCurrency or 0
+    return PlayerManager.setCurrency(state, current + change)
+end
+
+function PlayerManager.syncCurrency(context)
+    local state = resolve_state_reference(context)
+    if not state then
+        return nil
+    end
+
+    ensure_player_currency(state, PlayerManager.getCurrentShip(state), nil)
+    return state.playerCurrency
+end
+
+local function ensure_skills(pilot)
+    if type(pilot) ~= "table" then
+        return
+    end
+
+    pilot.skills = pilot.skills or {}
+
+    for categoryId, defaults in pairs(DEFAULT_SKILLS) do
+        local category = pilot.skills[categoryId]
+        if type(category) ~= "table" then
+            category = copy_table(defaults)
+            pilot.skills[categoryId] = category
+        else
+            category.label = category.label or defaults.label
+            category.order = category.order or defaults.order
+            category.skills = category.skills or {}
+
+            for skillId, skillDefaults in pairs(defaults.skills or {}) do
+                local skill = category.skills[skillId]
+                if type(skill) ~= "table" then
+                    skill = copy_table(skillDefaults)
+                    category.skills[skillId] = skill
+                else
+                    for key, defaultValue in pairs(skillDefaults) do
+                        if skill[key] == nil then
+                            if type(defaultValue) == "table" then
+                                skill[key] = copy_table(defaultValue)
+                            else
+                                skill[key] = defaultValue
+                            end
+                        end
+                    end
+                end
+
+                skill.label = skill.label or skill.name or skillId
+                skill.order = skill.order or skillDefaults.order or 0
+                if type(skill.level) ~= "number" then
+                    skill.level = skillDefaults.level or 1
+                end
+                if skill.level < 1 then
+                    skill.level = 1
+                end
+
+                if type(skill.xp) ~= "number" then
+                    skill.xp = skillDefaults.xp or 0
+                end
+                if skill.xp < 0 then
+                    skill.xp = 0
+                end
+
+                if type(skill.xpRequired) ~= "number" then
+                    skill.xpRequired = skillDefaults.xpRequired or 100
+                end
+                if skill.xpRequired <= 0 then
+                    skill.xpRequired = skillDefaults.xpRequired or 100
+                end
+            end
+        end
+    end
+end
+
+local function resolve_skill(pilot, categoryId, skillId)
+    if not pilot then
+        return nil
+    end
+
+    ensure_skills(pilot)
+
+    local categories = pilot.skills or {}
+    local category = categories[categoryId]
+    if not category then
+        return nil
+    end
+
+    if type(category.skills) ~= "table" then
+        category.skills = {}
+    end
+
+    local skill = category.skills[skillId]
+    if type(skill) ~= "table" then
+        category.skills[skillId] = nil
+        return nil
+    end
+
+    return skill
+end
+
 function PlayerManager.ensurePilot(state, playerId)
     if not state then
         return nil
@@ -60,7 +316,66 @@ function PlayerManager.ensurePilot(state, playerId)
         pilot.level.current = pilot.level.current or 1
     end
 
+    ensure_skills(pilot)
+
     return pilot
+end
+
+local function resolve_player_id(state, playerId)
+    if playerId then
+        return playerId
+    end
+
+    if state and state.localPlayerId then
+        return state.localPlayerId
+    end
+
+    return nil
+end
+
+function PlayerManager.addSkillXP(state, categoryId, skillId, amount, playerId)
+    amount = tonumber(amount) or 0
+    if not (state and categoryId and skillId) or amount <= 0 then
+        return false
+    end
+
+    local resolvedPlayerId = resolve_player_id(state, playerId)
+    local pilot = PlayerManager.ensurePilot(state, resolvedPlayerId)
+    if not pilot then
+        return false
+    end
+
+    local skill = resolve_skill(pilot, categoryId, skillId)
+    if not skill then
+        return false
+    end
+
+    skill.xp = math.max(0, (skill.xp or 0) + amount)
+
+    local leveledUp = false
+    local level = math.max(1, skill.level or 1)
+    local xpRequired = math.max(1, skill.xpRequired or 100)
+
+    while skill.xp >= xpRequired do
+        skill.xp = skill.xp - xpRequired
+        level = level + 1
+        xpRequired = math.max(xpRequired + 50, math.floor(xpRequired * 1.25 + 0.5))
+        leveledUp = true
+    end
+
+    skill.level = level
+    skill.xpRequired = xpRequired
+
+    if leveledUp then
+        local loveTimer = love and love.timer
+        if loveTimer and loveTimer.getTime then
+            skill.lastLevelUpTime = loveTimer.getTime()
+        else
+            skill.lastLevelUpTime = os.time()
+        end
+    end
+
+    return true, leveledUp
 end
 
 function PlayerManager.applyLevel(state, levelData, playerId)
@@ -77,6 +392,8 @@ function PlayerManager.applyLevel(state, levelData, playerId)
     else
         pilot.level.current = pilot.level.current or 1
     end
+
+    ensure_skills(pilot)
 
     return pilot
 end
@@ -125,21 +442,7 @@ function PlayerManager.attachShip(state, shipEntity, levelData, playerId)
         state.playerShip = shipEntity
         state.player = shipEntity
 
-        state.playerCurrency = state.playerCurrency or STARTING_CURRENCY
-
-        if shipEntity then
-            if shipEntity.currency == nil then
-                shipEntity.currency = state.playerCurrency
-            end
-            if shipEntity.credits == nil then
-                shipEntity.credits = state.playerCurrency
-            end
-            if shipEntity.wallet == nil and STARTING_CURRENCY > 0 then
-                shipEntity.wallet = { balance = state.playerCurrency }
-            elseif type(shipEntity.wallet) == "table" then
-                shipEntity.wallet.balance = shipEntity.wallet.balance or state.playerCurrency
-            end
-        end
+        ensure_player_currency(state, shipEntity, STARTING_CURRENCY)
     else
         shipEntity.pilot = nil
         if levelData then

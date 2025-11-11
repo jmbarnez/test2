@@ -11,12 +11,21 @@ local function createCargoUIState()
     }
 end
 
+local function createSkillsUIState()
+    return {
+        visible = false,
+        dragging = false,
+        _was_mouse_down = false,
+    }
+end
+
 local function any_modal_visible(state)
     return (state.pauseUI and state.pauseUI.visible)
         or (state.deathUI and state.deathUI.visible)
         or (state.cargoUI and state.cargoUI.visible)
         or (state.optionsUI and state.optionsUI.visible)
         or (state.mapUI and state.mapUI.visible)
+        or (state.skillsUI and state.skillsUI.visible)
 end
 
 local function createDeathUIState()
@@ -115,6 +124,7 @@ function UIStateManager.initialize(state)
     state.pauseUI = state.pauseUI or createPauseUIState()
     state.optionsUI = state.optionsUI or createOptionsUIState()
     state.mapUI = state.mapUI or createMapUIState()
+    state.skillsUI = state.skillsUI or createSkillsUIState()
     
     -- Initialize input state
     state.uiInput = state.uiInput or {
@@ -140,6 +150,7 @@ function UIStateManager.cleanup(state)
     state.pauseUI = nil
     state.optionsUI = nil
     state.mapUI = nil
+    state.skillsUI = nil
     state.uiInput = nil
     state.respawnRequested = nil
     state.isPaused = nil
@@ -186,6 +197,55 @@ function UIStateManager.toggleCargoUI(state)
     end
 
     state.cargoUI.visible = not state.cargoUI.visible
+end
+
+local function setSkillsVisibility(state, visible)
+    if not (state and state.skillsUI) then
+        return
+    end
+
+    local skillsUI = state.skillsUI
+    if skillsUI.visible == visible then
+        return
+    end
+
+    skillsUI.visible = visible
+    skillsUI.dragging = false
+
+    if not visible then
+        skillsUI._was_mouse_down = love.mouse and love.mouse.isDown and love.mouse.isDown(1) or false
+    end
+
+    if state.uiInput then
+        if visible then
+            state.uiInput.mouseCaptured = true
+            state.uiInput.keyboardCaptured = true
+        else
+            local keepCaptured = any_modal_visible(state)
+            state.uiInput.mouseCaptured = not not keepCaptured
+            state.uiInput.keyboardCaptured = not not keepCaptured
+        end
+    end
+end
+
+function UIStateManager.showSkillsUI(state)
+    setSkillsVisibility(state, true)
+end
+
+function UIStateManager.hideSkillsUI(state)
+    setSkillsVisibility(state, false)
+end
+
+function UIStateManager.toggleSkillsUI(state)
+    if not (state and state.skillsUI) then
+        return
+    end
+
+    setSkillsVisibility(state, not state.skillsUI.visible)
+end
+
+function UIStateManager.isSkillsUIVisible(state)
+    return state and state.skillsUI and state.skillsUI.visible
 end
 
 local function setPauseVisibility(state, visible)

@@ -11,6 +11,7 @@ local love = love
 local DEFAULT_PROJECTILE_COLOR = { 0.2, 0.8, 1.0 }
 local DEFAULT_PROJECTILE_GLOW = { 0.5, 0.9, 1.0 }
 local DEFAULT_WEAPON_OFFSET = 30
+local PROJECTILE_GROUP_INDEX = -32
 
 local function resolve_damage_multiplier(shooter)
     if shooter and shooter.enemy then
@@ -108,6 +109,7 @@ local function spawn_projectile(tinyWorld, physicsWorld, shooter, startX, startY
     projectileComponent.damage = baseDamage * damageMultiplier
     projectileComponent.owner = shooter
     projectileComponent.ownerPlayerId = shooter and shooter.playerId or nil
+    projectileComponent.groupIndex = projectileComponent.groupIndex or PROJECTILE_GROUP_INDEX
     if not projectileComponent.damageType then
         projectileComponent.damageType = weapon.damageType
             or (constants.damage and constants.damage.defaultDamageType)
@@ -185,6 +187,9 @@ local function spawn_projectile(tinyWorld, physicsWorld, shooter, startX, startY
             type = "projectile",
             collider = "projectile"
         })
+        if projectileComponent.groupIndex then
+            fixture:setGroupIndex(projectileComponent.groupIndex)
+        end
         if physicsConfig and physicsConfig.mass then
             body:setMassData(physicsConfig.mass, physicsConfig.massCenterX or 0, physicsConfig.massCenterY or 0, physicsConfig.inertia or body:getInertia())
         else
@@ -256,6 +261,9 @@ local function fire_hitscan(entity, startX, startY, dirX, dirY, weapon, physicsW
             end
             local user = fixture:getUserData()
             if type(user) == "table" and user.entity then
+                if user.type == "projectile" then
+                    return -1
+                end
                 if fraction < closestFraction then
                     closestFraction = fraction
                     hitInfo = {
@@ -300,7 +308,7 @@ local function fire_hitscan(entity, startX, startY, dirX, dirY, weapon, physicsW
                 local multiplier = damage_util.resolve_multiplier(damageType, armorType)
                 damage = damage * multiplier
                 if damage > 0 then
-                    damageEntity(target, damage)
+                    damageEntity(target, damage, entity)
                 end
             end
         end

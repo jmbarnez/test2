@@ -8,6 +8,7 @@ local createRenderSystem = require("src.renderers.render")
 local createPlayerControlSystem = require("src.systems.player_control")
 local createAsteroidSpawner = require("src.spawners.asteroid")
 local createEnemySpawner = require("src.spawners.enemy")
+local createStationSpawner = require("src.spawners.station")
 local createEnemyAISystem = require("src.systems.enemy_ai")
 local createWeaponSystem = require("src.systems.weapon_fire")
 local createProjectileSystem = require("src.systems.projectile")
@@ -19,8 +20,17 @@ local createDestructionSystem = require("src.systems.destruction")
 local createLootDropSystem = require("src.systems.loot_drop")
 local createPickupSystem = require("src.systems.pickup")
 local Entities = require("src.states.gameplay.entities")
+local PlayerManager = require("src.player.manager")
 
 local Systems = {}
+
+local SALVAGE_PICKUP_XP = {
+    ["resource:hull_scrap"] = {
+        category = "industry",
+        skill = "salvaging",
+        xp = 10,
+    },
+}
 
 local function ensure_world(state)
     if not state.world then
@@ -33,6 +43,24 @@ local function add_common_systems(state)
     state.movementSystem = state.world:addSystem(createMovementSystem())
     state.pickupSystem = state.world:addSystem(createPickupSystem({
         state = state,
+        onCollected = function(pickup, ship)
+            if not (pickup and ship and ship.player) then
+                return
+            end
+
+            local item = pickup.item
+            local itemId = (item and item.id) or pickup.itemId
+            if not itemId then
+                return
+            end
+
+            local spec = SALVAGE_PICKUP_XP[itemId]
+            if not spec then
+                return
+            end
+
+            PlayerManager.addSkillXP(state, spec.category, spec.skill, spec.xp, ship.playerId)
+        end,
     }))
     state.weaponSystem = state.world:addSystem(createWeaponSystem(state))
     state.shipSystem = state.world:addSystem(createShipSystem(state))
@@ -49,10 +77,9 @@ end
 function Systems.initialize(state, damageCallback)
     ensure_world(state)
 
-    state.uiInput = {
-        mouseCaptured = false,
-        keyboardCaptured = false,
-    }
+    state.uiInput = state.uiInput or {}
+    state.uiInput.mouseCaptured = false
+    state.uiInput.keyboardCaptured = false
 
     if damageCallback then
         state.damageEntity = damageCallback
@@ -73,6 +100,7 @@ function Systems.initialize(state, damageCallback)
 
     state.spawnerSystem = state.world:addSystem(createAsteroidSpawner(state))
     state.enemySpawnerSystem = state.world:addSystem(createEnemySpawner(state))
+    state.stationSpawnerSystem = state.world:addSystem(createStationSpawner(state))
 
     add_common_systems(state)
 
@@ -89,9 +117,16 @@ function Systems.initialize(state, damageCallback)
 end
 
 function Systems.teardown(state)
+    if state.uiInput then
+        state.uiInput.mouseCaptured = false
+        state.uiInput.keyboardCaptured = false
+        state.uiInput = nil
+    end
+
     state.controlSystem = nil
     state.spawnerSystem = nil
     state.enemySpawnerSystem = nil
+    state.stationSpawnerSystem = nil
     state.movementSystem = nil
     state.pickupSystem = nil
     state.renderSystem = nil

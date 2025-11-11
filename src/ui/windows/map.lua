@@ -1,4 +1,5 @@
 local theme = require("src.ui.theme")
+local window = require("src.ui.window")
 local UIStateManager = require("src.ui.state_manager")
 local UIButton = require("src.ui.components.button")
 local PlayerManager = require("src.player.manager")
@@ -72,18 +73,31 @@ local function clamp_center(state, bounds, rect, scale)
     state.centerY = clamp(state.centerY, bounds.y + half_view_world_height, bounds.y + bounds.height - half_view_world_height)
 end
 
-local function get_map_rect(screen_width, screen_height)
+local function get_window_rect(screen_width, screen_height)
     local spacing = theme.get_spacing()
-    local margin = math.max(36, spacing and spacing.window_margin or 36)
+    local margin = spacing and spacing.window_margin or 48
 
-    local rect_width = math.max(200, screen_width - margin * 2)
-    local rect_height = math.max(200, screen_height - margin * 2)
+    local rect_width = math.max(420, screen_width - margin * 2)
+    local rect_height = math.max(320, screen_height - margin * 2)
 
     return {
-        x = (screen_width - rect_width) * 0.5,
-        y = (screen_height - rect_height) * 0.5,
+        x = math.max(0, (screen_width - rect_width) * 0.5),
+        y = math.max(0, (screen_height - rect_height) * 0.5),
         width = rect_width,
         height = rect_height,
+    }
+end
+
+local function get_map_rect(content)
+    if not content then
+        return nil
+    end
+
+    return {
+        x = content.x,
+        y = content.y,
+        width = math.max(1, content.width),
+        height = math.max(1, content.height),
     }
 end
 
@@ -95,43 +109,132 @@ local function draw_legend(rect, fonts, colors)
         { label = "Asteroids", color = colors.asteroid },
     }
 
-    local padding = 16
+    local controls = {
+        "Drag to pan",
+        "Scroll to zoom",
+    }
+
+    local spacing = theme.get_spacing() or {}
+    local panelMargin = spacing.window_padding or 24
+
+    local padding = 18
     local swatchSize = 12
-    local lineSpacing = 8
-    local font = fonts.small or fonts.body
+    local swatchSpacing = 12
+    local rowSpacing = 6
+    local headingSpacing = 8
+    local sectionSpacing = 14
+    local controlSpacing = 4
 
-    local panelWidth = 160
-    local panelHeight = padding * 2 + (#legendItems * (swatchSize + lineSpacing))
-    panelHeight = panelHeight - lineSpacing
+    local labelFont = fonts.small or fonts.body
+    local headingFont = fonts.body or labelFont
+    local hintFont = fonts.tiny or labelFont
 
-    local panelX = rect.x + padding
-    local panelY = rect.y + padding
+    local headingText = "MAP LEGEND"
 
-    love.graphics.setColor(colors.background)
-    love.graphics.rectangle("fill", panelX, panelY, panelWidth, panelHeight, 6, 6)
+    local headingHeight = headingFont:getHeight()
+    local labelHeight = labelFont:getHeight()
+    local hintHeight = hintFont:getHeight()
 
-    love.graphics.setColor(colors.border)
-    love.graphics.setLineWidth(1)
-    love.graphics.rectangle("line", panelX + 0.5, panelY + 0.5, panelWidth - 1, panelHeight - 1, 6, 6)
-
-    love.graphics.setFont(font)
-
-    local textColor = colors.legend_text or { 0.8, 0.82, 0.86, 1 }
-    local y = panelY + padding
-    local x = panelX + padding
-
+    local maxLabelWidth = 0
     for _, item in ipairs(legendItems) do
-        love.graphics.setColor(item.color or textColor)
-        love.graphics.rectangle("fill", x, y + (font:getHeight() - swatchSize) * 0.5, swatchSize, swatchSize, 3, 3)
-
-        love.graphics.setColor(textColor)
-        love.graphics.print(item.label, x + swatchSize + 10, y)
-
-        y = y + font:getHeight() + lineSpacing
+        maxLabelWidth = math.max(maxLabelWidth, labelFont:getWidth(item.label))
     end
 
-    love.graphics.setColor(colors.legend_muted or { 0.6, 0.65, 0.7, 1 })
-    love.graphics.print("Drag to pan\nScroll to zoom", x, panelY + panelHeight - padding - font:getHeight() * 2)
+    local maxControlWidth = 0
+    for _, text in ipairs(controls) do
+        maxControlWidth = math.max(maxControlWidth, hintFont:getWidth(text))
+    end
+
+    local contentWidth = math.max(
+        headingFont:getWidth(headingText),
+        swatchSize + swatchSpacing + maxLabelWidth,
+        maxControlWidth
+    )
+
+    local panelWidth = padding * 2 + contentWidth
+    local maxPanelWidth = rect.width - panelMargin * 2
+    if maxPanelWidth <= 0 then
+        maxPanelWidth = rect.width * 0.5
+    end
+    panelWidth = math.min(panelWidth, maxPanelWidth)
+
+    local legendSectionHeight = (#legendItems > 0) and (#legendItems * labelHeight + (#legendItems - 1) * rowSpacing) or 0
+    local controlsHeight = (#controls > 0) and (#controls * hintHeight + (#controls - 1) * controlSpacing) or 0
+
+    local panelHeight = padding + headingHeight
+    if legendSectionHeight > 0 then
+        panelHeight = panelHeight + headingSpacing + legendSectionHeight
+    end
+    if controlsHeight > 0 then
+        panelHeight = panelHeight + sectionSpacing + controlsHeight
+    end
+    panelHeight = panelHeight + padding
+
+    local panelX = rect.x + panelMargin
+    local panelY = rect.y + panelMargin
+
+    local palette = theme.palette or {}
+    local panelColor = colors.legend_panel or palette.surface_subtle or colors.background or { 0.08, 0.09, 0.12, 0.94 }
+    local borderColor = colors.legend_border or colors.border or palette.border or { 0.22, 0.28, 0.36, 1 }
+    local textColor = colors.legend_text or { 0.8, 0.82, 0.86, 1 }
+    local mutedColor = colors.legend_muted or { 0.6, 0.65, 0.7, 1 }
+    local headingColor = colors.legend_heading or textColor
+
+    love.graphics.setColor(panelColor)
+    love.graphics.rectangle("fill", panelX, panelY, panelWidth, panelHeight)
+
+    love.graphics.setColor(borderColor)
+    love.graphics.setLineWidth(1)
+    love.graphics.rectangle("line", panelX + 0.5, panelY + 0.5, panelWidth - 1, panelHeight - 1)
+
+    local textX = panelX + padding
+    local currentY = panelY + padding
+
+    love.graphics.setFont(headingFont)
+    love.graphics.setColor(headingColor)
+    love.graphics.print(headingText, textX, currentY)
+    currentY = currentY + headingHeight
+
+    if legendSectionHeight > 0 then
+        currentY = currentY + headingSpacing
+        love.graphics.setFont(labelFont)
+
+        for index, item in ipairs(legendItems) do
+            local swatchY = currentY + (labelHeight - swatchSize) * 0.5
+
+            love.graphics.setColor(item.color or textColor)
+            love.graphics.rectangle("fill", textX, swatchY, swatchSize, swatchSize)
+
+            love.graphics.setColor(textColor)
+            love.graphics.print(item.label, textX + swatchSize + swatchSpacing, currentY)
+
+            currentY = currentY + labelHeight
+            if index < #legendItems then
+                currentY = currentY + rowSpacing
+            end
+        end
+    end
+
+    if controlsHeight > 0 then
+        currentY = currentY + sectionSpacing * 0.5
+
+        local dividerY = currentY
+        love.graphics.setColor(colors.legend_divider or borderColor)
+        love.graphics.setLineWidth(1)
+        love.graphics.line(textX, dividerY, panelX + panelWidth - padding, dividerY)
+
+        currentY = currentY + sectionSpacing * 0.5
+
+        love.graphics.setFont(hintFont)
+        love.graphics.setColor(mutedColor)
+        for index, text in ipairs(controls) do
+            love.graphics.print(text, textX, currentY)
+            currentY = currentY + hintHeight
+            if index < #controls then
+                currentY = currentY + controlSpacing
+            end
+        end
+    end
 end
 
 local function draw_entities(context, player, rect, bounds, colors, scale, centerX, centerY)
@@ -192,15 +295,10 @@ function map_window.draw(context)
     local fonts = theme.get_fonts()
     local colors = theme.colors.map or {}
 
-    if context and context.uiInput then
-        context.uiInput.mouseCaptured = true
-        context.uiInput.keyboardCaptured = true
-    end
-
     local screenWidth = love.graphics.getWidth()
     local screenHeight = love.graphics.getHeight()
 
-    local rect = get_map_rect(screenWidth, screenHeight)
+    local windowRect = get_window_rect(screenWidth, screenHeight)
 
     state.zoom = clamp(state.zoom or 1, state.min_zoom or 0.35, state.max_zoom or 6)
 
@@ -209,35 +307,9 @@ function map_window.draw(context)
         state._just_opened = false
     end
 
-    local baseScale = math.min(rect.width / bounds.width, rect.height / bounds.height)
-    local scale = baseScale * state.zoom
-
-    clamp_center(state, bounds, rect, scale)
-
     local mouseX, mouseY = love.mouse.getPosition()
     local isMouseDown = love.mouse.isDown(1)
     local justPressed = isMouseDown and not state._was_mouse_down
-
-    if justPressed and point_in_rect(mouseX, mouseY, rect) then
-        state.dragging = true
-        state.drag_start_mouse_x = mouseX
-        state.drag_start_mouse_y = mouseY
-        state.drag_start_center_x = state.centerX
-        state.drag_start_center_y = state.centerY
-    elseif not isMouseDown then
-        state.dragging = false
-    end
-
-    if state.dragging and isMouseDown then
-        local dx = (mouseX - (state.drag_start_mouse_x or mouseX)) / scale
-        local dy = (mouseY - (state.drag_start_mouse_y or mouseY)) / scale
-
-        state.centerX = (state.drag_start_center_x or state.centerX) - dx
-        state.centerY = (state.drag_start_center_y or state.centerY) - dy
-        clamp_center(state, bounds, rect, scale)
-    end
-
-    state._was_mouse_down = isMouseDown
 
     love.graphics.push("all")
     love.graphics.origin()
@@ -245,12 +317,72 @@ function map_window.draw(context)
     love.graphics.setColor(colors.overlay or { 0, 0, 0, 0.78 })
     love.graphics.rectangle("fill", 0, 0, screenWidth, screenHeight)
 
-    love.graphics.setColor(colors.background or { 0.05, 0.06, 0.08, 0.95 })
-    love.graphics.rectangle("fill", rect.x, rect.y, rect.width, rect.height, 8, 8)
+    local frame = window.draw_frame {
+        x = windowRect.x,
+        y = windowRect.y,
+        width = windowRect.width,
+        height = windowRect.height,
+        title = state.title or "Sector Map",
+        fonts = fonts,
+        state = state,
+        input = {
+            x = mouseX,
+            y = mouseY,
+            is_down = isMouseDown,
+            just_pressed = justPressed,
+        },
+        show_close = true,
+        bottom_bar_height = 0,
+    }
 
-    love.graphics.setColor(colors.border or { 0.2, 0.26, 0.34, 1 })
-    love.graphics.setLineWidth(2)
-    love.graphics.rectangle("line", rect.x + 1, rect.y + 1, rect.width - 2, rect.height - 2, 8, 8)
+    local contentFrame = frame and (frame.content_full or frame.content)
+    local rect = get_map_rect(contentFrame)
+    if not rect then
+        love.graphics.pop()
+        return false
+    end
+
+    if context and context.uiInput then
+        if frame.dragging or state.mapDragging then
+            context.uiInput.mouseCaptured = true
+        end
+        context.uiInput.keyboardCaptured = true
+    end
+
+    local baseScale = math.min(rect.width / bounds.width, rect.height / bounds.height)
+    local scale = baseScale * state.zoom
+
+    clamp_center(state, bounds, rect, scale)
+
+    if justPressed and point_in_rect(mouseX, mouseY, rect) then
+        state.mapDragging = true
+        state.mapDragStartMouseX = mouseX
+        state.mapDragStartMouseY = mouseY
+        state.mapDragStartCenterX = state.centerX
+        state.mapDragStartCenterY = state.centerY
+    elseif not isMouseDown then
+        state.mapDragging = false
+    end
+
+    if state.mapDragging and isMouseDown then
+        local dx = (mouseX - (state.mapDragStartMouseX or mouseX)) / scale
+        local dy = (mouseY - (state.mapDragStartMouseY or mouseY)) / scale
+
+        state.centerX = (state.mapDragStartCenterX or state.centerX) - dx
+        state.centerY = (state.mapDragStartCenterY or state.centerY) - dy
+        clamp_center(state, bounds, rect, scale)
+    end
+
+    state._was_mouse_down = isMouseDown
+
+    love.graphics.setColor(colors.background or theme.palette.surface_subtle or { 0.05, 0.06, 0.08, 0.95 })
+    love.graphics.rectangle("fill", rect.x, rect.y, rect.width, rect.height)
+
+    if colors.border then
+        love.graphics.setColor(colors.border)
+        love.graphics.setLineWidth(1)
+        love.graphics.rectangle("line", rect.x + 0.5, rect.y + 0.5, rect.width - 1, rect.height - 1)
+    end
 
     love.graphics.push()
     love.graphics.setScissor(rect.x, rect.y, rect.width, rect.height)
@@ -319,7 +451,14 @@ function map_window.draw(context)
         clamp_center(state, bounds, rect, baseScale * state.zoom)
     end
 
+    local shouldClose = frame and frame.close_clicked
+
     love.graphics.pop()
+
+    if shouldClose then
+        UIStateManager.hideMapUI(context)
+        return true
+    end
 
     return true
 end

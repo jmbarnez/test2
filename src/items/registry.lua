@@ -5,6 +5,7 @@ local weaponByBlueprint = {}
 local builtin_definitions = {
     require("src.items.definitions.resource_ore_chunk"),
     require("src.items.definitions.resource_rare_crystal"),
+    require("src.items.definitions.resource_hull_scrap"),
 }
 
 local function deep_copy(value, cache)

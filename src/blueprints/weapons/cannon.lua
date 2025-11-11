@@ -50,7 +50,7 @@ return {
             fireMode = "projectile",
             projectileSpeed = 450,
             damage = 90,
-            fireRate = 0.5,
+            fireRate = 2.0,
             damageType = "kinetic",
             projectileLifetime = 2.0,
             projectileSize = 6,

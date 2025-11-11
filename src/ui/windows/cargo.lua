@@ -3,6 +3,8 @@ local theme = require("src.ui.theme")
 local window = require("src.ui.window")
 local tooltip = require("src.ui.tooltip")
 local PlayerManager = require("src.player.manager")
+local Items = require("src.items.registry")
+local loader = require("src.blueprints.loader")
 local utf8 = require("utf8")
 ---@diagnostic disable-next-line: undefined-global
 local love = love
@@ -302,20 +304,220 @@ end
 
 local function create_item_tooltip(item)
     if not item then return end
-    
-    local tooltip_body = {}
-    if item.quantity then
-        tooltip_body[#tooltip_body + 1] = string.format("Quantity: %s", item.quantity)
+
+    local definition = item.id and Items.get(item.id) or nil
+
+    local function format_number(value, decimals)
+        if type(value) ~= "number" then
+            return tostring(value or "--")
+        end
+
+        if not decimals then
+            if math.abs(value - math.floor(value)) < 0.001 then
+                return string.format("%d", value)
+            end
+
+            local magnitude = math.abs(value)
+            if magnitude >= 100 then
+                decimals = 0
+            elseif magnitude >= 10 then
+                decimals = 1
+            else
+                decimals = 2
+            end
+        end
+
+        return string.format("%." .. tostring(decimals) .. "f", value)
     end
-    if item.volume then
-        tooltip_body[#tooltip_body + 1] = string.format("Volume: %s", item.volume)
+
+    local function capitalize(value)
+        if type(value) ~= "string" or value == "" then
+            return value
+        end
+        return value:sub(1, 1):upper() .. value:sub(2)
+    end
+
+    local function append_line(body, text)
+        if type(text) == "string" and text ~= "" then
+            body[#body + 1] = text
+        end
+    end
+
+    local function is_weapon_item(target)
+        if type(target) ~= "table" then
+            return false
+        end
+        if target.type == "weapon" then
+            return true
+        end
+        if target.blueprintCategory == "weapons" then
+            return true
+        end
+        if type(target.id) == "string" and target.id:match("^weapon:") then
+            return true
+        end
+        return false
+    end
+
+    local function extract_blueprint_id(target)
+        if type(target) ~= "table" then
+            return nil
+        end
+        if type(target.blueprintId) == "string" then
+            return target.blueprintId
+        end
+        if type(target.id) == "string" then
+            local blueprintId = target.id:match("^weapon:(.+)")
+            if blueprintId then
+                return blueprintId
+            end
+        end
+        return nil
+    end
+
+    local tooltip_body = {}
+
+    local item_type = (definition and definition.type) or item.type
+    if item_type then
+        append_line(tooltip_body, string.format("Type: %s", capitalize(tostring(item_type))))
+    end
+
+    if item.stackable ~= nil then
+        append_line(tooltip_body, string.format("Stackable: %s", item.stackable and "Yes" or "No"))
+    end
+
+    if item.installed ~= nil then
+        append_line(tooltip_body, string.format("Installed: %s", item.installed and "Yes" or "No"))
+    end
+
+    local slot = item.slot or (definition and definition.assign)
+    if slot then
+        append_line(tooltip_body, string.format("Slot: %s", tostring(slot)))
+    end
+
+    local quantity = item.quantity or (definition and definition.defaultQuantity)
+    if quantity then
+        append_line(tooltip_body, string.format("Quantity: %s", format_number(quantity, 0)))
+    end
+
+    local per_unit_volume = item.volume or item.unitVolume or (definition and (definition.volume or definition.unitVolume))
+    if per_unit_volume then
+        append_line(tooltip_body, string.format("Volume (per): %s", format_number(per_unit_volume)))
+        if quantity and quantity > 1 then
+            append_line(tooltip_body, string.format("Volume (total): %s", format_number(per_unit_volume * quantity)))
+        end
+    end
+
+    local description = item.description or (definition and definition.description)
+
+    if is_weapon_item(item) then
+        local weapon_stats = {}
+        local function append_weapon_stat(label, value, suffix, decimals)
+            if value == nil then
+                return
+            end
+            local text
+            if type(value) == "number" then
+                text = format_number(value, decimals)
+            else
+                text = tostring(value)
+            end
+            if suffix then
+                text = text .. suffix
+            end
+            weapon_stats[#weapon_stats + 1] = string.format("%s: %s", label, text)
+        end
+
+        local blueprint_id = extract_blueprint_id(item)
+        local blueprint_weapon
+
+        if blueprint_id then
+            local ok, blueprint = pcall(loader.load, "weapons", blueprint_id)
+            if ok and type(blueprint) == "table" then
+                local components = blueprint.components
+                if type(components) == "table" then
+                    blueprint_weapon = components.weapon
+                end
+                if not description then
+                    description = blueprint.description or blueprint.summary
+                end
+            end
+        end
+
+        local weapon_data = blueprint_weapon or (item.metadata and item.metadata.weapon)
+
+        if type(weapon_data) == "table" then
+            append_weapon_stat("Mode", weapon_data.fireMode and capitalize(weapon_data.fireMode))
+
+            if weapon_data.damage then
+                append_weapon_stat("Damage", weapon_data.damage)
+            end
+
+            if weapon_data.damagePerSecond then
+                append_weapon_stat("Damage/sec", weapon_data.damagePerSecond)
+            end
+
+            if weapon_data.fireRate and weapon_data.fireRate > 0 then
+                local rate_text = format_number(weapon_data.fireRate, 2)
+                local per_second = 1 / weapon_data.fireRate
+                weapon_stats[#weapon_stats + 1] = string.format(
+                    "Rate: %s s between shots (%s/s)",
+                    rate_text,
+                    format_number(per_second, 1)
+                )
+            end
+
+            if weapon_data.beamDuration then
+                append_weapon_stat("Beam Duration", weapon_data.beamDuration, " s", 2)
+            end
+
+            if weapon_data.projectileSpeed then
+                append_weapon_stat("Projectile Speed", weapon_data.projectileSpeed)
+            end
+
+            if weapon_data.projectileLifetime then
+                append_weapon_stat("Projectile Lifetime", weapon_data.projectileLifetime, " s", 2)
+            end
+
+            if weapon_data.maxRange then
+                append_weapon_stat("Range", weapon_data.maxRange)
+            elseif weapon_data.projectileSpeed and weapon_data.projectileLifetime then
+                append_weapon_stat("Range", weapon_data.projectileSpeed * weapon_data.projectileLifetime)
+            end
+
+            if weapon_data.projectileSize then
+                append_weapon_stat("Projectile Size", weapon_data.projectileSize)
+            end
+
+            if weapon_data.width then
+                append_weapon_stat("Beam Width", weapon_data.width)
+            end
+
+            if weapon_data.damageType then
+                append_weapon_stat("Damage Type", capitalize(weapon_data.damageType))
+            end
+        end
+
+        if #weapon_stats > 0 then
+            append_line(tooltip_body, "Weapon Stats:")
+            for i = 1, #weapon_stats do
+                append_line(tooltip_body, "  " .. weapon_stats[i])
+            end
+        end
     end
 
     tooltip.request({
-        heading = item.name or "Unknown Item",
+        heading = item.name or (definition and definition.name) or "Unknown Item",
         body = tooltip_body,
-        description = item.description,
+        description = description,
     })
+end
+
+local function clear_search_focus(context, state)
+    if context and context.uiInput then
+        context.uiInput.keyboardCaptured = false
+    end
+    state.isSearchActive = false
 end
 
 function cargo_window.draw(context)
@@ -330,15 +532,26 @@ function cargo_window.draw(context)
 
     local uiInput = context.uiInput
 
+    local isVisible = state.visible == true
+    local previousVisible = state._previous_visible
+
+    if previousVisible == nil then
+        if not isVisible then
+            clear_search_focus(context, state)
+        end
+    elseif previousVisible ~= isVisible then
+        if not isVisible then
+            clear_search_focus(context, state)
+        elseif uiInput then
+            uiInput.keyboardCaptured = false
+        end
+    end
+
     if not state.visible then
         state.dragging = false
-        if state.isSearchActive then
-            state.isSearchActive = false
-            if uiInput then
-                uiInput.keyboardCaptured = false
-            end
-        end
+        clear_search_focus(context, state)
         state._was_mouse_down = love.mouse.isDown(1)
+        state._previous_visible = isVisible
         return
     end
 
@@ -370,7 +583,11 @@ function cargo_window.draw(context)
     percentFull = math.max(0, math.min(percentFull, 1))
 
     local currencyValue
-    if player then
+    if context then
+        currencyValue = PlayerManager.getCurrency(context)
+    end
+
+    if currencyValue == nil and player then
         if player.currency ~= nil then
             currencyValue = player.currency
         elseif player.credits ~= nil then
@@ -611,11 +828,10 @@ function cargo_window.draw(context)
     if frame.close_clicked then
         state.visible = false
         state.dragging = false
-        if state.isSearchActive and uiInput then
-            uiInput.keyboardCaptured = false
-        end
-        state.isSearchActive = false
+        clear_search_focus(context, state)
     end
+
+    state._previous_visible = state.visible == true
 
     love.graphics.pop()
 end
@@ -632,13 +848,6 @@ function cargo_window.textinput(context, text)
 
     state.searchQuery = (state.searchQuery or "") .. text
     return true
-end
-
-local function clear_search_focus(context, state)
-    if context and context.uiInput then
-        context.uiInput.keyboardCaptured = false
-    end
-    state.isSearchActive = false
 end
 
 function cargo_window.keypressed(context, key, scancode, isrepeat)

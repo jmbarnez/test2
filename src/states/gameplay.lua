@@ -16,11 +16,13 @@ local map_window = require("src.ui.windows.map")
 require("src.entities.ship_factory")
 require("src.entities.asteroid_factory")
 require("src.entities.weapon_factory")
+require("src.entities.station_factory")
 local World = require("src.states.gameplay.world")
 local Entities = require("src.states.gameplay.entities")
 local Systems = require("src.states.gameplay.systems")
 local View = require("src.states.gameplay.view")
 local PlayerEngineTrail = require("src.effects.player_engine_trail")
+local FloatingText = require("src.effects.floating_text")
 
 local love = love
 
@@ -62,6 +64,9 @@ function gameplay:enter(_, config)
 
     -- Initialize UI state
     UIStateManager.initialize(self)
+
+    FloatingText.setFallback(self)
+    FloatingText.clear(self)
     
     -- Initialize engine trail
     self.engineTrail = PlayerEngineTrail.new()
@@ -70,11 +75,12 @@ function gameplay:enter(_, config)
     World.initialize(self)
     View.initialize(self)
     Systems.initialize(self, Entities.damage)
-    
+
     local player = Entities.spawnPlayer(self)
     if player then
-        if self.engineTrail then
-            self.engineTrail:attachPlayer(player)
+        local engineTrail = self.engineTrail
+        if engineTrail then
+            engineTrail:attachPlayer(player)
         end
         self:registerPlayerCallbacks(player)
     end
@@ -92,6 +98,9 @@ function gameplay:leave()
         self.engineTrail:clear()
         self.engineTrail = nil
     end
+
+    FloatingText.clear(self)
+    FloatingText.setFallback(nil)
     
     -- Clean up UI state
     UIStateManager.cleanup(self)
@@ -140,6 +149,8 @@ function gameplay:update(dt)
         self.engineTrail:update(dt)
     end
 
+    FloatingText.update(self, dt)
+
     Entities.updateHealthTimers(self.world, dt)
 
     View.updateCamera(self)
@@ -158,6 +169,7 @@ function gameplay:respawnPlayer()
     self:registerPlayerCallbacks(player)
 
     if self.engineTrail then
+        self.engineTrail:clear()
         self.engineTrail:attachPlayer(player)
         self.engineTrail:setActive(false)
     end
@@ -224,6 +236,7 @@ function gameplay:draw()
         self.engineTrail:draw()
     end
     self.world:draw()
+    FloatingText.draw(self)
     love.graphics.pop()
 end
 
@@ -294,6 +307,11 @@ function gameplay:keypressed(key)
 
     if key == "m" then
         UIStateManager.toggleMapUI(self)
+        return
+    end
+
+    if key == "k" then
+        UIStateManager.toggleSkillsUI(self)
         return
     end
 end
