@@ -93,6 +93,63 @@ local function record_metric(container, key, value)
     bucket.cursor = (cursor % window) + 1
 end
 
+local METRIC_ORDER = { "frame_dt_ms", "update_ms", "render_ms" }
+local METRIC_LABELS = {
+    frame_dt_ms = "Frame dt",
+    update_ms = "Update",
+    render_ms = "Render",
+}
+
+local function update_performance_strings(state)
+    if not state then
+        return
+    end
+
+    local metrics = state.performanceStatsRecords
+    if not metrics then
+        state.performanceStats = nil
+        return
+    end
+
+    local lines = {}
+    for i = 1, #METRIC_ORDER do
+        local key = METRIC_ORDER[i]
+        local bucket = metrics[key]
+        if bucket and bucket.last then
+            local avg = bucket.avg or bucket.last
+            local minv = bucket.min or bucket.last
+            local maxv = bucket.max or bucket.last
+            local last = bucket.last
+            lines[#lines + 1] = string.format(
+                "%s: avg %.2fms (%.2f-%.2f) last %.2f",
+                METRIC_LABELS[key] or key,
+                avg,
+                minv,
+                maxv,
+                last
+            )
+        end
+    end
+
+    state.performanceStats = lines
+end
+
+local function finalize_update_metrics(state, start_time)
+    if not state then
+        return
+    end
+
+    local metrics = state.performanceStatsRecords
+    if metrics and start_time then
+        local stop = get_time()
+        if stop then
+            record_metric(metrics, "update_ms", math.max(0, (stop - start_time) * 1000))
+        end
+    end
+
+    update_performance_strings(state)
+end
+
 local gameplay = {}
 
 local function resolveSectorId(config)
@@ -292,6 +349,9 @@ function gameplay:enter(_, config)
     -- Initialize UI state
     UIStateManager.initialize(self)
 
+    self.performanceStatsRecords = {}
+    self.performanceStats = {}
+
     FloatingText.setFallback(self)
     FloatingText.clear(self)
     
@@ -339,12 +399,27 @@ function gameplay:leave()
     
     -- Clean up UI state
     UIStateManager.cleanup(self)
+
+    self.performanceStatsRecords = nil
+    self.performanceStats = nil
 end
 
 function gameplay:update(dt)
     if not self.world then
         return
     end
+
+    local metrics = self.performanceStatsRecords
+    if not metrics then
+        metrics = {}
+        self.performanceStatsRecords = metrics
+    end
+
+    if dt then
+        record_metric(metrics, "frame_dt_ms", dt * 1000)
+    end
+
+    local updateStart = get_time()
 
     if self._pendingCameraRefresh then
         View.updateCamera(self)
@@ -356,6 +431,7 @@ function gameplay:update(dt)
     end
 
     if UIStateManager.isPaused(self) then
+        finalize_update_metrics(self, updateStart)
         return
     end
 
@@ -394,6 +470,8 @@ function gameplay:update(dt)
     Entities.updateHealthTimers(self.world, dt)
 
     View.updateCamera(self)
+
+    finalize_update_metrics(self, updateStart)
 end
 
 function gameplay:respawnPlayer()
@@ -458,6 +536,14 @@ function gameplay:draw()
         return
     end
 
+    local metrics = self.performanceStatsRecords
+    if not metrics then
+        metrics = {}
+        self.performanceStatsRecords = metrics
+    end
+
+    local renderStart = get_time()
+
     if self._pendingCameraRefresh then
         View.updateCamera(self)
         self._pendingCameraRefresh = nil
@@ -484,6 +570,15 @@ function gameplay:draw()
     self.world:draw()
     FloatingText.draw(self)
     love.graphics.pop()
+
+    if metrics and renderStart then
+        local renderStop = get_time()
+        if renderStop then
+            record_metric(metrics, "render_ms", math.max(0, (renderStop - renderStart) * 1000))
+        end
+    end
+
+    update_performance_strings(self)
 end
 
 function gameplay:resize(w, h)

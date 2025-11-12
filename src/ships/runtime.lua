@@ -220,6 +220,98 @@ function runtime.decrement_health_timer(entity, dt)
     end
 end
 
+local function resolve_shield_component(entity)
+    if type(entity) ~= "table" then
+        return nil
+    end
+
+    local shield = entity.shield
+    if type(shield) ~= "table" then
+        shield = nil
+    end
+
+    if not shield and entity.health and type(entity.health.shield) == "table" then
+        shield = entity.health.shield
+        entity.shield = shield
+    elseif shield and entity.health then
+        entity.health.shield = entity.health.shield or shield
+    end
+
+    return shield
+end
+
+local function initialize_shield(entity)
+    local shield = resolve_shield_component(entity)
+    if not shield then
+        return
+    end
+
+    local maxCandidate = shield.max or shield.capacity or shield.limit or shield.strength or shield.current or 0
+    local maxShield = math.max(0, tonumber(maxCandidate) or 0)
+    shield.max = maxShield
+
+    if maxShield > 0 then
+        local current = tonumber(shield.current)
+        if current == nil then
+            current = maxShield
+        end
+        shield.current = math.max(0, math.min(current, maxShield))
+    else
+        shield.current = 0
+    end
+
+    shield.regen = math.max(0, tonumber(shield.regen) or 0)
+    shield.rechargeDelay = math.max(0, tonumber(shield.rechargeDelay) or 0)
+    shield.rechargeTimer = math.max(0, tonumber(shield.rechargeTimer) or 0)
+    shield.percent = (maxShield > 0) and (shield.current / maxShield) or 0
+    shield.isDepleted = shield.current <= 0
+end
+
+local function update_shield(entity, dt)
+    local shield = resolve_shield_component(entity)
+    if not shield then
+        return
+    end
+
+    local maxShield = math.max(0, tonumber(shield.max) or 0)
+    shield.max = maxShield
+
+    if maxShield <= 0 then
+        shield.current = 0
+        shield.regen = math.max(0, tonumber(shield.regen) or 0)
+        shield.rechargeDelay = math.max(0, tonumber(shield.rechargeDelay) or 0)
+        shield.rechargeTimer = 0
+        shield.percent = 0
+        shield.isDepleted = true
+        return
+    end
+
+    local current = tonumber(shield.current)
+    if current == nil then
+        current = maxShield
+    end
+    current = math.max(0, math.min(current, maxShield))
+
+    local regenRate = math.max(0, tonumber(shield.regen) or 0)
+    local rechargeDelay = math.max(0, tonumber(shield.rechargeDelay) or 0)
+    local rechargeTimer = math.max(0, tonumber(shield.rechargeTimer) or 0)
+
+    if rechargeTimer > 0 and dt > 0 then
+        rechargeTimer = math.max(0, rechargeTimer - dt)
+    end
+
+    if regenRate > 0 and rechargeTimer <= 0 and current < maxShield and dt > 0 then
+        current = math.min(maxShield, current + regenRate * dt)
+    end
+
+    shield.current = current
+    shield.regen = regenRate
+    shield.rechargeDelay = rechargeDelay
+    shield.rechargeTimer = rechargeTimer
+    shield.percent = (maxShield > 0) and (current / maxShield) or 0
+    shield.isDepleted = current <= 0
+end
+
 local function initialize_energy(entity)
     local energy = entity.energy
     if type(energy) ~= "table" then
@@ -292,6 +384,7 @@ function runtime.initialize(entity, constants, context)
     end
 
     runtime.initialize_health(entity, constants)
+    initialize_shield(entity)
     initialize_energy(entity)
     populate_weapon_inventory(entity, context or {})
     ShipCargo.refresh_if_needed(entity.cargo)
@@ -304,6 +397,7 @@ end
 function runtime.update(entity, dt)
     ShipCargo.refresh_if_needed(entity.cargo)
     runtime.decrement_health_timer(entity, dt)
+    update_shield(entity, dt)
     update_energy(entity, dt)
 end
 
@@ -348,6 +442,10 @@ function runtime.serialize(entity)
         energy = entity.energy and {
             current = entity.energy.current,
             max = entity.energy.max,
+        } or nil,
+        shield = entity.shield and {
+            current = entity.shield.current,
+            max = entity.shield.max,
         } or nil,
         stats = entity.stats and ship_util.deep_copy(entity.stats) or nil,
         cargo = entity.cargo and {
@@ -419,6 +517,24 @@ function runtime.applySnapshot(entity, snapshot)
         entity.energy = entity.energy or {}
         entity.energy.current = snapshot.energy.current or entity.energy.current
         entity.energy.max = snapshot.energy.max or entity.energy.max
+    end
+
+    if snapshot.shield then
+        local shield = resolve_shield_component(entity)
+        if not shield then
+            shield = {}
+            entity.shield = shield
+            if entity.health then
+                entity.health.shield = shield
+            end
+        end
+
+        shield.current = snapshot.shield.current or shield.current
+        shield.max = snapshot.shield.max or shield.max
+        shield.percent = (shield.max and shield.max > 0)
+            and ((shield.current or 0) / shield.max)
+            or 0
+        shield.isDepleted = (shield.current or 0) <= 0
     end
 
     if snapshot.weapons and type(entity.weapons) == "table" then

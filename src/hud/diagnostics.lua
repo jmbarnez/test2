@@ -49,6 +49,53 @@ local function build_lines(context, player)
     lines[#lines + 1] = string.format("FPS: %d (%.2fms)", fps, dt * 1000)
     lines[#lines + 1] = string.format("Memory: %.1f KB", memory_usage)
     
+    -- Entity diagnostics
+    if context and context.world then
+        local entities = context.world.entities or {}
+        local total = 0
+        local players = 0
+        local enemies = 0
+        local projectiles = 0
+        local asteroids = 0
+        local stations = 0
+
+        for i = 1, #entities do
+            local entity = entities[i]
+            if entity then
+                total = total + 1
+
+                if entity.player then
+                    players = players + 1
+                end
+
+                local blueprint = entity.blueprint
+                local category = blueprint and blueprint.category
+
+                if entity.enemy or (entity.faction == "enemy") or (category == "ships" and entity.hostile) then
+                    enemies = enemies + 1
+                end
+
+                if entity.projectile or category == "projectiles" then
+                    projectiles = projectiles + 1
+                elseif category == "asteroids" then
+                    asteroids = asteroids + 1
+                elseif category == "stations" then
+                    stations = stations + 1
+                end
+            end
+        end
+
+        lines[#lines + 1] = string.format(
+            "Entities: %d | players %d | enemies %d | projectiles %d | asteroids %d | stations %d",
+            total,
+            players,
+            enemies,
+            projectiles,
+            asteroids,
+            stations
+        )
+    end
+
     -- Player diagnostics
     lines[#lines + 1] = string.format("Speed: %.1f px/s", speed)
     lines[#lines + 1] = string.format("Accel: %.1f px/s²", acceleration)

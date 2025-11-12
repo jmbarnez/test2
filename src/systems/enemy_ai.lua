@@ -89,6 +89,51 @@ local clamp_vector = function(x, y, max)
     return clampX, clampY
 end
 
+local function update_engine_trail(entity, isThrusting, impulseX, impulseY, dt)
+    if not entity then
+        return
+    end
+
+    impulseX = impulseX or 0
+    impulseY = impulseY or 0
+
+    local thrusting = isThrusting and (impulseX ~= 0 or impulseY ~= 0)
+    local currentThrust = 0
+
+    if thrusting then
+        local impulseMagnitude = vector.length(impulseX, impulseY)
+        if dt and dt > 0 then
+            currentThrust = impulseMagnitude / dt
+        else
+            currentThrust = impulseMagnitude
+        end
+        thrusting = currentThrust > 0
+    end
+
+    if not thrusting then
+        entity.isThrusting = false
+        entity.currentThrust = 0
+        if entity.engineTrail then
+            entity.engineTrail:setActive(false)
+        end
+        return
+    end
+
+    entity.isThrusting = true
+    entity.currentThrust = currentThrust
+
+    local stats = entity.stats or {}
+    if stats.main_thrust and stats.main_thrust > 0 then
+        entity.maxThrust = stats.main_thrust
+    elseif not entity.maxThrust or entity.maxThrust < currentThrust then
+        entity.maxThrust = currentThrust
+    end
+
+    if entity.engineTrail then
+        entity.engineTrail:setActive(true)
+    end
+end
+
 local function ensure_home(ai, entity)
     if ai.home then
         return ai.home
@@ -146,16 +191,19 @@ end
 local function handle_wander(entity, body, ai, stats, dt)
     local position = entity.position
     if not (position and position.x and position.y) then
+        update_engine_trail(entity, false)
         return false
     end
 
     local home = ensure_home(ai, entity)
     if not home then
+        update_engine_trail(entity, false)
         return false
     end
 
     local radius = ai.wanderRadius or stats.wander_radius or 0
     if radius <= 0 then
+        update_engine_trail(entity, false)
         return false
     end
 
@@ -193,6 +241,8 @@ local function handle_wander(entity, body, ai, stats, dt)
         local damping = math.max(0, 1 - dt * 5)
         body:setLinearVelocity(vx * damping, vy * damping)
 
+        update_engine_trail(entity, false)
+
         if entity.weapon then
             entity.weapon.firing = false
             entity.weapon.targetX = nil
@@ -221,6 +271,8 @@ local function handle_wander(entity, body, ai, stats, dt)
     local diffX, diffY = desiredVX - currentVX, desiredVY - currentVY
     local diffLen = vector.length(diffX, diffY)
 
+    local impulseX, impulseY = 0, 0
+
     if diffLen > 0 then
         local maxDelta = maxAccel * dt
         if diffLen > maxDelta then
@@ -228,12 +280,15 @@ local function handle_wander(entity, body, ai, stats, dt)
             diffX, diffY = diffX * scale, diffY * scale
         end
 
-        body:applyLinearImpulse(diffX * mass, diffY * mass)
+        impulseX, impulseY = diffX * mass, diffY * mass
+        body:applyLinearImpulse(impulseX, impulseY)
     end
 
     local newVX, newVY = body:getLinearVelocity()
     newVX, newVY = clamp_vector(newVX, newVY, maxSpeed)
     body:setLinearVelocity(newVX, newVY)
+
+    update_engine_trail(entity, true, impulseX, impulseY, dt)
 
     if entity.weapon then
         entity.weapon.firing = false
@@ -307,6 +362,7 @@ local function create_behavior_tree(context)
     local engageTargetNode = BehaviorTree.Action(function(entity, blackboard, dt)
         local body = entity.body
         if not body or body:isDestroyed() then
+            update_engine_trail(entity, false)
             entity.currentTarget = nil
             return BTStatus.failure
         end
@@ -317,6 +373,7 @@ local function create_behavior_tree(context)
             local vx, vy = body:getLinearVelocity()
             local damping = math.max(0, 1 - dt * 4)
             body:setLinearVelocity(vx * damping, vy * damping)
+            update_engine_trail(entity, false)
             return BTStatus.failure
         end
 
@@ -339,6 +396,7 @@ local function create_behavior_tree(context)
             local vx, vy = body:getLinearVelocity()
             local damping = math.max(0, 1 - dt * 4)
             body:setLinearVelocity(vx * damping, vy * damping)
+            update_engine_trail(entity, false)
             return BTStatus.failure
         end
 
@@ -362,6 +420,7 @@ local function create_behavior_tree(context)
             local vx, vy = body:getLinearVelocity()
             local damping = math.max(0, 1 - dt * 4)
             body:setLinearVelocity(vx * damping, vy * damping)
+            update_engine_trail(entity, false)
             return BTStatus.failure
         end
 
@@ -405,6 +464,8 @@ local function create_behavior_tree(context)
         local diffX, diffY = desiredVX - currentVX, desiredVY - currentVY
         local diffLen = vector.length(diffX, diffY)
 
+        local impulseX, impulseY = 0, 0
+
         if diffLen > 0 then
             local maxDelta = maxAccel * dt
             if diffLen > maxDelta then
@@ -412,12 +473,15 @@ local function create_behavior_tree(context)
                 diffX, diffY = diffX * scale, diffY * scale
             end
 
-            body:applyLinearImpulse(diffX * mass, diffY * mass)
+            impulseX, impulseY = diffX * mass, diffY * mass
+            body:applyLinearImpulse(impulseX, impulseY)
         end
 
         local newVX, newVY = body:getLinearVelocity()
         newVX, newVY = clamp_vector(newVX, newVY, maxSpeed)
         body:setLinearVelocity(newVX, newVY)
+
+        update_engine_trail(entity, true, impulseX, impulseY, dt)
 
         if entity.weapon then
             local weapon = entity.weapon

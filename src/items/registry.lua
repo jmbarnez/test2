@@ -4,6 +4,7 @@ local Items = {}
 
 local definitions = {}
 local weaponByBlueprint = {}
+local moduleByBlueprint = {}
 local builtin_definitions = {
     require("src.items.definitions.resource_ore_chunk"),
     require("src.items.definitions.resource_rare_crystal"),
@@ -29,6 +30,91 @@ local function apply_overrides(target, overrides)
     end
 
     return target
+end
+
+function Items.registerModuleBlueprint(blueprint)
+    if type(blueprint) ~= "table" then
+        return nil
+    end
+
+    local blueprintId = blueprint.id
+    if not blueprintId then
+        return nil
+    end
+
+    local itemId = "module:" .. blueprintId
+    if definitions[itemId] then
+        moduleByBlueprint[blueprintId] = itemId
+        return itemId
+    end
+
+    local itemMeta = blueprint.item or {}
+
+    Items.register({
+        id = itemId,
+        type = "module",
+        name = blueprint.name or itemMeta.name or blueprintId,
+        stackable = false,
+        blueprintId = blueprintId,
+        blueprintCategory = blueprint.category or "modules",
+        icon = blueprint.icon and table_util.deep_copy(blueprint.icon) or nil,
+        volume = itemMeta.volume,
+        value = itemMeta.value,
+        description = itemMeta.description or blueprint.description,
+        createInstance = function(instance, overrides)
+            overrides = overrides or {}
+            instance.quantity = 1
+            instance.installed = overrides.installed or false
+            instance.slot = overrides.slot or blueprint.slot or "defense"
+            if overrides.overrides then
+                instance.overrides = table_util.deep_copy(overrides.overrides)
+            end
+        end,
+    })
+
+    moduleByBlueprint[blueprintId] = itemId
+    return itemId
+end
+
+function Items.ensureModuleItem(blueprint, overrides)
+    local itemId = Items.registerModuleBlueprint(blueprint)
+    if not itemId then
+        return nil, "invalid_module_blueprint"
+    end
+    return Items.instantiate(itemId, overrides)
+end
+
+function Items.createModuleItem(moduleId, overrides)
+    if not moduleId then
+        return nil, "invalid_module_id"
+    end
+
+    local itemId = moduleByBlueprint[moduleId]
+    if not itemId then
+        itemId = "module:" .. moduleId
+        if not definitions[itemId] then
+            Items.register({
+                id = itemId,
+                type = "module",
+                name = moduleId,
+                stackable = false,
+                blueprintId = moduleId,
+                blueprintCategory = "modules",
+                createInstance = function(instance, overrides_)
+                    overrides_ = overrides_ or {}
+                    instance.quantity = 1
+                    instance.installed = overrides_.installed or false
+                    instance.slot = overrides_.slot or "defense"
+                    if overrides_.overrides then
+                        instance.overrides = table_util.deep_copy(overrides_.overrides)
+                    end
+                end,
+            })
+        end
+        moduleByBlueprint[moduleId] = itemId
+    end
+
+    return Items.instantiate(itemId, overrides)
 end
 
 function Items.register(definition)
