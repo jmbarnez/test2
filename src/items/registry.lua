@@ -49,6 +49,12 @@ function Items.registerModuleBlueprint(blueprint)
     end
 
     local itemMeta = blueprint.item or {}
+    local components = blueprint.components or {}
+    local moduleStats = components.module
+    local definitionMetadata
+    if moduleStats then
+        definitionMetadata = { module = table_util.deep_copy(moduleStats) }
+    end
 
     Items.register({
         id = itemId,
@@ -61,6 +67,8 @@ function Items.registerModuleBlueprint(blueprint)
         volume = itemMeta.volume,
         value = itemMeta.value,
         description = itemMeta.description or blueprint.description,
+        rarity = blueprint.rarity,
+        metadata = definitionMetadata,
         createInstance = function(instance, overrides)
             overrides = overrides or {}
             instance.quantity = 1
@@ -68,6 +76,9 @@ function Items.registerModuleBlueprint(blueprint)
             instance.slot = overrides.slot or blueprint.slot or "defense"
             if overrides.overrides then
                 instance.overrides = table_util.deep_copy(overrides.overrides)
+            end
+            if moduleStats then
+                instance.module = table_util.deep_copy(moduleStats)
             end
         end,
     })

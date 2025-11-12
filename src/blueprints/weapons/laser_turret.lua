@@ -47,6 +47,9 @@ return {
             offset = 26,
             color = { 0.3, 1.0, 0.45 },
             glowColor = { 0.6, 1.0, 0.8 },
+            sfx = {
+                fire = "sfx:laser_turret_fire",
+            },
             projectileBlueprint = {
                 projectile = {
                     lifetime = 5.0,

@@ -6,6 +6,7 @@ local vector = require("src.util.vector")
 local Intent = require("src.input.intent")
 local damage_util = require("src.util.damage")
 local ProjectileFactory = require("src.entities.projectile_factory")
+local AudioManager = require("src.audio.manager")
 
 local love = love
 
@@ -116,6 +117,33 @@ local function has_energy(entity, amount)
     end
 
     return canSpend
+end
+
+local function play_weapon_sound(weapon, key)
+    if not weapon then
+        return
+    end
+
+    local soundId
+    local sfx = weapon.sfx
+    if type(sfx) == "table" then
+        soundId = sfx[key]
+    elseif key == "fire" and type(sfx) == "string" then
+        soundId = sfx
+    end
+
+    if not soundId then
+        local fieldName = key .. "Sound"
+        soundId = weapon[fieldName]
+    end
+
+    if not soundId and key ~= "fire" then
+        soundId = weapon.fireSound
+    end
+
+    if type(soundId) == "string" and soundId ~= "" then
+        AudioManager.play_sfx(soundId)
+    end
 end
 
 local function fire_hitscan(entity, startX, startY, dirX, dirY, weapon, physicsWorld, damageEntity, dt, beams, impacts)
@@ -347,6 +375,7 @@ return function(context)
 
                             if fire then
                                 ProjectileFactory.spawn(world, physicsWorld, entity, startX, startY, dirX, dirY, weapon)
+                                play_weapon_sound(weapon, "fire")
 
                                 -- Reset cooldown
                                 local fireRate = weapon.fireRate or 0.5
@@ -381,6 +410,24 @@ return function(context)
                             end
                         else
                             beamActive = fire
+                        end
+
+                        if usesBurst then
+                            if triggered then
+                                play_weapon_sound(weapon, "fire")
+                            end
+                            if not beamActive then
+                                weapon._fireSoundPlaying = false
+                            end
+                        else
+                            if beamActive then
+                                if not weapon._fireSoundPlaying then
+                                    play_weapon_sound(weapon, "fire")
+                                    weapon._fireSoundPlaying = true
+                                end
+                            else
+                                weapon._fireSoundPlaying = false
+                            end
                         end
 
                         if beamActive then

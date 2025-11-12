@@ -74,6 +74,48 @@ function util.instantiate_initial_item(descriptor, loader, Items)
         end
     end
 
+    local moduleId = descriptor.module or descriptor.moduleId or descriptor.blueprint
+    if moduleId then
+        local blueprint
+        local ok, loaded = pcall(loader.load, "modules", moduleId)
+        if ok then
+            blueprint = loaded
+        end
+
+        local overrides = {}
+        if descriptor.quantity then
+            overrides.quantity = util.sanitize_positive_number(descriptor.quantity)
+        end
+        if descriptor.installed ~= nil then
+            overrides.installed = descriptor.installed
+        end
+        if descriptor.slot then
+            overrides.slot = descriptor.slot
+        end
+        if descriptor.overrides then
+            overrides.overrides = util.deep_copy(descriptor.overrides)
+        end
+        if descriptor.name then
+            overrides.name = descriptor.name
+        end
+
+        local instance
+        if blueprint then
+            instance = Items.ensureModuleItem(blueprint, overrides)
+        else
+            instance = Items.createModuleItem(moduleId, overrides)
+        end
+
+        if instance then
+            instance.quantity = util.sanitize_positive_number(instance.quantity or descriptor.quantity or 1)
+            instance.volume = util.sanitize_positive_number(descriptor.volume or instance.volume or 1)
+            if not instance.icon and blueprint and blueprint.icon then
+                instance.icon = util.deep_copy(blueprint.icon)
+            end
+            return instance
+        end
+    end
+
     local fallback = util.deep_copy(descriptor)
     fallback.quantity = util.sanitize_positive_number(fallback.quantity or 1)
     fallback.volume = util.sanitize_positive_number(fallback.volume or 1)

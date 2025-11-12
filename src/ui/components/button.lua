@@ -1,8 +1,11 @@
 local theme = require("src.ui.theme")
+local AudioManager = require("src.audio.manager")
 ---@diagnostic disable-next-line: undefined-global
 local love = love
 
 local ui_button = {}
+
+local hover_state = {}
 
 local function resolve_rect(rect)
     if not rect then
@@ -24,6 +27,15 @@ local function point_in_rect(px, py, rect)
 
     local x, y, width, height = resolve_rect(rect)
     return px >= x and px <= x + width and py >= y and py <= y + height
+end
+
+local function rect_key(rect, fallback)
+    if fallback then
+        return fallback
+    end
+
+    local x, y, width, height = resolve_rect(rect)
+    return table.concat({ x or 0, y or 0, width or 0, height or 0 }, ":")
 end
 
 ---Renders a themed UI button and returns interaction state
@@ -116,6 +128,31 @@ function ui_button.render(options)
     love.graphics.printf(label, text_x, text_y, text_width, align)
 
     love.graphics.pop()
+
+    local sounds = options.sounds or {}
+    local click_sound = options.click_sound or options.clickSound or sounds.click or "sfx:button_click"
+    local hover_sound = options.hover_sound or options.hoverSound or sounds.hover or "sfx:button_hover"
+
+    local key = rect_key(rect, options.id)
+
+    if click_sound and clicked then
+        AudioManager.play_sfx(click_sound)
+    end
+
+    if hover_sound and not disabled then
+        if hovered then
+            if key and not hover_state[key] then
+                AudioManager.play_sfx(hover_sound)
+            end
+            if key then
+                hover_state[key] = true
+            end
+        elseif key then
+            hover_state[key] = nil
+        end
+    elseif key then
+        hover_state[key] = nil
+    end
 
     return {
         hovered = hovered,

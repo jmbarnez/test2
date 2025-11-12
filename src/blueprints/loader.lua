@@ -1,4 +1,5 @@
 local table_util = require("src.util.table")
+local Blueprint = require("src.blueprints.blueprint")
 
 local loader = {}
 
@@ -63,6 +64,23 @@ function loader.load(category, id, params)
     local blueprint = materialize_blueprint(entry, params)
     blueprint.category = blueprint.category or category
     blueprint.id = blueprint.id or id
+
+    local ok, errors = Blueprint.validate(category, blueprint)
+    if not ok then
+        local header = string.format("Blueprint '%s/%s'", category, id)
+        local formatted
+        if type(errors) == "table" then
+            formatted = Blueprint.format_errors(errors)
+        else
+            formatted = tostring(errors)
+        end
+        if formatted and #formatted > 0 then
+            error(string.format("%s failed validation:\n - %s", header, formatted), 3)
+        else
+            error(string.format("%s failed validation", header), 3)
+        end
+    end
+
     return blueprint
 end
 

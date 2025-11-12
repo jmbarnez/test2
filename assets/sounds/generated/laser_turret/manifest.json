@@ -1,0 +1,175 @@
+{
+  "preset": "laser_turret",
+  "description": "Pulse laser turret shots",
+  "source": "scripts\\audio\\presets\\laser_turret.json",
+  "variants": [
+    {
+      "path": "assets\\sounds\\generated\\laser_turret\\laser_turret_default.wav",
+      "duration": 0.55,
+      "sample_rate": 44100,
+      "seed": 8721,
+      "parameters": {
+        "duration": 0.55,
+        "sample_rate": 44100,
+        "frequency": {
+          "start": 1100,
+          "decay": 3.8,
+          "floor": 220,
+          "jitter_amplitude": 0.04,
+          "jitter_frequency": 90
+        },
+        "harmonics": [
+          {
+            "ratio": 1.0,
+            "amplitude": 0.7
+          },
+          {
+            "ratio": 1.9,
+            "amplitude": 0.3,
+            "phase": 0.4
+          },
+          {
+            "ratio": 2.8,
+            "amplitude": 0.15,
+            "phase": -0.2
+          }
+        ],
+        "burst": {
+          "frequency": 16
+        },
+        "tremolo": {
+          "frequency": 7,
+          "depth": 0.4,
+          "floor": 0.6
+        },
+        "sub": {
+          "ratio": 0.45,
+          "amplitude": 0.45
+        },
+        "noise": {
+          "amplitude": 0.18,
+          "decay": 6.2
+        },
+        "envelope": {
+          "attack": 0.02,
+          "decay": 4.4,
+          "release": 0.18
+        }
+      },
+      "variant": "default",
+      "filename": "laser_turret_default.wav"
+    },
+    {
+      "path": "assets\\sounds\\generated\\laser_turret\\laser_turret_warm.wav",
+      "duration": 0.55,
+      "sample_rate": 44100,
+      "seed": 1245,
+      "parameters": {
+        "duration": 0.55,
+        "sample_rate": 44100,
+        "frequency": {
+          "start": 1100,
+          "decay": 3.8,
+          "floor": 220,
+          "jitter_amplitude": 0.04,
+          "jitter_frequency": 90
+        },
+        "harmonics": [
+          {
+            "ratio": 1.0,
+            "amplitude": 0.65
+          },
+          {
+            "ratio": 1.7,
+            "amplitude": 0.32,
+            "phase": 0.2
+          },
+          {
+            "ratio": 2.4,
+            "amplitude": 0.12,
+            "phase": -0.3
+          }
+        ],
+        "burst": {
+          "frequency": 16
+        },
+        "tremolo": {
+          "frequency": 7,
+          "depth": 0.4,
+          "floor": 0.6
+        },
+        "sub": {
+          "ratio": 0.45,
+          "amplitude": 0.45
+        },
+        "noise": {
+          "amplitude": 0.14,
+          "decay": 6.2
+        },
+        "envelope": {
+          "attack": 0.02,
+          "decay": 3.8,
+          "release": 0.22
+        }
+      },
+      "variant": "warm",
+      "filename": "laser_turret_warm.wav"
+    },
+    {
+      "path": "assets\\sounds\\generated\\laser_turret\\laser_turret_bright.wav",
+      "duration": 0.55,
+      "sample_rate": 44100,
+      "seed": 9981,
+      "parameters": {
+        "duration": 0.55,
+        "sample_rate": 44100,
+        "frequency": {
+          "start": 1100,
+          "decay": 3.8,
+          "floor": 220,
+          "jitter_amplitude": 0.04,
+          "jitter_frequency": 90
+        },
+        "harmonics": [
+          {
+            "ratio": 1.0,
+            "amplitude": 0.72
+          },
+          {
+            "ratio": 2.1,
+            "amplitude": 0.34,
+            "phase": 0.3
+          },
+          {
+            "ratio": 3.0,
+            "amplitude": 0.18,
+            "phase": 0.1
+          }
+        ],
+        "burst": {
+          "frequency": 16
+        },
+        "tremolo": {
+          "frequency": 7,
+          "depth": 0.4,
+          "floor": 0.6
+        },
+        "sub": {
+          "ratio": 0.45,
+          "amplitude": 0.35
+        },
+        "noise": {
+          "amplitude": 0.2,
+          "decay": 6.2
+        },
+        "envelope": {
+          "attack": 0.02,
+          "decay": 4.4,
+          "release": 0.18
+        }
+      },
+      "variant": "bright",
+      "filename": "laser_turret_bright.wav"
+    }
+  ]
+}
