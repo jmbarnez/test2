@@ -12,30 +12,45 @@ local lg = love.graphics
 return function(context)
     -- Get reference to projectile system for its particles
     local projectileSystem = context and context.projectileSystem
+    local weaponFireSystem = context and context.weaponFireSystem
     
     return tiny.system {
         draw = function(self)
-            if not projectileSystem then
-                return
+            -- Draw projectile impact particles
+            if projectileSystem then
+                local impactParticles = projectileSystem.impactParticles
+                if impactParticles and #impactParticles > 0 then
+                    lg.push("all")
+                    lg.setBlendMode("add")
+                    
+                    for i = 1, #impactParticles do
+                        local p = impactParticles[i]
+                        local alpha = p.color and p.color[4]
+                        if alpha and alpha > 0 and p.size and p.size > 0 then
+                            lg.setColor(p.color)
+                            lg.setPointSize(math.max(1, p.size))
+                            lg.points(p.x, p.y)
+                        end
+                    end
+                    
+                    lg.pop()
+                end
             end
             
-            -- Draw projectile impact particles
-            local impactParticles = projectileSystem.impactParticles
-            if impactParticles and #impactParticles > 0 then
-                lg.push("all")
-                lg.setBlendMode("add")
-                
-                for i = 1, #impactParticles do
-                    local p = impactParticles[i]
-                    local alpha = p.color and p.color[4]
-                    if alpha and alpha > 0 and p.size and p.size > 0 then
-                        lg.setColor(p.color)
-                        lg.setPointSize(math.max(1, p.size))
-                        lg.points(p.x, p.y)
+            -- Draw laser beam impact sparks
+            if weaponFireSystem then
+                local beamImpacts = weaponFireSystem.beamImpacts
+                if beamImpacts and #beamImpacts > 0 then
+                    lg.push("all")
+                    
+                    for i = 1, #beamImpacts do
+                        local spark = beamImpacts[i]
+                        lg.setColor(spark.color)
+                        lg.circle("fill", spark.x, spark.y, spark.size)
                     end
+                    
+                    lg.pop()
                 end
-                
-                lg.pop()
             end
         end,
     }

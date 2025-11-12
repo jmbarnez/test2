@@ -560,15 +560,6 @@ return function(context)
                 love.graphics.pop()
             end
 
-            local beamImpacts = self.beamImpacts
-            if beamImpacts then
-                for i = 1, #beamImpacts do
-                    local spark = beamImpacts[i]
-                    love.graphics.setColor(spark.color)
-                    love.graphics.circle("fill", spark.x, spark.y, spark.size)
-                end
-            end
-
             love.graphics.pop()
         end,
     }

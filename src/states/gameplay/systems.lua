@@ -147,6 +147,7 @@ function Systems.initialize(state, damageCallback)
     state.renderSystem = state.world:addSystem(createRenderSystem(baseContext))
     state.particleEffectsSystem = state.world:addSystem(createParticleEffectsSystem(GameContext.extend(baseContext, {
         projectileSystem = state.projectileSystem,
+        weaponFireSystem = state.weaponSystem,
     })))
     state.targetingSystem = state.world:addSystem(createTargetingSystem(GameContext.extend(baseContext, {
         camera = state.camera,
