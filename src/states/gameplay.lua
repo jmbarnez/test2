@@ -421,11 +421,6 @@ function gameplay:update(dt)
 
     local updateStart = get_time()
 
-    if self._pendingCameraRefresh then
-        View.updateCamera(self)
-        self._pendingCameraRefresh = nil
-    end
-
     if UIStateManager.isRespawnRequested(self) then
         self:respawnPlayer()
     end
@@ -543,11 +538,6 @@ function gameplay:draw()
     end
 
     local renderStart = get_time()
-
-    if self._pendingCameraRefresh then
-        View.updateCamera(self)
-        self._pendingCameraRefresh = nil
-    end
 
     local clearColor = constants.render.clear_color or { 0, 0, 0, 1 }
     local r = clearColor[1] or 0

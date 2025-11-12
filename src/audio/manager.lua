@@ -2,17 +2,25 @@
 
 local love = love
 
+local DEFAULT_MASTER_VOLUME = 0.1
+
 local AudioManager = {
     _initialized = false,
     _sfx = {},
     _music = {},
     _currentMusic = nil,
     _currentMusicName = nil,
-    _currentMusicVolume = 1,
-    masterVolume = 1,
+    _currentMusicVolume = DEFAULT_MASTER_VOLUME,
+    masterVolume = DEFAULT_MASTER_VOLUME,
     musicVolume = 1,
     sfxVolume = 1,
 }
+
+AudioManager.DEFAULT_MASTER_VOLUME = DEFAULT_MASTER_VOLUME
+
+function AudioManager.get_default_master_volume()
+    return DEFAULT_MASTER_VOLUME
+end
 
 local SOUND_EXTENSIONS = {
     ogg = true,

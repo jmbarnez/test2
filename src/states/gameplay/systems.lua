@@ -3,10 +3,12 @@ local UIStateManager = require("src.ui.state_manager")
 
 local tiny = require("libs.tiny")
 local Intent = require("src.input.intent")
+local GameContext = require("src.states.gameplay.context")
 local createLocalInputSystem = require("src.systems.input_local")
 local createMovementSystem = require("src.systems.movement")
 local createRenderSystem = require("src.renderers.render")
 local createPlayerControlSystem = require("src.systems.player_control")
+local EngineTrailSystem = require("src.systems.engine_trail")
 local createAsteroidSpawner = require("src.spawners.asteroid")
 local createEnemySpawner = require("src.spawners.enemy")
 local createStationSpawner = require("src.spawners.station")
@@ -75,16 +77,14 @@ local function ensure_world(state)
     Intent.ensureContainer(state)
 end
 
-local function add_common_systems(state)
+local function add_common_systems(state, context)
     state.movementSystem = state.world:addSystem(createMovementSystem())
-    state.pickupSystem = state.world:addSystem(createPickupSystem({
-        state = state,
-    }))
-    state.weaponSystem = state.world:addSystem(createWeaponSystem(state))
-    state.shipSystem = state.world:addSystem(createShipSystem(state))
-    state.projectileSystem = state.world:addSystem(createProjectileSystem(state))
-    state.lootDropSystem = state.world:addSystem(createLootDropSystem({
-        state = state,
+    local sharedContext = context or GameContext.compose(state)
+    state.pickupSystem = state.world:addSystem(createPickupSystem(GameContext.extend(sharedContext)))
+    state.weaponSystem = state.world:addSystem(createWeaponSystem(GameContext.extend(sharedContext)))
+    state.shipSystem = state.world:addSystem(createShipSystem(GameContext.extend(sharedContext)))
+    state.projectileSystem = state.world:addSystem(createProjectileSystem(GameContext.extend(sharedContext)))
+    state.lootDropSystem = state.world:addSystem(createLootDropSystem(GameContext.extend(sharedContext, {
         spawnLootItem = function(drop)
             return Entities.spawnLootPickup(state, drop)
         end,
@@ -105,8 +105,8 @@ local function add_common_systems(state)
 
             PlayerManager.addSkillXP(state, spec.category, spec.skill, spec.xp, playerId)
         end,
-    }))
-    state.destructionSystem = state.world:addSystem(createDestructionSystem(state))
+    })))
+    state.destructionSystem = state.world:addSystem(createDestructionSystem(GameContext.extend(sharedContext)))
 end
 
 function Systems.initialize(state, damageCallback)
@@ -116,39 +116,40 @@ function Systems.initialize(state, damageCallback)
     state.uiInput.mouseCaptured = false
     state.uiInput.keyboardCaptured = false
 
-    if damageCallback then
-        state.damageEntity = damageCallback
-    end
+    local baseContext = GameContext.compose(state, {
+        damageEntity = damageCallback or state.damageEntity,
+    })
 
-    state.inputSystem = state.world:addSystem(createLocalInputSystem({
-        state = state,
+    state.damageEntity = baseContext.damageEntity
+
+    state.inputSystem = state.world:addSystem(createLocalInputSystem(GameContext.extend(baseContext, {
         camera = state.camera,
         uiInput = state.uiInput,
-    }))
+    })))
 
-    state.controlSystem = state.world:addSystem(createPlayerControlSystem({
+    state.controlSystem = state.world:addSystem(createPlayerControlSystem(GameContext.extend(baseContext, {
         camera = state.camera,
         engineTrail = state.engineTrail,
         uiInput = state.uiInput,
         intentHolder = state,
-    }))
+    })))
 
-    state.spawnerSystem = state.world:addSystem(createAsteroidSpawner(state))
-    state.enemySpawnerSystem = state.world:addSystem(createEnemySpawner(state))
-    state.stationSpawnerSystem = state.world:addSystem(createStationSpawner(state))
+    state.spawnerSystem = state.world:addSystem(createAsteroidSpawner(baseContext))
+    state.enemySpawnerSystem = state.world:addSystem(createEnemySpawner(baseContext))
+    state.stationSpawnerSystem = state.world:addSystem(createStationSpawner(baseContext))
 
-    add_common_systems(state)
+    add_common_systems(state, baseContext)
 
-    state.enemyAISystem = state.world:addSystem(createEnemyAISystem(state))
+    state.enemyAISystem = state.world:addSystem(createEnemyAISystem(baseContext))
 
-    state.renderSystem = state.world:addSystem(createRenderSystem(state))
-    state.targetingSystem = state.world:addSystem(createTargetingSystem({
-        state = state,
+    state.engineTrailSystem = state.world:addSystem(EngineTrailSystem)
+    state.renderSystem = state.world:addSystem(createRenderSystem(baseContext))
+    state.targetingSystem = state.world:addSystem(createTargetingSystem(GameContext.extend(baseContext, {
         camera = state.camera,
         uiInput = state.uiInput,
-    }))
-    state.hudSystem = state.world:addSystem(createHudSystem(state))
-    state.uiSystem = state.world:addSystem(createUiSystem(state))
+    })))
+    state.hudSystem = state.world:addSystem(createHudSystem(baseContext))
+    state.uiSystem = state.world:addSystem(createUiSystem(baseContext))
 end
 
 function Systems.teardown(state)

@@ -3,6 +3,7 @@
 
 local constants = require("src.constants.game")
 local runtime_settings = require("src.settings.runtime")
+local AudioManager = require("src.audio.manager")
 
 ---@diagnostic disable-next-line: undefined-global
 local love = love
@@ -11,6 +12,7 @@ local OptionsData = {}
 
 -- Default values
 local DEFAULT_MAX_FPS = math.max(0, (constants.window and constants.window.max_fps) or 0)
+local DEFAULT_MASTER_VOLUME = AudioManager.get_default_master_volume()
 
 local DEFAULT_KEYBINDINGS = {
     moveLeft = { "a", "left" },
@@ -76,7 +78,7 @@ function OptionsData.ensure(state, context)
     if state.syncPending or not settings.masterVolume then
         state.syncPending = false
 
-        settings.masterVolume = clamp01((love.audio and love.audio.getVolume and love.audio.getVolume()) or settings.masterVolume or 1)
+        settings.masterVolume = clamp01((love.audio and love.audio.getVolume and love.audio.getVolume()) or settings.masterVolume or DEFAULT_MASTER_VOLUME)
         settings.musicVolume = clamp01(settings.musicVolume or settings.masterVolume)
         settings.sfxVolume = clamp01(settings.sfxVolume or settings.masterVolume)
 
@@ -146,9 +148,9 @@ function OptionsData.resetToDefaults(settings)
         return
     end
 
-    settings.masterVolume = 1
-    settings.musicVolume = 1
-    settings.sfxVolume = 1
+    settings.masterVolume = DEFAULT_MASTER_VOLUME
+    settings.musicVolume = DEFAULT_MASTER_VOLUME
+    settings.sfxVolume = DEFAULT_MASTER_VOLUME
     settings.fullscreen = false
     settings.vsync = false
     settings.maxFps = DEFAULT_MAX_FPS

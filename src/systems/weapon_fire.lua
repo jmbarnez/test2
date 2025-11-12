@@ -337,9 +337,6 @@ return function(context)
 
                     -- PROJECTILE MODE (Cannon, missiles, etc.)
                     if fireMode == "projectile" then
-                        -- Only server/offline spawns projectiles; clients receive via snapshots
-                        local isClient = context.netRole == 'client'
-
                         if fire and (not weapon.cooldown or weapon.cooldown <= 0) then
                             if entity and entity.player then
                                 local shotCost = weapon.energyPerShot or weapon.energyCost or weapon.energyDrain or weapon.energyPerSecond or 14

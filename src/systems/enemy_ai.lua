@@ -8,6 +8,16 @@ local BehaviorTree = require("src.ai.behavior_tree")
 local TAU = math_util.TAU
 local BTStatus = BehaviorTree.Status
 
+-- Cache frequently used functions
+local random = love.math.random
+local cos = math.cos
+local sin = math.sin
+local atan2 = math.atan2
+local sqrt = math.sqrt
+local abs = math.abs
+local min = math.min
+local max = math.max
+
 local function has_tag(entity, tag)
     if not entity or not tag then
         return false
@@ -58,8 +68,8 @@ local function ensure_ai_state(entity)
     local state = entity.aiState
     if not state then
         state = {
-            strafeTimer = love.math.random() * 1.2 + 0.4,
-            strafeDir = love.math.random() < 0.5 and -1 or 1,
+            strafeTimer = random() * 1.2 + 0.4,
+            strafeDir = random() < 0.5 and -1 or 1,
         }
         entity.aiState = state
     end
@@ -85,11 +95,10 @@ end
 
 local normalize_vector = vector.normalize
 local clamp_vector = function(x, y, max)
-    local clampX, clampY = vector.clamp(x, y, max)
-    return clampX, clampY
+    return vector.clamp(x, y, max)
 end
 
-local function update_engine_trail(entity, isThrusting, impulseX, impulseY, dt)
+local function update_engine_trail(entity, isThrusting, impulseX, impulseY, dt, desiredSpeed)
     if not entity then
         return
     end
@@ -97,30 +106,32 @@ local function update_engine_trail(entity, isThrusting, impulseX, impulseY, dt)
     impulseX = impulseX or 0
     impulseY = impulseY or 0
 
-    local thrusting = isThrusting and (impulseX ~= 0 or impulseY ~= 0)
-    local currentThrust = 0
+    local thrusting = not not isThrusting
+    local currentThrust = entity.currentThrust or 0
 
     if thrusting then
         local impulseMagnitude = vector.length(impulseX, impulseY)
-        if dt and dt > 0 then
-            currentThrust = impulseMagnitude / dt
-        else
-            currentThrust = impulseMagnitude
+        if impulseMagnitude > 0 then
+            currentThrust = dt and dt > 0 and (impulseMagnitude / dt) or impulseMagnitude
+        elseif desiredSpeed and desiredSpeed > 0 then
+            currentThrust = desiredSpeed
+        elseif entity.body then
+            local vx, vy = entity.body:getLinearVelocity()
+            currentThrust = vector.length(vx, vy)
         end
-        thrusting = currentThrust > 0
+
+        thrusting = currentThrust > 0.1
     end
 
+    entity.isThrusting = thrusting
+    entity.currentThrust = thrusting and currentThrust or 0
+
     if not thrusting then
-        entity.isThrusting = false
-        entity.currentThrust = 0
         if entity.engineTrail then
             entity.engineTrail:setActive(false)
         end
         return
     end
-
-    entity.isThrusting = true
-    entity.currentThrust = currentThrust
 
     local stats = entity.stats or {}
     if stats.main_thrust and stats.main_thrust > 0 then
@@ -155,9 +166,9 @@ local function ensure_home(ai, entity)
 end
 
 local function choose_wander_point(home, radius)
-    local angle = love.math.random() * TAU
-    local dist = love.math.random() * radius
-    return home.x + math.cos(angle) * dist, home.y + math.sin(angle) * dist
+    local angle = random() * TAU
+    local dist = random() * radius
+    return home.x + cos(angle) * dist, home.y + sin(angle) * dist
 end
 
 local PlayerManager = require("src.player.manager")
@@ -176,8 +187,8 @@ local function compute_ranges(entity)
     local engagement = ai.engagementRange or stats.max_range or weaponRange or detection
 
     if weaponRange then
-        engagement = math.min(engagement or weaponRange, weaponRange)
-        detection = math.max(detection or weaponRange, weaponRange * 1.1)
+        engagement = min(engagement or weaponRange, weaponRange)
+        detection = max(detection or weaponRange, weaponRange * 1.1)
     end
 
     detection = detection or engagement or 600
@@ -186,6 +197,20 @@ local function compute_ranges(entity)
     local preferred = ai.preferredDistance or stats.preferred_distance or (engagement * 0.85)
 
     return detection, engagement, preferred, weaponRange
+end
+
+local function apply_damping(body, dt, factor)
+    local vx, vy = body:getLinearVelocity()
+    local damping = max(0, 1 - dt * factor)
+    body:setLinearVelocity(vx * damping, vy * damping)
+end
+
+local function disable_weapon(entity)
+    if entity.weapon then
+        entity.weapon.firing = false
+        entity.weapon.targetX = nil
+        entity.weapon.targetY = nil
+    end
 end
 
 local function handle_wander(entity, body, ai, stats, dt)
@@ -207,12 +232,12 @@ local function handle_wander(entity, body, ai, stats, dt)
         return false
     end
 
-    local arriveRadius = ai.wanderArriveRadius or math.max(40, radius * 0.2)
+    local arriveRadius = ai.wanderArriveRadius or max(40, radius * 0.2)
     local state = ensure_ai_state(entity)
 
     local maxSpeed = stats.max_speed or 240
     local wanderSpeed = ai.wanderSpeed or stats.wander_speed or (maxSpeed * 0.55)
-    wanderSpeed = math.min(wanderSpeed, maxSpeed)
+    wanderSpeed = min(wanderSpeed, maxSpeed)
 
     local ex, ey = position.x, position.y
     local radiusSq = radius * radius
@@ -231,28 +256,18 @@ local function handle_wander(entity, body, ai, stats, dt)
     end
 
     local target = state.wanderTarget
-    local tx, ty = target.x, target.y
-    local dx, dy = tx - ex, ty - ey
+    local dx, dy = target.x - ex, target.y - ey
     local dirX, dirY, distance = normalize_vector(dx, dy)
 
     if distance <= arriveRadius then
         state.wanderTarget = nil
-        local vx, vy = body:getLinearVelocity()
-        local damping = math.max(0, 1 - dt * 5)
-        body:setLinearVelocity(vx * damping, vy * damping)
-
+        apply_damping(body, dt, 5)
         update_engine_trail(entity, false)
-
-        if entity.weapon then
-            entity.weapon.firing = false
-            entity.weapon.targetX = nil
-            entity.weapon.targetY = nil
-        end
-
+        disable_weapon(entity)
         return true
     end
 
-    local desiredAngle = math.atan2(dy, dx) + math.pi * 0.5
+    local desiredAngle = atan2(dy, dx) + math.pi * 0.5
     local currentAngle = body:getAngle()
     local delta = clamp_angle(desiredAngle - currentAngle)
 
@@ -263,8 +278,7 @@ local function handle_wander(entity, body, ai, stats, dt)
     local maxAccel = stats.max_acceleration or 600
     local mass = stats.mass or body:getMass() or 1
 
-    local desiredVX = dirX * wanderSpeed
-    local desiredVY = dirY * wanderSpeed
+    local desiredVX, desiredVY = dirX * wanderSpeed, dirY * wanderSpeed
     desiredVX, desiredVY = clamp_vector(desiredVX, desiredVY, maxSpeed)
 
     local currentVX, currentVY = body:getLinearVelocity()
@@ -288,13 +302,9 @@ local function handle_wander(entity, body, ai, stats, dt)
     newVX, newVY = clamp_vector(newVX, newVY, maxSpeed)
     body:setLinearVelocity(newVX, newVY)
 
-    update_engine_trail(entity, true, impulseX, impulseY, dt)
-
-    if entity.weapon then
-        entity.weapon.firing = false
-        entity.weapon.targetX = nil
-        entity.weapon.targetY = nil
-    end
+    local desiredSpeed = vector.length(desiredVX, desiredVY)
+    update_engine_trail(entity, true, impulseX, impulseY, dt, desiredSpeed)
+    disable_weapon(entity)
 
     return true
 end
@@ -312,6 +322,15 @@ local function ensure_blackboard(ai, context)
     return blackboard
 end
 
+local function update_range_profile(blackboard, detectionRange, engagementRange, preferredDistance, weaponRange)
+    local rangeProfile = blackboard.rangeProfile or {}
+    rangeProfile.detection = detectionRange
+    rangeProfile.engagement = engagementRange
+    rangeProfile.preferred = preferredDistance
+    rangeProfile.weapon = weaponRange
+    blackboard.rangeProfile = rangeProfile
+end
+
 local function create_behavior_tree(context)
     local ensureTargetNode = BehaviorTree.Action(function(entity, blackboard, dt)
         local body = entity.body
@@ -327,16 +346,10 @@ local function create_behavior_tree(context)
         end
 
         local ai = entity.ai or {}
-        local stats = entity.stats or {}
         ensure_home(ai, entity)
 
         local detectionRange, engagementRange, preferredDistance, weaponRange = compute_ranges(entity)
-        local rangeProfile = blackboard.rangeProfile or {}
-        rangeProfile.detection = detectionRange
-        rangeProfile.engagement = engagementRange
-        rangeProfile.preferred = preferredDistance
-        rangeProfile.weapon = weaponRange
-        blackboard.rangeProfile = rangeProfile
+        update_range_profile(blackboard, detectionRange, engagementRange, preferredDistance, weaponRange)
 
         local target = entity.currentTarget
 
@@ -350,12 +363,7 @@ local function create_behavior_tree(context)
             return BTStatus.success
         end
 
-        if entity.weapon then
-            entity.weapon.firing = false
-            entity.weapon.targetX = nil
-            entity.weapon.targetY = nil
-        end
-
+        disable_weapon(entity)
         return BTStatus.failure
     end)
 
@@ -370,9 +378,7 @@ local function create_behavior_tree(context)
         local position = entity.position
         local target = entity.currentTarget
         if not (position and position.x and position.y and target and target.position) then
-            local vx, vy = body:getLinearVelocity()
-            local damping = math.max(0, 1 - dt * 4)
-            body:setLinearVelocity(vx * damping, vy * damping)
+            apply_damping(body, dt, 4)
             update_engine_trail(entity, false)
             return BTStatus.failure
         end
@@ -380,12 +386,7 @@ local function create_behavior_tree(context)
         local ai = entity.ai or {}
         local stats = entity.stats or {}
         local detectionRange, engagementRange, preferredDistance, weaponRange = compute_ranges(entity)
-        local rangeProfile = blackboard.rangeProfile or {}
-        rangeProfile.detection = detectionRange
-        rangeProfile.engagement = engagementRange
-        rangeProfile.preferred = preferredDistance
-        rangeProfile.weapon = weaponRange
-        blackboard.rangeProfile = rangeProfile
+        update_range_profile(blackboard, detectionRange, engagementRange, preferredDistance, weaponRange)
 
         local ex, ey = position.x, position.y
         local tx, ty = target.position.x, target.position.y
@@ -393,14 +394,12 @@ local function create_behavior_tree(context)
         local dirX, dirY, distance = normalize_vector(dx, dy)
 
         if not dirX or not dirY then
-            local vx, vy = body:getLinearVelocity()
-            local damping = math.max(0, 1 - dt * 4)
-            body:setLinearVelocity(vx * damping, vy * damping)
+            apply_damping(body, dt, 4)
             update_engine_trail(entity, false)
             return BTStatus.failure
         end
 
-        local desiredAngle = math.atan2(dy, dx) + math.pi * 0.5
+        local desiredAngle = atan2(dy, dx) + math.pi * 0.5
         local currentAngle = body:getAngle()
         local delta = clamp_angle(desiredAngle - currentAngle)
 
@@ -412,32 +411,22 @@ local function create_behavior_tree(context)
         local dropRange = disengageRange or detectionRange or engagementRange
         if dropRange and dropRange > 0 and distance > dropRange then
             entity.currentTarget = nil
-            if entity.weapon then
-                entity.weapon.firing = false
-                entity.weapon.targetX = nil
-                entity.weapon.targetY = nil
-            end
-            local vx, vy = body:getLinearVelocity()
-            local damping = math.max(0, 1 - dt * 4)
-            body:setLinearVelocity(vx * damping, vy * damping)
+            disable_weapon(entity)
+            apply_damping(body, dt, 4)
             update_engine_trail(entity, false)
             return BTStatus.failure
         end
 
-        local preferredDistance = math.max(80, preferredDistance or 0)
+        preferredDistance = max(80, preferredDistance or 0)
         local maxSpeed = stats.max_speed or 240
         local maxAccel = stats.max_acceleration or 600
         local mass = stats.mass or body:getMass() or 1
 
         local distanceError = distance - preferredDistance
-        local normalizedError
-        if preferredDistance and preferredDistance > 0 then
-            normalizedError = distanceError / preferredDistance
-        else
-            normalizedError = distanceError / math.max(distance, 1)
-        end
-        -- normalizedError keeps approach thrust smooth when outside/inside preferred distance
-        normalizedError = math.max(-1, math.min(1, normalizedError))
+        local normalizedError = preferredDistance > 0 
+            and (distanceError / preferredDistance) 
+            or (distanceError / max(distance, 1))
+        normalizedError = max(-1, min(1, normalizedError))
 
         local desiredSpeed = maxSpeed * normalizedError
         local desiredVX, desiredVY = dirX * desiredSpeed, dirY * desiredSpeed
@@ -447,13 +436,13 @@ local function create_behavior_tree(context)
             local state = ensure_ai_state(entity)
             state.strafeTimer = state.strafeTimer - dt
             if state.strafeTimer <= 0 then
-                state.strafeTimer = love.math.random() * 1.2 + 0.4
-                state.strafeDir = love.math.random() < 0.5 and -1 or 1
+                state.strafeTimer = random() * 1.2 + 0.4
+                state.strafeDir = random() < 0.5 and -1 or 1
             end
 
             local strafeDirX, strafeDirY = -dirY * state.strafeDir, dirX * state.strafeDir
             local strafeSpeed = maxSpeed * 0.6
-            local strafeScale = 1 - math.min(1, math.abs(normalizedError))
+            local strafeScale = 1 - min(1, abs(normalizedError))
             desiredVX = desiredVX + strafeDirX * strafeSpeed * strafeScale
             desiredVY = desiredVY + strafeDirY * strafeSpeed * strafeScale
         end
@@ -481,12 +470,13 @@ local function create_behavior_tree(context)
         newVX, newVY = clamp_vector(newVX, newVY, maxSpeed)
         body:setLinearVelocity(newVX, newVY)
 
-        update_engine_trail(entity, true, impulseX, impulseY, dt)
+        desiredSpeed = vector.length(desiredVX, desiredVY)
+        update_engine_trail(entity, true, impulseX, impulseY, dt, desiredSpeed)
 
         if entity.weapon then
             local weapon = entity.weapon
             local maxRange = weaponRange or weapon.maxRange or stats.max_range or engagementRange
-            local canFire = (maxRange and distance <= maxRange) and distance <= engagementRange
+            local canFire = maxRange and distance <= min(maxRange, engagementRange)
 
             weapon.firing = canFire
             weapon.targetX = canFire and tx or nil
@@ -505,11 +495,7 @@ local function create_behavior_tree(context)
         local ai = entity.ai or {}
         local stats = entity.stats or {}
 
-        if handle_wander(entity, body, ai, stats, dt) then
-            return BTStatus.success
-        end
-
-        return BTStatus.failure
+        return handle_wander(entity, body, ai, stats, dt) and BTStatus.success or BTStatus.failure
     end)
 
     local root = BehaviorTree.Selector({
@@ -543,7 +529,6 @@ return function(context)
             end
 
             local ai = entity.ai or {}
-            local stats = entity.stats or {}
             ensure_home(ai, entity)
             local tree = ensure_behavior_tree(ai, context)
             local blackboard = ensure_blackboard(ai, context)
@@ -551,10 +536,8 @@ return function(context)
 
             local status = tree:tick(entity, blackboard, dt)
 
-            if status == BTStatus.failure and entity.weapon then
-                entity.weapon.firing = false
-                entity.weapon.targetX = nil
-                entity.weapon.targetY = nil
+            if status == BTStatus.failure then
+                disable_weapon(entity)
             end
         end,
     }

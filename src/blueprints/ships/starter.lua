@@ -206,6 +206,10 @@ return {
             current = 95,
             regen = 0,
         },
+        shield = {
+            max = 50,
+            current = 50,
+        },
         colliders = {
             {
                 name = "hull",

@@ -548,10 +548,6 @@ function UIStateManager.onResize(state, width, height)
     state._viewport.width = width or (love.graphics and love.graphics.getWidth()) or state._viewport.width
     state._viewport.height = height or (love.graphics and love.graphics.getHeight()) or state._viewport.height
 
-    if type(state) == "table" then
-        state._pendingCameraRefresh = true
-    end
-
     if type(state.updateCamera) == "function" then
         state:updateCamera()
     end

@@ -246,27 +246,36 @@ function StatusPanel.draw(player)
         g.print("Hull", bar_x, current_y)
         print_right(font_small, Util.format_resource(hull_current, hull_max), bar_x, current_y, bar_width)
 
-        local shield_text = shield_max and shield_max > 0 and Util.format_resource(shield_current, shield_max) or ""
-        if shield_text ~= "" then
-            set_color(muted_color)
+        current_y = current_y + small_height
+
+        local shield_available = shield_max and shield_max > 0
+        if shield_available then
             g.setFont(font_small)
-            g.print("Shield: " .. shield_text, bar_x, current_y + small_height)
-            current_y = current_y + small_height * 2 + 4
-        else
+            set_color(muted_color)
+            g.print("Shield", bar_x, current_y)
+            set_color(text_color)
+            print_right(font_small, Util.format_resource(shield_current, shield_max), bar_x, current_y, bar_width)
             current_y = current_y + small_height + 4
+        else
+            current_y = current_y + 4
         end
 
         local hull_pct = Util.clamp01(hull_current / hull_max)
-        local shield_pct = shield_max and shield_max > 0 and Util.clamp01(shield_current / shield_max) or 0
+        local shield_pct = shield_available and Util.clamp01(shield_current / shield_max) or 0
 
         draw_progress_bar(bar_x, current_y, bar_width, hull_height, hull_pct, hud_colors.hull_fill)
 
         if shield_pct > 0 then
-            set_color(hud_colors.shield_fill)
-            g.rectangle("fill", bar_x + 1, current_y + hull_height / 2, (bar_width - 2) * shield_pct, hull_height / 2 - 1)
-            set_color(hud_colors.status_border)
-            g.setLineWidth(1)
-            g.line(bar_x + 1, current_y + hull_height / 2, bar_x + bar_width - 1, current_y + hull_height / 2)
+            local overlay = { 0.1, 0.85, 1.0, 0.75 }
+            set_color(overlay)
+            g.rectangle("fill", bar_x + 1, current_y + 1, (bar_width - 2) * shield_pct, hull_height - 2)
+
+            if g and g.setBlendMode then
+                g.setBlendMode("add")
+                g.setColor(0.45, 0.98, 1.0, 0.45)
+                g.rectangle("fill", bar_x + 3, current_y + 3, math.max(0, (bar_width - 6) * shield_pct), math.max(0, hull_height - 6))
+                g.setBlendMode("alpha")
+            end
         end
 
         draw_scale_markers(bar_x, current_y, bar_width, hull_height, 4)

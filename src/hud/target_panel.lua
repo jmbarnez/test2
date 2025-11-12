@@ -176,8 +176,12 @@ function TargetPanel.draw(context, player)
         end
 
         if shield_pct > 0 then
-            set_color(hud_colors.shield_fill or { 0.3, 0.6, 0.95, 1 })
-            love.graphics.rectangle("fill", text_x + 1, bar_y + 1, (bar_width - 2) * shield_pct, (bar_height - 2) * 0.5)
+            local shield_color = hud_colors.shield_fill or { 0.3, 0.6, 0.95, 1 }
+            love.graphics.setColor(shield_color[1], shield_color[2], shield_color[3], (shield_color[4] or 1) * 0.65)
+            love.graphics.rectangle("fill", text_x + 1, bar_y + 1, (bar_width - 2) * shield_pct, bar_height - 2)
+            set_color(hud_colors.status_border or { 0.2, 0.26, 0.34, 0.9 })
+            love.graphics.setLineWidth(1)
+            love.graphics.rectangle("line", text_x + 0.5, bar_y + 0.5, bar_width - 1, bar_height - 1)
         end
 
         set_color(hud_colors.status_border or { 0.2, 0.26, 0.34, 0.9 })
@@ -223,8 +227,12 @@ function TargetPanel.draw(context, player)
     end
 
     if shield_pct > 0 then
-        set_color(hud_colors.shield_fill or { 0.3, 0.6, 0.95, 1 })
-        love.graphics.rectangle("fill", text_x + 1, bar_y + 1, (bar_width - 2) * shield_pct, (bar_height - 2) * 0.5)
+        local shield_color = hud_colors.shield_fill or { 0.3, 0.6, 0.95, 1 }
+        love.graphics.setColor(shield_color[1], shield_color[2], shield_color[3], (shield_color[4] or 1) * 0.65)
+        love.graphics.rectangle("fill", text_x + 1, bar_y + 1, (bar_width - 2) * shield_pct, bar_height - 2)
+        set_color(hud_colors.status_border or { 0.2, 0.26, 0.34, 0.9 })
+        love.graphics.setLineWidth(1)
+        love.graphics.rectangle("line", text_x + 0.5, bar_y + 0.5, bar_width - 1, bar_height - 1)
     end
 
     set_color(hud_colors.status_border or { 0.2, 0.26, 0.34, 0.9 })

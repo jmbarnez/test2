@@ -5,35 +5,25 @@ local ShipCargo = require("src.ships.cargo")
 
 local runtime = {}
 
+-- Helper functions
 local function compute_polygon_radius(points)
+    if type(points) ~= "table" then return 0 end
+    
     local maxRadius = 0
-    if type(points) ~= "table" then
-        return maxRadius
-    end
-
     for i = 1, #points, 2 do
-        local x = points[i] or 0
-        local y = points[i + 1] or 0
-        local radius = vector.length(x, y)
-        if radius > maxRadius then
-            maxRadius = radius
-        end
+        local radius = vector.length(points[i] or 0, points[i + 1] or 0)
+        maxRadius = math.max(maxRadius, radius)
     end
-
     return maxRadius
 end
 
 local function compute_drawable_radius(drawable)
-    if type(drawable) ~= "table" then
-        return 0
-    end
-
-    if drawable._mountRadius then
-        return drawable._mountRadius
-    end
+    if type(drawable) ~= "table" then return 0 end
+    if drawable._mountRadius then return drawable._mountRadius end
 
     local radius = 0
     local parts = drawable.parts
+    
     if type(parts) == "table" then
         for i = 1, #parts do
             local part = parts[i]
@@ -46,10 +36,7 @@ local function compute_drawable_radius(drawable)
                 else
                     partRadius = compute_polygon_radius(part.points or {})
                 end
-
-                if partRadius > radius then
-                    radius = partRadius
-                end
+                radius = math.max(radius, partRadius)
             end
         end
     end
@@ -59,21 +46,15 @@ local function compute_drawable_radius(drawable)
 end
 
 local function resolve_mount_anchor(mount_data, entity)
-    if type(mount_data) ~= "table" then
-        return mount_data
-    end
-
-    local anchor = mount_data.anchor
-    if type(anchor) ~= "table" then
+    if type(mount_data) ~= "table" or type(mount_data.anchor) ~= "table" then
         return mount_data
     end
 
     local mount_radius = entity and entity.mountRadius or 0
     if mount_radius > 0 then
-        local anchorX = anchor.x or 0
-        local anchorY = anchor.y or 0
-        mount_data.lateral = (mount_data.lateral or 0) + anchorX * mount_radius
-        mount_data.forward = (mount_data.forward or 0) + anchorY * mount_radius
+        local anchor = mount_data.anchor
+        mount_data.lateral = (mount_data.lateral or 0) + (anchor.x or 0) * mount_radius
+        mount_data.forward = (mount_data.forward or 0) + (anchor.y or 0) * mount_radius
     end
 
     mount_data.anchor = nil
@@ -86,6 +67,16 @@ local function create_shapes(collider)
     end
 
     local collider_type = collider.type or "polygon"
+    local offset = collider.offset or {}
+    local ox, oy = offset.x or 0, offset.y or 0
+
+    if collider_type == "circle" then
+        local radius = collider.radius
+        if type(radius) ~= "number" or radius <= 0 then
+            error("Circle collider requires a positive radius", 3)
+        end
+        return { love.physics.newCircleShape(ox, oy, radius) }
+    end
 
     if collider_type == "polygon" then
         local raw_points = collider.points
@@ -93,27 +84,21 @@ local function create_shapes(collider)
             error("Polygon collider requires at least 3 vertices (6 coordinates)", 3)
         end
 
-        local offset = collider.offset
+        -- Apply offset
         local adjusted = {}
-        local vertex_count = #raw_points / 2
-
-        if type(offset) == "table" then
-            local ox = offset.x or 0
-            local oy = offset.y or 0
-            for i = 1, #raw_points, 2 do
-                adjusted[#adjusted + 1] = raw_points[i] + ox
-                adjusted[#adjusted + 1] = raw_points[i + 1] + oy
-            end
-        else
-            for i = 1, #raw_points do
-                adjusted[i] = raw_points[i]
-            end
+        for i = 1, #raw_points, 2 do
+            adjusted[#adjusted + 1] = raw_points[i] + ox
+            adjusted[#adjusted + 1] = raw_points[i + 1] + oy
         end
 
+        local vertex_count = #adjusted / 2
+        
+        -- Simple polygon
         if vertex_count <= 8 then
             return { love.physics.newPolygonShape(adjusted) }
         end
 
+        -- Triangulate complex polygon
         local shapes = {}
         for i = 3, vertex_count do
             local triangle = {
@@ -123,20 +108,13 @@ local function create_shapes(collider)
             }
             shapes[#shapes + 1] = love.physics.newPolygonShape(triangle)
         end
-
         return shapes
-    elseif collider_type == "circle" then
-        local radius = collider.radius
-        if type(radius) ~= "number" or radius <= 0 then
-            error("Circle collider requires a positive radius", 3)
-        end
-        local offset = collider.offset or {}
-        return { love.physics.newCircleShape(offset.x or 0, offset.y or 0, radius) }
-    else
-        error(string.format("Unsupported collider type '%s'", tostring(collider_type)), 3)
     end
+
+    error(string.format("Unsupported collider type '%s'", tostring(collider_type)), 3)
 end
 
+-- Expose utility functions
 runtime.compute_polygon_radius = compute_polygon_radius
 runtime.compute_drawable_radius = compute_drawable_radius
 runtime.resolve_mount_anchor = resolve_mount_anchor
@@ -147,28 +125,24 @@ function runtime.create_entity(components)
 end
 
 local function populate_weapon_inventory(entity, context)
-    local weapons = entity.weapons
-    local cargo = entity.cargo
-    if not (weapons and cargo and cargo.items) then
-        return
-    end
+    local weapons, cargo = entity.weapons, entity.cargo
+    if not (weapons and cargo and cargo.items) then return end
 
-    context = context or {}
-    local weaponOverrides = context.weaponOverrides or {}
+    local weaponOverrides = (context or {}).weaponOverrides or {}
 
     for i = 1, #weapons do
         local weapon = weapons[i]
         if weapon and weapon.itemId then
-            local overrides
-            if weapon.blueprint and weapon.blueprint.id then
-                overrides = weaponOverrides[weapon.blueprint.id]
-            end
+            local overrides = weapon.blueprint and weapon.blueprint.id 
+                and weaponOverrides[weapon.blueprint.id]
+            
             local itemInstance = Items.instantiate(weapon.itemId, {
                 installed = true,
                 slot = weapon.assign,
                 mount = weapon.weaponMount,
                 overrides = overrides,
             })
+            
             if itemInstance then
                 cargo.items[#cargo.items + 1] = itemInstance
                 cargo.dirty = true
@@ -177,205 +151,157 @@ local function populate_weapon_inventory(entity, context)
     end
 end
 
+-- Health system
 function runtime.initialize_health(entity, constants)
     local hull = entity.hull
     if hull then
         local maxHull = hull.max or hull.capacity or hull.strength or 100
-        entity.hull.max = maxHull
-        entity.hull.current = math.min(hull.current or maxHull, maxHull)
+        hull.max = maxHull
+        hull.current = math.min(hull.current or maxHull, maxHull)
     end
 
-    if entity.health then
-        entity.health.max = entity.health.max
-            or (entity.hull and entity.hull.max)
-            or entity.health.current
-            or 100
+    -- Initialize health component
+    if not entity.health then
+        entity.health = hull or { max = 100, current = 100 }
+    else
+        entity.health.max = entity.health.max or (hull and hull.max) or entity.health.current or 100
         entity.health.current = math.min(entity.health.current or entity.health.max, entity.health.max)
-        entity.health.showTimer = entity.health.showTimer or 0
-    elseif entity.hull then
-        entity.health = entity.hull
-        entity.health.showTimer = entity.health.showTimer or 0
     end
+    entity.health.showTimer = entity.health.showTimer or 0
 
-    if not entity.healthBar then
-        local defaults = constants and constants.ships and constants.ships.health_bar
-        if defaults then
-            entity.healthBar = ship_util.deep_copy(defaults)
-            local bar = entity.healthBar
-            bar.showDuration = bar.showDuration or bar.show_duration
-        end
-    elseif entity.healthBar.showDuration == nil and entity.healthBar.show_duration ~= nil then
-        entity.healthBar.showDuration = entity.healthBar.show_duration
+    -- Initialize health bar
+    if not entity.healthBar and constants and constants.ships and constants.ships.health_bar then
+        entity.healthBar = ship_util.deep_copy(constants.ships.health_bar)
+    end
+    
+    if entity.healthBar then
+        entity.healthBar.showDuration = entity.healthBar.showDuration or entity.healthBar.show_duration
     end
 end
 
 function runtime.decrement_health_timer(entity, dt)
-    if dt <= 0 then
-        return
-    end
-
     local health = entity.health
-    if health and health.showTimer and health.showTimer > 0 then
+    if health and health.showTimer and health.showTimer > 0 and dt > 0 then
         health.showTimer = math.max(0, health.showTimer - dt)
     end
 end
 
+-- Shield system
 local function resolve_shield_component(entity)
-    if type(entity) ~= "table" then
-        return nil
-    end
+    if type(entity) ~= "table" then return nil end
 
     local shield = entity.shield
-    if type(shield) ~= "table" then
-        shield = nil
+    if type(shield) == "table" then
+        if entity.health then
+            entity.health.shield = entity.health.shield or shield
+        end
+        return shield
     end
 
-    if not shield and entity.health and type(entity.health.shield) == "table" then
-        shield = entity.health.shield
-        entity.shield = shield
-    elseif shield and entity.health then
-        entity.health.shield = entity.health.shield or shield
+    -- Check if shield is in health component
+    if entity.health and type(entity.health.shield) == "table" then
+        entity.shield = entity.health.shield
+        return entity.health.shield
     end
 
-    return shield
+    return nil
+end
+
+local function clamp(value, min_val, max_val)
+    return math.max(min_val, math.min(value, max_val))
 end
 
 local function initialize_shield(entity)
     local shield = resolve_shield_component(entity)
-    if not shield then
-        return
-    end
+    if not shield then return end
 
-    local maxCandidate = shield.max or shield.capacity or shield.limit or shield.strength or shield.current or 0
-    local maxShield = math.max(0, tonumber(maxCandidate) or 0)
+    local maxShield = math.max(0, tonumber(shield.max or shield.capacity or shield.limit 
+        or shield.strength or shield.current or 0) or 0)
+    
     shield.max = maxShield
-
-    if maxShield > 0 then
-        local current = tonumber(shield.current)
-        if current == nil then
-            current = maxShield
-        end
-        shield.current = math.max(0, math.min(current, maxShield))
-    else
-        shield.current = 0
-    end
-
+    shield.current = maxShield > 0 and clamp(tonumber(shield.current) or maxShield, 0, maxShield) or 0
     shield.regen = math.max(0, tonumber(shield.regen) or 0)
     shield.rechargeDelay = math.max(0, tonumber(shield.rechargeDelay) or 0)
     shield.rechargeTimer = math.max(0, tonumber(shield.rechargeTimer) or 0)
-    shield.percent = (maxShield > 0) and (shield.current / maxShield) or 0
+    shield.percent = maxShield > 0 and (shield.current / maxShield) or 0
     shield.isDepleted = shield.current <= 0
 end
 
 local function update_shield(entity, dt)
     local shield = resolve_shield_component(entity)
-    if not shield then
-        return
-    end
+    if not shield or dt <= 0 then return end
 
     local maxShield = math.max(0, tonumber(shield.max) or 0)
     shield.max = maxShield
 
     if maxShield <= 0 then
-        shield.current = 0
-        shield.regen = math.max(0, tonumber(shield.regen) or 0)
-        shield.rechargeDelay = math.max(0, tonumber(shield.rechargeDelay) or 0)
-        shield.rechargeTimer = 0
-        shield.percent = 0
+        shield.current, shield.percent, shield.rechargeTimer = 0, 0, 0
         shield.isDepleted = true
         return
     end
 
-    local current = tonumber(shield.current)
-    if current == nil then
-        current = maxShield
-    end
-    current = math.max(0, math.min(current, maxShield))
-
+    local current = clamp(tonumber(shield.current) or maxShield, 0, maxShield)
+    local rechargeTimer = math.max(0, (tonumber(shield.rechargeTimer) or 0) - dt)
     local regenRate = math.max(0, tonumber(shield.regen) or 0)
-    local rechargeDelay = math.max(0, tonumber(shield.rechargeDelay) or 0)
-    local rechargeTimer = math.max(0, tonumber(shield.rechargeTimer) or 0)
 
-    if rechargeTimer > 0 and dt > 0 then
-        rechargeTimer = math.max(0, rechargeTimer - dt)
-    end
-
-    if regenRate > 0 and rechargeTimer <= 0 and current < maxShield and dt > 0 then
+    -- Regenerate shield
+    if regenRate > 0 and rechargeTimer <= 0 and current < maxShield then
         current = math.min(maxShield, current + regenRate * dt)
     end
 
     shield.current = current
-    shield.regen = regenRate
-    shield.rechargeDelay = rechargeDelay
     shield.rechargeTimer = rechargeTimer
-    shield.percent = (maxShield > 0) and (current / maxShield) or 0
+    shield.percent = current / maxShield
     shield.isDepleted = current <= 0
 end
 
+-- Energy system
 local function initialize_energy(entity)
     local energy = entity.energy
-    if type(energy) ~= "table" then
-        return
-    end
+    if type(energy) ~= "table" then return end
 
     local stats = entity.stats or {}
-    local candidateMax = energy.max or energy.capacity or energy.limit or energy.current or stats.main_thrust or 0
-    local maxEnergy = math.max(0, tonumber(candidateMax) or 0)
+    local maxEnergy = math.max(0, tonumber(energy.max or energy.capacity or energy.limit 
+        or energy.current or stats.main_thrust or 0) or 0)
 
     energy.max = maxEnergy
-
-    if maxEnergy > 0 then
-        local current = tonumber(energy.current)
-        if current == nil then current = maxEnergy end
-        energy.current = math.min(maxEnergy, math.max(0, current))
-    else
-        energy.current = 0
-    end
-
+    energy.current = maxEnergy > 0 and clamp(tonumber(energy.current) or maxEnergy, 0, maxEnergy) or 0
     energy.regen = math.max(0, tonumber(energy.regen) or 0)
-    local defaultDrain = stats.main_thrust or 0
-    energy.thrustDrain = math.max(0, tonumber(energy.thrustDrain) or defaultDrain)
-    energy.rechargeDelay = 0
-    energy.rechargeTimer = 0
+    energy.thrustDrain = math.max(0, tonumber(energy.thrustDrain) or stats.main_thrust or 0)
+    energy.rechargeDelay, energy.rechargeTimer = 0, 0
     energy.isDepleted = energy.current <= 0
-    energy.percent = (maxEnergy > 0) and (energy.current / maxEnergy) or 0
+    energy.percent = maxEnergy > 0 and (energy.current / maxEnergy) or 0
 end
 
 local function update_energy(entity, dt)
     local energy = entity.energy
-    if type(energy) ~= "table" then
-        return
-    end
+    if type(energy) ~= "table" then return end
 
     local maxEnergy = math.max(0, tonumber(energy.max) or 0)
     energy.max = maxEnergy
 
     if maxEnergy <= 0 then
-        energy.current = 0
-        energy.percent = 0
+        energy.current, energy.percent, energy.rechargeTimer = 0, 0, 0
         energy.isDepleted = true
-        energy.rechargeTimer = 0
         return
     end
 
     local current = tonumber(energy.current) or maxEnergy
-    local rechargeTimer = math.max(0, tonumber(energy.rechargeTimer) or 0)
     local regenRate = math.max(0, tonumber(energy.regen) or 0)
 
-    if entity.player then
-        if regenRate > 0 then
-            current = math.min(maxEnergy, current + regenRate * dt)
-        end
+    -- Only regenerate for players
+    if entity.player and regenRate > 0 then
+        current = math.min(maxEnergy, current + regenRate * dt)
     else
         current = math.min(maxEnergy, current)
     end
 
     energy.current = current
-    energy.rechargeTimer = rechargeTimer
-    energy.percent = (maxEnergy > 0) and (current / maxEnergy) or 0
+    energy.percent = current / maxEnergy
     energy.isDepleted = current <= 0
 end
 
+-- Main runtime functions
 function runtime.initialize(entity, constants, context)
     entity.shipRuntime = true
 
@@ -402,13 +328,11 @@ function runtime.update(entity, dt)
 end
 
 function runtime.serialize(entity)
-    if type(entity) ~= "table" then
-        return nil
-    end
+    if type(entity) ~= "table" then return nil end
 
     local body = entity.body
-    local vx, vy = 0, 0
-    local angularVelocity
+    local vx, vy, angularVelocity = 0, 0, nil
+    
     if body and not body:isDestroyed() then
         vx, vy = body:getLinearVelocity()
         angularVelocity = body:getAngularVelocity()
@@ -460,46 +384,36 @@ function runtime.applySnapshot(entity, snapshot)
         return entity
     end
 
-    local body = entity.body
+    -- Simple property updates
+    entity.playerId = snapshot.playerId or entity.playerId
+    entity.faction = snapshot.faction or entity.faction
 
-    if snapshot.playerId then
-        entity.playerId = snapshot.playerId
-    end
-    if snapshot.faction then
-        entity.faction = snapshot.faction
-    end
-
+    -- Position
     if snapshot.position then
         entity.position = entity.position or {}
         entity.position.x = snapshot.position.x or entity.position.x or 0
         entity.position.y = snapshot.position.y or entity.position.y or 0
-        -- Don't update body here - snapshot.lua handles body positioning for interpolation
     end
 
-    if snapshot.rotation ~= nil then
-        entity.rotation = snapshot.rotation
-        -- Don't update body here - snapshot.lua handles body rotation for interpolation
-    end
-
+    -- Rotation and velocity
+    if snapshot.rotation ~= nil then entity.rotation = snapshot.rotation end
     if snapshot.velocity then
         entity.velocity = entity.velocity or {}
         entity.velocity.x = snapshot.velocity.x or 0
         entity.velocity.y = snapshot.velocity.y or 0
-        -- Don't update body here - snapshot.lua handles body velocity for interpolation
     end
 
-    -- Don't update angularVelocity on body - snapshot.lua handles all body state for interpolation
-
+    -- Health
     if snapshot.health then
         entity.health = entity.health or {}
         entity.health.current = snapshot.health.current or entity.health.current
         entity.health.max = snapshot.health.max or entity.health.max
     end
 
+    -- Level and stats
     if snapshot.level then
         entity.level = ship_util.deep_copy(snapshot.level)
     end
-
     if snapshot.stats then
         entity.stats = entity.stats or {}
         for key, value in pairs(snapshot.stats) do
@@ -507,42 +421,42 @@ function runtime.applySnapshot(entity, snapshot)
         end
     end
 
+    -- Thrust
     if snapshot.thrust then
         entity.isThrusting = not not snapshot.thrust.isThrusting
         entity.currentThrust = snapshot.thrust.current or entity.currentThrust
         entity.maxThrust = snapshot.thrust.max or entity.maxThrust
     end
 
+    -- Energy
     if snapshot.energy then
         entity.energy = entity.energy or {}
         entity.energy.current = snapshot.energy.current or entity.energy.current
         entity.energy.max = snapshot.energy.max or entity.energy.max
     end
 
+    -- Shield
     if snapshot.shield then
-        local shield = resolve_shield_component(entity)
-        if not shield then
-            shield = {}
+        local shield = resolve_shield_component(entity) or {}
+        if not entity.shield then
             entity.shield = shield
-            if entity.health then
-                entity.health.shield = shield
-            end
+            if entity.health then entity.health.shield = shield end
         end
 
-        shield.current = snapshot.shield.current or shield.current
-        shield.max = snapshot.shield.max or shield.max
-        shield.percent = (shield.max and shield.max > 0)
-            and ((shield.current or 0) / shield.max)
-            or 0
-        shield.isDepleted = (shield.current or 0) <= 0
+        shield.current = snapshot.shield.current or shield.current or 0
+        shield.max = snapshot.shield.max or shield.max or 0
+        shield.percent = shield.max > 0 and (shield.current / shield.max) or 0
+        shield.isDepleted = shield.current <= 0
     end
 
+    -- Weapons
     if snapshot.weapons and type(entity.weapons) == "table" then
         for index = 1, #snapshot.weapons do
             local weaponSnapshot = snapshot.weapons[index]
             local weapon = entity.weapons[index]
+            
+            -- Find weapon by id if not at same index
             if not weapon and weaponSnapshot.id then
-                -- Attempt to find by weapon id
                 for w = 1, #entity.weapons do
                     local candidate = entity.weapons[w]
                     local candidateId = candidate and (candidate.id or (candidate.blueprint and candidate.blueprint.id))
@@ -559,16 +473,15 @@ function runtime.applySnapshot(entity, snapshot)
         end
     end
 
-    -- Apply primary weapon component
     if snapshot.weapon and entity.weapon then
         runtime.apply_weapon_state(entity.weapon, snapshot.weapon)
     end
 
-    -- Apply weapon mount
     if snapshot.weaponMount then
         entity.weaponMount = ship_util.deep_copy(snapshot.weaponMount)
     end
 
+    -- Cargo
     if snapshot.cargo and entity.cargo then
         entity.cargo.capacity = snapshot.cargo.capacity or entity.cargo.capacity
         entity.cargo.used = snapshot.cargo.used or entity.cargo.used
@@ -579,9 +492,7 @@ function runtime.applySnapshot(entity, snapshot)
 end
 
 function runtime.apply_weapon_state(weapon, snapshot)
-    if type(weapon) ~= "table" or type(snapshot) ~= "table" then
-        return
-    end
+    if type(weapon) ~= "table" or type(snapshot) ~= "table" then return end
 
     weapon.firing = not not snapshot.firing
     weapon.alwaysFire = not not snapshot.alwaysFire

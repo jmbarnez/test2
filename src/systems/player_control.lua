@@ -7,8 +7,10 @@
 ----@diagnostic disable: undefined-global
 local tiny = require("libs.tiny")
 local vector = require("src.util.vector")
+local GameContext = require("src.states.gameplay.context")
+
 return function(context)
-    context = context or {}
+    context = GameContext.compose(GameContext.resolveState(context) or context, context)
     local engineTrail = context.engineTrail
     local uiInput = context.uiInput
     return tiny.system {

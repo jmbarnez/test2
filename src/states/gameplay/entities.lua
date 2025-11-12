@@ -261,10 +261,35 @@ function Entities.spawnPlayer(state, shipIdOrConfig, overrides)
 
     local shipEntity = world:add(playerShip)
 
-    local playerId = config.playerId or "player"
+    local playerId = (config and config.playerId) or "player"
     PlayerManager.attachShip(state, shipEntity, levelData, playerId)
 
     return shipEntity
+end
+
+local function resolve_shield(entity)
+    if not entity then
+        return nil
+    end
+
+    local shield = entity.shield
+    if type(shield) ~= "table" and entity.health then
+        local healthShield = entity.health.shield
+        if type(healthShield) == "table" then
+            shield = healthShield
+            entity.shield = shield
+        end
+    end
+
+    if type(shield) ~= "table" then
+        return nil
+    end
+
+    if entity.health and entity.health.shield == nil then
+        entity.health.shield = shield
+    end
+
+    return shield
 end
 
 function Entities.damage(entity, amount, source, context)
@@ -272,8 +297,61 @@ function Entities.damage(entity, amount, source, context)
         return
     end
 
+    local damageAmount = math.max(0, tonumber(amount) or 0)
+    if damageAmount <= 0 then
+        return
+    end
+
+    local shield = resolve_shield(entity)
+    if shield and (tonumber(shield.max) or 0) > 0 then
+        local maxShield = math.max(0, tonumber(shield.max) or 0)
+        local current = math.max(0, tonumber(shield.current) or 0)
+        local absorbed = math.min(current, damageAmount)
+        if absorbed > 0 then
+            current = current - absorbed
+            damageAmount = damageAmount - absorbed
+            shield.current = current
+            local percent = 0
+            if maxShield > 0 then
+                percent = math.max(0, math.min(1, current / maxShield))
+            end
+            shield.percent = percent
+            shield.isDepleted = current <= 0
+            local rechargeDelay = math.max(0, tonumber(shield.rechargeDelay) or 0)
+            shield.rechargeTimer = rechargeDelay
+        end
+    end
+
+    if damageAmount <= 0 then
+        if source ~= nil then
+            entity.lastDamageSource = source
+
+            local playerId = source.playerId
+                or source.ownerPlayerId
+                or (source.owner and source.owner.playerId)
+
+            if not playerId and source.player then
+                playerId = source.playerId or (source.player and source.player.playerId)
+            end
+
+            if not playerId and source.lastDamagePlayerId then
+                playerId = source.lastDamagePlayerId
+            end
+
+            if playerId then
+                entity.lastDamagePlayerId = playerId
+            end
+        end
+
+        if entity.healthBar then
+            entity.health.showTimer = entity.healthBar.showDuration or 0
+        end
+
+        return
+    end
+
     local previous = entity.health.current or entity.health.max or 0
-    entity.health.current = math.max(0, previous - amount)
+    entity.health.current = math.max(0, previous - damageAmount)
 
     if source ~= nil then
         entity.lastDamageSource = source
@@ -303,7 +381,7 @@ function Entities.damage(entity, amount, source, context)
         entity.pendingDestroy = true
     end
 
-    if amount and amount > 0 then
+    if damageAmount and damageAmount > 0 then
         local contextHost = entity.damageContext
             or (source and source.damageContext)
             or (source and source.state)
@@ -317,7 +395,7 @@ function Entities.damage(entity, amount, source, context)
             end
         end
 
-        damage_numbers.push(contextHost, entity, amount, {
+        damage_numbers.push(contextHost, entity, damageAmount, {
             position = impactPosition,
         })
     end
@@ -345,8 +423,16 @@ function Entities.destroyWorldEntities(world)
 
     for i = 1, #world.entities do
         local entity = world.entities[i]
-        if entity.body and not entity.body:isDestroyed() then
-            entity.body:destroy()
+        if entity then
+            local trail = entity.engineTrail
+            if trail and trail.clear then
+                trail:clear()
+            end
+            entity.engineTrail = nil
+
+            if entity.body and not entity.body:isDestroyed() then
+                entity.body:destroy()
+            end
         end
     end
 
@@ -383,10 +469,18 @@ function Entities.clearNonLocalEntities(state)
 
     for i = 1, #toRemove do
         local entity = toRemove[i]
-        if entity.body and not entity.body:isDestroyed() then
-            entity.body:destroy()
+        if entity then
+            local trail = entity.engineTrail
+            if trail and trail.clear then
+                trail:clear()
+            end
+            entity.engineTrail = nil
+
+            if entity.body and not entity.body:isDestroyed() then
+                entity.body:destroy()
+            end
+            world:remove(entity)
         end
-        world:remove(entity)
     end
 
     if state.entitiesById then
