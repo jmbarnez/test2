@@ -609,6 +609,17 @@ PlayerManager.register(context, ship)
 
 ## Error Handling & Validation
 
+### Error Handling Strategy
+
+1. **Define the audience of the error.**
+   - Use `assert` (or `error`) only for *developer contract violations*—bad blueprint data, missing required fields, or states that should be impossible if the code is correct. Always include a descriptive message that pinpoints the failure.
+   - Prefer graceful returns (`return false, "reason"` or `return nil`) for runtime issues that can happen in normal play, such as optional modules not being initialized yet or input coming from user-configurable data.
+2. **Never fail silently without context.** If a function cannot complete its work, it must either:
+   - Return a status boolean plus an explanatory message, or
+   - Log a warning when `context.debugMode`/`_G.DEBUG` is true so the issue surfaces during testing.
+3. **Degrade when possible.** For optional systems (audio, analytics, network), attempt a fallback path before giving up. Only surface a hard error when no safe alternative exists.
+4. **Document expectations.** Public APIs must state whether they `assert`, throw, or return status codes so callers can handle the outcome consistently.
+
 ### Nil-Safety Pattern
 
 Always validate inputs that could be nil:

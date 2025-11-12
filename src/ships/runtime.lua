@@ -2,6 +2,7 @@ local Items = require("src.items.registry")
 local vector = require("src.util.vector")
 local ship_util = require("src.ships.util")
 local ShipCargo = require("src.ships.cargo")
+local Modules = require("src.ships.modules")
 
 local runtime = {}
 
@@ -309,10 +310,12 @@ function runtime.initialize(entity, constants, context)
         ShipCargo.initialize(entity.cargo)
     end
 
+    Modules.initialize(entity)
     runtime.initialize_health(entity, constants)
     initialize_shield(entity)
     initialize_energy(entity)
     populate_weapon_inventory(entity, context or {})
+    Modules.sync_from_cargo(entity)
     ShipCargo.refresh_if_needed(entity.cargo)
 
     if entity.stats and entity.stats.main_thrust then
@@ -322,6 +325,9 @@ end
 
 function runtime.update(entity, dt)
     ShipCargo.refresh_if_needed(entity.cargo)
+    if entity.cargo and entity.cargo.dirty then
+        Modules.sync_from_cargo(entity)
+    end
     runtime.decrement_health_timer(entity, dt)
     update_shield(entity, dt)
     update_energy(entity, dt)
@@ -371,6 +377,7 @@ function runtime.serialize(entity)
             current = entity.shield.current,
             max = entity.shield.max,
         } or nil,
+        modules = Modules.serialize(entity),
         stats = entity.stats and ship_util.deep_copy(entity.stats) or nil,
         cargo = entity.cargo and {
             used = entity.cargo.used,
@@ -447,6 +454,12 @@ function runtime.applySnapshot(entity, snapshot)
         shield.max = snapshot.shield.max or shield.max or 0
         shield.percent = shield.max > 0 and (shield.current / shield.max) or 0
         shield.isDepleted = shield.current <= 0
+    end
+
+    if snapshot.modules then
+        Modules.apply_snapshot(entity, snapshot.modules)
+    else
+        Modules.sync_from_cargo(entity)
     end
 
     -- Weapons

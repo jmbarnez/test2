@@ -210,6 +210,12 @@ return {
             max = 50,
             current = 50,
         },
+        modules = {
+            defaultType = "defense",
+            slots = {
+                { type = "defense" },
+            },
+        },
         colliders = {
             {
                 name = "hull",

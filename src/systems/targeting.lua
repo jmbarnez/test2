@@ -45,6 +45,30 @@ local function get_hover_radius(entity)
     return math.max(MIN_RADIUS, radius)
 end
 
+local function is_targetable(entity)
+    if not entity then
+        return false
+    end
+
+    if entity.enemy then
+        return true
+    end
+
+    if entity.station or entity.type == "station" then
+        return true
+    end
+
+    if entity.asteroid or entity.type == "asteroid" then
+        return true
+    end
+
+    if entity.targetable ~= nil then
+        return not not entity.targetable
+    end
+
+    return false
+end
+
 local function is_valid_target(entity)
     if not entity or entity.pendingDestroy or entity.player then
         return false
@@ -74,7 +98,7 @@ local function find_closest_target(entities, world_x, world_y, player_entity)
 
     for i = 1, #entities do
         local entity = entities[i]
-        if entity ~= player_entity and entity.enemy and is_valid_target(entity) then
+        if entity ~= player_entity and is_targetable(entity) and is_valid_target(entity) then
             local pos = entity.position
             local radius = get_hover_radius(entity) * HOVER_RADIUS_MULTIPLIER
             local dx, dy = world_x - pos.x, world_y - pos.y

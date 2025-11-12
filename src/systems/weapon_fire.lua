@@ -10,15 +10,35 @@ local AudioManager = require("src.audio.manager")
 
 local love = love
 
-local DEFAULT_WEAPON_OFFSET = 30
+local DEFAULT_WEAPON_OFFSET = 30 -- Default muzzle offset when no mount data is provided
+local ENEMY_DAMAGE_MULTIPLIER = 0.5 -- Enemy-fired weapons deal half damage to ease early encounters
+local ENERGY_EPSILON = 1e-6 -- Tolerance to mitigate floating-point drift when evaluating energy availability
+local DEFAULT_PLAYER_ENERGY_DRAIN = 14 -- Fallback energy drain when a weapon does not define custom consumption
+
+---@alias WeaponEntity table
+---@alias WeaponComponent table
+---@alias WeaponBeamContainer table[]
+---@alias WeaponImpactContainer table[]
+---@alias WeaponSystemContext { physicsWorld:love.World|nil, damageEntity:fun(target:table, amount:number, source:table, context:table)|nil, camera:table|nil, intentHolder:table|nil, state:table|nil }
+
+local SPARK_COUNT = 12 -- Number of impact sparks spawned when a beam strikes
+local SPARK_JITTER_MAX = math.pi * 0.6 -- Maximum angular deviation for spark directions
+local SPARK_SPEED_MIN = 140 -- Minimum spark velocity in pixels/second
+local SPARK_SPEED_MAX = 240 -- Maximum spark velocity in pixels/second
+local SPARK_LIFETIME_BASE = 0.2 -- Minimum lifetime for beam impact sparks (seconds)
+local SPARK_LIFETIME_VARIANCE = 0.18 -- Additional randomized spark lifetime (seconds)
+local SPARK_VELOCITY_DAMPING = 0.88 -- Damping factor applied each frame to spark velocity
 
 local function resolve_damage_multiplier(shooter)
     if shooter and shooter.enemy then
-        return 0.5
+        return ENEMY_DAMAGE_MULTIPLIER
     end
     return 1
 end
 
+---@param entity WeaponEntity
+---@return number startX
+---@return number startY
 local function compute_muzzle_origin(entity)
     local weapon = entity.weapon or {}
     local mount = entity.weaponMount
@@ -56,6 +76,12 @@ local function compute_muzzle_origin(entity)
 
     return startX, startY
 end
+---@param container WeaponImpactContainer|nil
+---@param x number
+---@param y number
+---@param dirX number
+---@param dirY number
+---@param beamColor number[]
 local function spawn_beam_sparks(container, x, y, dirX, dirY, beamColor)
     if not container then
         return
@@ -69,11 +95,11 @@ local function spawn_beam_sparks(container, x, y, dirX, dirY, beamColor)
         1.0,
     }
 
-    for _ = 1, 12 do
-        local jitter = (love.math.random() - 0.5) * math.pi * 0.6
+    for _ = 1, SPARK_COUNT do
+        local jitter = (love.math.random() - 0.5) * SPARK_JITTER_MAX
         local angle = baseAngle + jitter
-        local speed = love.math.random(140, 240)
-        local lifetime = 0.2 + love.math.random() * 0.18
+        local speed = love.math.random(SPARK_SPEED_MIN, SPARK_SPEED_MAX)
+        local lifetime = SPARK_LIFETIME_BASE + love.math.random() * SPARK_LIFETIME_VARIANCE
 
         local spark = {
             x = x + (love.math.random() - 0.5) * 3,
@@ -96,6 +122,9 @@ local function spawn_beam_sparks(container, x, y, dirX, dirY, beamColor)
     end
 end
 
+---@param entity WeaponEntity|nil
+---@param amount number
+---@return boolean
 local function has_energy(entity, amount)
     local energy = entity and entity.energy
     if not energy then
@@ -105,7 +134,7 @@ local function has_energy(entity, amount)
     local current = tonumber(energy.current) or 0
     local maxEnergy = tonumber(energy.max) or 0
     local drain = math.max(0, amount)
-    local canSpend = current >= drain - 1e-6
+    local canSpend = current >= drain - ENERGY_EPSILON
 
     if canSpend and drain > 0 then
         energy.current = current - drain
@@ -119,6 +148,8 @@ local function has_energy(entity, amount)
     return canSpend
 end
 
+---@param weapon WeaponComponent|nil
+---@param key string
 local function play_weapon_sound(weapon, key)
     if not weapon then
         return
@@ -146,6 +177,17 @@ local function play_weapon_sound(weapon, key)
     end
 end
 
+---@param entity WeaponEntity
+---@param startX number
+---@param startY number
+---@param dirX number
+---@param dirY number
+---@param weapon WeaponComponent
+---@param physicsWorld love.World|nil
+---@param damageEntity fun(target:table, amount:number, source:table, context:table)|nil
+---@param dt number
+---@param beams WeaponBeamContainer
+---@param impacts WeaponImpactContainer
 local function fire_hitscan(entity, startX, startY, dirX, dirY, weapon, physicsWorld, damageEntity, dt, beams, impacts)
     local weaponConst = constants.weapons or {}
     local beamConst = weaponConst[weapon.constantKey or "laser"] or {}
@@ -155,7 +197,7 @@ local function fire_hitscan(entity, startX, startY, dirX, dirY, weapon, physicsW
     local endY = startY + dirY * maxRange
 
     if entity and entity.player then
-        local drainPerSecond = weapon.energyPerSecond or weapon.energyDrain or 14
+        local drainPerSecond = weapon.energyPerSecond or weapon.energyDrain or DEFAULT_PLAYER_ENERGY_DRAIN
         local energyCost = math.max(0, drainPerSecond * dt)
         if not has_energy(entity, energyCost) then
             return
@@ -247,6 +289,8 @@ local function fire_hitscan(entity, startX, startY, dirX, dirY, weapon, physicsW
     }
 end
 
+---@param context WeaponSystemContext
+---@return table
 return function(context)
     context = context or {}
     local physicsWorld = context.physicsWorld
@@ -367,7 +411,7 @@ return function(context)
                     if fireMode == "projectile" then
                         if fire and (not weapon.cooldown or weapon.cooldown <= 0) then
                             if entity and entity.player then
-                                local shotCost = weapon.energyPerShot or weapon.energyCost or weapon.energyDrain or weapon.energyPerSecond or 14
+                                local shotCost = weapon.energyPerShot or weapon.energyCost or weapon.energyDrain or weapon.energyPerSecond or DEFAULT_PLAYER_ENERGY_DRAIN
                                 if not has_energy(entity, shotCost) then
                                     fire = false
                                 end
@@ -456,8 +500,8 @@ return function(context)
                 else
                     spark.x = spark.x + spark.vx * dt
                     spark.y = spark.y + spark.vy * dt
-                    spark.vx = spark.vx * 0.88
-                    spark.vy = spark.vy * 0.88
+                    spark.vx = spark.vx * SPARK_VELOCITY_DAMPING
+                    spark.vy = spark.vy * SPARK_VELOCITY_DAMPING
                     local ratio = spark.maxLifetime > 0 and (spark.lifetime / spark.maxLifetime) or 0
                     if spark.baseSize then
                         spark.size = spark.baseSize * math.max(ratio, 0)

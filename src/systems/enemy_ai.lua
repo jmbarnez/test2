@@ -8,6 +8,13 @@ local BehaviorTree = require("src.ai.behavior_tree")
 local TAU = math_util.TAU
 local BTStatus = BehaviorTree.Status
 
+---@class EnemyBehaviorTreeInstance
+---@field tick fun(self:EnemyBehaviorTreeInstance, entity:table, blackboard:table, dt:number):string
+
+---@alias EnemyBehaviorContext table
+---@alias EnemyEntity table
+---@alias EnemyBlackboard table
+
 -- Cache frequently used functions
 local random = love.math.random
 local cos = math.cos
@@ -44,6 +51,12 @@ local function within_range(origin, candidate, range)
     return (dx * dx + dy * dy) <= (range * range)
 end
 
+---@param world table
+---@param tag string
+---@param preferred table|nil
+---@param origin { x:number, y:number }|nil
+---@param detectionRange number|nil
+---@return table|nil
 local function find_target(world, tag, preferred, origin, detectionRange)
     if preferred and has_tag(preferred, tag) and within_range(origin, preferred, detectionRange) then
         return preferred
@@ -64,6 +77,8 @@ local function find_target(world, tag, preferred, origin, detectionRange)
     return nil
 end
 
+---@param entity EnemyEntity
+---@return table
 local function ensure_ai_state(entity)
     local state = entity.aiState
     if not state then
@@ -98,6 +113,12 @@ local clamp_vector = function(x, y, max)
     return vector.clamp(x, y, max)
 end
 
+---@param entity EnemyEntity
+---@param isThrusting boolean
+---@param impulseX number|nil
+---@param impulseY number|nil
+---@param dt number|nil
+---@param desiredSpeed number|nil
 local function update_engine_trail(entity, isThrusting, impulseX, impulseY, dt, desiredSpeed)
     if not entity then
         return
@@ -145,6 +166,9 @@ local function update_engine_trail(entity, isThrusting, impulseX, impulseY, dt, 
     end
 end
 
+---@param ai table
+---@param entity EnemyEntity
+---@return { x:number, y:number }|nil
 local function ensure_home(ai, entity)
     if ai.home then
         return ai.home
@@ -165,6 +189,10 @@ local function ensure_home(ai, entity)
     return nil
 end
 
+---@param home { x:number, y:number }
+---@param radius number
+---@return number
+---@return number
 local function choose_wander_point(home, radius)
     local angle = random() * TAU
     local dist = random() * radius
@@ -173,10 +201,17 @@ end
 
 local PlayerManager = require("src.player.manager")
 
+---@param context EnemyBehaviorContext
+---@return table|nil
 local function get_local_player(context)
     return PlayerManager.resolveLocalPlayer(context)
 end
 
+---@param entity EnemyEntity
+---@return number detection
+---@return number engagement
+---@return number preferred
+---@return number|nil weaponRange
 local function compute_ranges(entity)
     local ai = entity.ai or {}
     local stats = entity.stats or {}
@@ -199,12 +234,16 @@ local function compute_ranges(entity)
     return detection, engagement, preferred, weaponRange
 end
 
+---@param body love.Body
+---@param dt number
+---@param factor number
 local function apply_damping(body, dt, factor)
     local vx, vy = body:getLinearVelocity()
     local damping = max(0, 1 - dt * factor)
     body:setLinearVelocity(vx * damping, vy * damping)
 end
 
+---@param entity EnemyEntity
 local function disable_weapon(entity)
     if entity.weapon then
         entity.weapon.firing = false
@@ -213,6 +252,12 @@ local function disable_weapon(entity)
     end
 end
 
+---@param entity EnemyEntity
+---@param body love.Body
+---@param ai table
+---@param stats table
+---@param dt number
+---@return boolean handled
 local function handle_wander(entity, body, ai, stats, dt)
     local position = entity.position
     if not (position and position.x and position.y) then
@@ -309,6 +354,9 @@ local function handle_wander(entity, body, ai, stats, dt)
     return true
 end
 
+---@param ai table
+---@param context EnemyBehaviorContext
+---@return EnemyBlackboard
 local function ensure_blackboard(ai, context)
     local blackboard = ai.blackboard
     if not blackboard then
@@ -322,6 +370,11 @@ local function ensure_blackboard(ai, context)
     return blackboard
 end
 
+---@param blackboard EnemyBlackboard
+---@param detectionRange number
+---@param engagementRange number
+---@param preferredDistance number
+---@param weaponRange number|nil
 local function update_range_profile(blackboard, detectionRange, engagementRange, preferredDistance, weaponRange)
     local rangeProfile = blackboard.rangeProfile or {}
     rangeProfile.detection = detectionRange
@@ -331,8 +384,13 @@ local function update_range_profile(blackboard, detectionRange, engagementRange,
     blackboard.rangeProfile = rangeProfile
 end
 
+---@param context EnemyBehaviorContext
+---@return EnemyBehaviorTreeInstance
 local function create_behavior_tree(context)
-    local ensureTargetNode = BehaviorTree.Action(function(entity, blackboard, dt)
+    ---@param entity EnemyEntity
+    ---@param blackboard EnemyBlackboard
+    ---@param dt number
+    local function ensure_target_action(entity, blackboard, dt)
         local body = entity.body
         if not body or body:isDestroyed() then
             entity.currentTarget = nil
@@ -365,9 +423,12 @@ local function create_behavior_tree(context)
 
         disable_weapon(entity)
         return BTStatus.failure
-    end)
+    end
 
-    local engageTargetNode = BehaviorTree.Action(function(entity, blackboard, dt)
+    ---@param entity EnemyEntity
+    ---@param blackboard EnemyBlackboard
+    ---@param dt number
+    local function engage_target_action(entity, blackboard, dt)
         local body = entity.body
         if not body or body:isDestroyed() then
             update_engine_trail(entity, false)
@@ -484,9 +545,12 @@ local function create_behavior_tree(context)
         end
 
         return BTStatus.running
-    end)
+    end
 
-    local wanderNode = BehaviorTree.Action(function(entity, blackboard, dt)
+    ---@param entity EnemyEntity
+    ---@param blackboard EnemyBlackboard
+    ---@param dt number
+    local function wander_action(entity, blackboard, dt)
         local body = entity.body
         if not body or body:isDestroyed() then
             return BTStatus.failure
@@ -496,7 +560,11 @@ local function create_behavior_tree(context)
         local stats = entity.stats or {}
 
         return handle_wander(entity, body, ai, stats, dt) and BTStatus.success or BTStatus.failure
-    end)
+    end
+
+    local ensureTargetNode = BehaviorTree.Action(ensure_target_action)
+    local engageTargetNode = BehaviorTree.Action(engage_target_action)
+    local wanderNode = BehaviorTree.Action(wander_action)
 
     local root = BehaviorTree.Selector({
         BehaviorTree.Sequence({
@@ -509,6 +577,9 @@ local function create_behavior_tree(context)
     return BehaviorTree.new(root)
 end
 
+---@param ai table
+---@param context EnemyBehaviorContext
+---@return EnemyBehaviorTreeInstance
 local function ensure_behavior_tree(ai, context)
     if not ai.behaviorTree then
         ai.behaviorTree = create_behavior_tree(context)
@@ -517,6 +588,8 @@ local function ensure_behavior_tree(ai, context)
     return ai.behaviorTree
 end
 
+---@param context EnemyBehaviorContext
+---@return table
 return function(context)
     context = context or {}
 
