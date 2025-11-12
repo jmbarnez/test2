@@ -22,6 +22,7 @@ local createTargetingSystem = require("src.systems.targeting")
 local createDestructionSystem = require("src.systems.destruction")
 local createLootDropSystem = require("src.systems.loot_drop")
 local createPickupSystem = require("src.systems.pickup")
+local createParticleEffectsSystem = require("src.systems.particle_effects")
 local Entities = require("src.states.gameplay.entities")
 local PlayerManager = require("src.player.manager")
 
@@ -144,6 +145,9 @@ function Systems.initialize(state, damageCallback)
 
     state.engineTrailSystem = state.world:addSystem(EngineTrailSystem)
     state.renderSystem = state.world:addSystem(createRenderSystem(baseContext))
+    state.particleEffectsSystem = state.world:addSystem(createParticleEffectsSystem(GameContext.extend(baseContext, {
+        projectileSystem = state.projectileSystem,
+    })))
     state.targetingSystem = state.world:addSystem(createTargetingSystem(GameContext.extend(baseContext, {
         camera = state.camera,
         uiInput = state.uiInput,

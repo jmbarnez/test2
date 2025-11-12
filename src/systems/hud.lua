@@ -8,10 +8,6 @@ local love = love
 return function(context)
     return tiny.system {
         draw = function()
-            if UIStateManager.isAnyUIVisible(context) then
-                return
-            end
-
             local player = PlayerManager.resolveLocalPlayer(context)
 
             love.graphics.push("all")

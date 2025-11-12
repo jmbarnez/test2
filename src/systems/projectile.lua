@@ -54,7 +54,7 @@ local function create_projectile_shape(drawable, size)
     end
 end
 
-local function create_impact_particles(x, y, projectile, target)
+local function create_impact_particles(x, y, projectile)
     local particles = {}
     local numParticles = math.random(8, 16)
     local baseColor = (projectile.drawable and projectile.drawable.color) or { 0.2, 0.8, 1.0 }
@@ -70,12 +70,6 @@ local function create_impact_particles(x, y, projectile, target)
     if projectile.velocity then
         impactAngle = atan2(projectile.velocity.y or 0, projectile.velocity.x or 0)
     end
-    
-    -- Calculate offset to prevent particles from rendering behind the target
-    -- Offset particles in the opposite direction of projectile velocity
-    local offsetDistance = 8  -- Pixels to offset from collision point
-    local offsetX = -math.cos(impactAngle) * offsetDistance
-    local offsetY = -math.sin(impactAngle) * offsetDistance
 
     for i = 1, numParticles do
         local spreadAngle = impactAngle + math.pi + (math.random() - 0.5) * math.pi * 0.8
@@ -86,8 +80,8 @@ local function create_impact_particles(x, y, projectile, target)
         local tintShift = randf(0.2, 0.5)
 
         particles[i] = {
-            x = x + offsetX + math.random(-2, 2),
-            y = y + offsetY + math.random(-2, 2),
+            x = x + math.random(-2, 2),
+            y = y + math.random(-2, 2),
             vx = math.cos(spreadAngle) * speed,
             vy = math.sin(spreadAngle) * speed,
             size = size,
@@ -252,7 +246,7 @@ return function(context)
                     x, y, tostring(targetData.type), #self.impactParticles))
             end
             
-            local particles = create_impact_particles(x, y, projectile, target)
+            local particles = create_impact_particles(x, y, projectile)
             for i = 1, #particles do
                 self.impactParticles[#self.impactParticles + 1] = particles[i]
             end
@@ -452,28 +446,6 @@ return function(context)
                     self.impactParticles[#self.impactParticles] = nil
                 end
             end
-        end,
-
-        draw = function(self)
-            lg.push("all")
-            lg.setBlendMode("add")
-            local drawnCount = 0
-            for i = 1, #self.impactParticles do
-                local p = self.impactParticles[i]
-                local alpha = p.color[4]
-                if alpha and alpha > 0 and p.size and p.size > 0 then
-                    lg.setColor(p.color)
-                    lg.setPointSize(math.max(1, p.size))
-                    lg.points(p.x, p.y)
-                    drawnCount = drawnCount + 1
-                end
-            end
-            -- Debug: Only log occasionally to avoid spam
-            if #self.impactParticles > 0 and math.random() < 0.01 then
-                print(string.format("[PROJECTILE DRAW] Total particles=%d, drawn=%d", 
-                    #self.impactParticles, drawnCount))
-            end
-            lg.pop()
         end,
     }
 end

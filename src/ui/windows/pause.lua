@@ -50,7 +50,7 @@ function pause_window.draw(context)
     love.graphics.rectangle("fill", 0, 0, screenWidth, screenHeight)
 
     local windowWidth = 420
-    local windowHeight = 340
+    local windowHeight = 380
     local mouseX, mouseY = love.mouse.getPosition()
     local isMouseDown = love.mouse.isDown(1)
     local justPressed = isMouseDown and not state._was_mouse_down
