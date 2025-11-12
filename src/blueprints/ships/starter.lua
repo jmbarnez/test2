@@ -210,6 +210,8 @@ return {
         shield = {
             max = 50,
             current = 50,
+            regen = 2,
+            rechargeDelay = 5.0,
         },
         modules = {
             defaultType = "defense",

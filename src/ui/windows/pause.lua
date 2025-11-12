@@ -2,6 +2,7 @@ local window = require("src.ui.components.window")
 local UIStateManager = require("src.ui.state_manager")
 local theme = require("src.ui.theme")
 local UIButton = require("src.ui.components.button")
+local SaveLoad = require("src.util.save_load")
 local Gamestate = require("libs.hump.gamestate")
 local start_menu = require("src.states.start_menu")
 
@@ -9,6 +10,22 @@ local start_menu = require("src.states.start_menu")
 local love = love
 
 local pause_window = {}
+
+local function set_status(state, message, color)
+    if not state then
+        return
+    end
+
+    state.statusMessage = message
+    state.statusColor = color or { 0.75, 0.78, 0.82, 1 }
+
+    local timer = love and love.timer and love.timer.getTime and love.timer.getTime()
+    if timer then
+        state.statusExpiry = timer + 3
+    else
+        state.statusExpiry = nil
+    end
+end
 
 function pause_window.draw(context)
     local state = context and context.pauseUI
@@ -74,8 +91,16 @@ function pause_window.draw(context)
     love.graphics.printf(hint, content.x, textY, content.width, "center")
     textY = textY + fonts.small:getHeight() + 18
 
+    local now = love.timer and love.timer.getTime and love.timer.getTime()
+    if state.statusMessage and state.statusExpiry and now and now >= state.statusExpiry then
+        state.statusMessage = nil
+        state.statusColor = nil
+        state.statusExpiry = nil
+    end
+
     local buttons = {
         { label = "Resume Game", action = "resume" },
+        { label = "Save Game", action = "save" },
         { label = "Options", action = "options" },
         { label = "Exit to Menu", action = "exit_to_menu" },
     }
@@ -116,6 +141,14 @@ function pause_window.draw(context)
         if result.clicked then
             if button.action == "resume" then
                 UIStateManager.hidePauseUI(context)
+            elseif button.action == "save" then
+                local success, err = SaveLoad.saveGame(context)
+                if success then
+                    set_status(state, "Game Saved", { 0.45, 0.95, 0.45, 1.0 })
+                else
+                    set_status(state, "Save Failed: " .. tostring(err), { 1.0, 0.45, 0.45, 1.0 })
+                    print("[PauseUI] Save error: " .. tostring(err))
+                end
             elseif button.action == "options" then
                 UIStateManager.showOptionsUI(context, "pause")
             elseif button.action == "exit_to_menu" then
@@ -136,7 +169,8 @@ function pause_window.draw(context)
 
     if state.statusMessage and state.statusMessage ~= "" then
         love.graphics.setFont(fonts.small)
-        love.graphics.setColor(mutedColor)
+        local statusColor = state.statusColor or mutedColor
+        love.graphics.setColor(statusColor)
         love.graphics.printf(state.statusMessage, content.x, buttonY + 6, content.width, "center")
     end
 

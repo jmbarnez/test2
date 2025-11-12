@@ -145,8 +145,8 @@ return {
             id = "laser_beam",
             overrides = {
                 weapon = {
-                    damagePerSecond = (constants.weapons.laser and constants.weapons.laser.damage_per_second or 32) * 0.5,
-                    maxRange = (constants.weapons.laser and constants.weapons.laser.max_range or 720) * 0.5,
+                    damagePerSecond = 16,
+                    maxRange = 360,
                     color = { 1, 0.2, 0.25 },
                     glowColor = { 1, 0.45, 0.5 },
                     width = 0.55,

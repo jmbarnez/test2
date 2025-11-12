@@ -24,6 +24,7 @@ local Systems = require("src.states.gameplay.systems")
 local View = require("src.states.gameplay.view")
 local EngineTrail = require("src.effects.engine_trail")
 local FloatingText = require("src.effects.floating_text")
+local SaveLoad = require("src.util.save_load")
 
 local love = love
 
@@ -178,6 +179,44 @@ local function is_control_modifier_active()
     end
 
     return false
+end
+
+local function show_status_toast(state, message, color)
+    if not (state and message and FloatingText and FloatingText.add) then
+        return
+    end
+
+    local player = PlayerManager.getCurrentShip(state)
+    local position
+    local offsetY = 28
+
+    if player and player.position then
+        position = {
+            x = player.position.x or 0,
+            y = player.position.y or 0,
+        }
+        offsetY = (player.mountRadius or 36) + 24
+    elseif state.camera then
+        local cam = state.camera
+        local width = cam.width or state.viewport and state.viewport.width or 0
+        local height = cam.height or state.viewport and state.viewport.height or 0
+        position = {
+            x = (cam.x or 0) + width * 0.5,
+            y = (cam.y or 0) + height * 0.5,
+        }
+        offsetY = math.max(24, height * 0.1)
+    end
+
+    if not position then
+        return
+    end
+
+    FloatingText.add(state, position, message, {
+        color = color,
+        offsetY = offsetY,
+        rise = 32,
+        scale = 1.1,
+    })
 end
 
 local VALID_PHYSICS_CALLBACK_PHASES = {
@@ -696,6 +735,28 @@ function gameplay:keypressed(key)
 
     if key == "k" then
         UIStateManager.toggleSkillsUI(self)
+        return
+    end
+
+    if key == "f5" then
+        local success, err = SaveLoad.saveGame(self)
+        if success then
+            show_status_toast(self, "Game Saved", { 0.4, 1.0, 0.4, 1.0 })
+        else
+            show_status_toast(self, "Save Failed: " .. tostring(err), { 1.0, 0.4, 0.4, 1.0 })
+            print("[SaveLoad] Save error: " .. tostring(err))
+        end
+        return
+    end
+
+    if key == "f9" then
+        local success, err = SaveLoad.loadGame(self)
+        if success then
+            show_status_toast(self, "Game Loaded", { 0.4, 1.0, 0.4, 1.0 })
+        else
+            show_status_toast(self, "Load Failed: " .. tostring(err), { 1.0, 0.4, 0.4, 1.0 })
+            print("[SaveLoad] Load error: " .. tostring(err))
+        end
         return
     end
 end

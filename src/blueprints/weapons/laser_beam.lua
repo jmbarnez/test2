@@ -1,7 +1,21 @@
-local constants = require("src.constants.game")
 local table_util = require("src.util.table")
 
-local weapon_defaults = (constants.weapons and constants.weapons.laser) or {}
+local weapon_defaults = {
+    width = 1.2,
+    fade_time = 0.08,
+    max_range = 600,
+    damage_per_second = 32,
+    energy_per_second = 24,
+    offset = 30,
+    color = { 0.2, 0.8, 1.0 },
+    glow_color = { 0.5, 0.9, 1.0 },
+    forward = 12,
+    inset = 0,
+    lateral = 0,
+    vertical = 0,
+    offsetX = 0,
+    offsetY = 0,
+}
 
 local function default(key, fallback)
     local value = weapon_defaults[key]

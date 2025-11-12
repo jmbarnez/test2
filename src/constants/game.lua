@@ -3,7 +3,7 @@
 -- ============================================================================
 -- Central configuration file for all game-wide constants and settings.
 -- This file defines parameters for rendering, physics, world generation,
--- entities, and gameplay mechanics.
+-- and gameplay mechanics. Entity-specific defaults belong in their blueprints.
 -- ============================================================================
 
 local constants = {}
@@ -11,139 +11,218 @@ local constants = {}
 -- ============================================================================
 -- LÖVE FRAMEWORK CONFIGURATION
 -- ============================================================================
--- Core LÖVE engine settings that control framework behavior and module usage.
--- These settings are applied during love.conf() initialization.
--- ============================================================================
 constants.love = {
-    identity = "procedural_space",  -- Save directory name for the game
-    version = "11.5",                -- Target LÖVE version
+    identity = "procedural_space",
+    version = "11.5",
     modules = {
-        joystick = false,            -- Disable joystick module (not needed)
-        physics = true,              -- Enable Box2D physics module
+        joystick = false,
+        physics = true,
     },
 }
 
 -- ============================================================================
 -- WINDOW CONFIGURATION
 -- ============================================================================
--- Display window settings including resolution, fullscreen mode, and
--- rendering options like VSync and anti-aliasing.
--- ============================================================================
 constants.window = {
-    title = "Novus",                 -- Window title bar text
-    width = 1600,                    -- Window width in pixels
-    height = 900,                   -- Window height in pixels
-    fullscreen = false,              -- Start in windowed mode
-    resizable = true,                -- Allow window resizing
-    vsync = 0,                       -- Disable vsync (using manual 60 FPS limiting)
-    msaa = 0,                        -- Multisample anti-aliasing samples (0 = disabled)
-    max_fps = 240,                   -- Manual frame limiter target when vsync is disabled
+    title = "Novus",
+    width = 1600,
+    height = 900,
+    fullscreen = false,
+    resizable = true,
+    vsync = 0,
+    msaa = 0,
+    max_fps = 240,
 }
 
--- View configuration (camera defaults)
 constants.view = {
-    default_zoom = 1.0,              -- Default camera zoom (native scale)
+    default_zoom = 1.0,
+    min_zoom = 0.3,
+    max_zoom = 2.5,
+    zoom_step = 0.1,
 }
 
 -- ============================================================================
 -- PHYSICS CONFIGURATION
 -- ============================================================================
--- Box2D physics world settings including scale, gravity, and optimization
--- parameters for the simulation.
--- ============================================================================
 constants.physics = {
-    meter_scale = 64,                -- Pixels per meter (Box2D works in meters)
-    gravity = { x = 0, y = 0 },      -- Zero gravity for space environment
-    allow_sleeping = true,           -- Allow physics bodies to sleep when idle (optimization)
-    fixed_timestep = 1/60,           -- Fixed timestep for deterministic simulation
-    max_steps = 4,                   -- Maximum physics steps per frame (prevent spiral of death)
+    meter_scale = 64,
+    gravity = { x = 0, y = 0 },
+    allow_sleeping = true,
+    fixed_timestep = 1/60,
+    max_steps = 4,
+    velocity_iterations = 8,
+    position_iterations = 3,
 }
 
 -- ============================================================================
 -- WORLD CONFIGURATION
 -- ============================================================================
--- Defines the playable space boundaries and default sector for gameplay.
--- World bounds constrain player movement and entity spawning.
--- ============================================================================
 constants.world = {
     bounds = {
-        x = 0,                       -- World origin X coordinate
-        y = 0,                       -- World origin Y coordinate
-        width = 50000,                -- Total world width in pixels
-        height = 50000,               -- Total world height in pixels
+        x = 0,
+        y = 0,
+        width = 50000,
+        height = 50000,
     },
-    default_sector = "default_sector", -- Initial sector to load on game start
+    default_sector = "default_sector",
+    chunk_size = 2048,
+    unload_distance = 4096,
+}
+
+-- ============================================================================
+-- ASTEROID CONFIGURATION
+-- ============================================================================
+constants.asteroids = {
+    radius = { min = 32, max = 80 },
+    sides = { min = 6, max = 11 },
+    scale = { min = 0.82, max = 1.18 },
+    color = { 0.68, 0.62, 0.55 },
+    durability = { min = 160, max = 320 },
+    friction = 0.85,
+    restitution = 0.05,
+    damping = {
+        linear = 0.18,
+        angular = 0.12,
+    },
+    health_bar = {
+        show_duration = 1.5,
+        height = 4,
+        padding = 6,
+    },
+    loot = {
+        rolls = 2,
+        entries = {
+            {
+                id = "resource:ore_chunk",
+                chance = 0.85,
+                quantity = { min = 1, max = 3 },
+                scatter = 26,
+            },
+            {
+                id = "resource:rare_crystal",
+                chance = 0.12,
+                quantity = { min = 1, max = 1 },
+                scatter = 18,
+            },
+        },
+    },
+    mining_xp = {
+        base = 24,
+        chunk = 12,
+    },
+    chunks = {
+        enabled = true,
+        inherit_loot = true,
+        max_levels = 2,
+        min_radius = 18,
+        min_health = 12,
+        count = { min = 2, max = 4 },
+        size_scale = { min = 0.32, max = 0.55 },
+        health_scale = { min = 0.25, max = 0.4 },
+        offset = { min = 12, max = 46 },
+        speed = { min = 70, max = 180 },
+        angular_velocity = { min = -2.8, max = 2.8 },
+        loot_drop = {
+            id = "resource:ore_chunk",
+            count = { min = 1, max = 2 },
+            quantity = { min = 1, max = 3 },
+            scatter = { min = 10, max = 32 },
+            velocity = { min = 40, max = 140 },
+            lifetime = 18,
+            collectRadius = 26,
+            size = 18,
+        },
+    },
 }
 
 -- ============================================================================
 -- PLAYER CONFIGURATION
 -- ============================================================================
--- Player-specific settings including starting ship type and initial state.
--- ============================================================================
 constants.player = {
-    starter_ship_id = "starter",     -- Blueprint ID for the player's starting ship
-    starting_currency = 10000,        -- Initial credits for the player
+    starter_ship_id = "starter",
+    starting_currency = 10000,
+    starting_position = { x = 25000, y = 25000 },
+    respawn_invulnerability = 3.0,
+    max_interaction_distance = 200,
 }
 
-constants.ships = {
+-- ============================================================================
+-- UI CONFIGURATION
+-- ============================================================================
+constants.ui = {
     health_bar = {
         width = 56,
         height = 4,
         offset = 34,
         show_duration = 1.5,
+        background_color = { 0.2, 0.2, 0.2, 0.8 },
+        health_color = { 0.2, 0.8, 0.3 },
+        damage_color = { 0.9, 0.2, 0.2 },
+    },
+    minimap = {
+        size = 200,
+        position = { x = 20, y = 20 },
+        background_alpha = 0.5,
+        zoom = 0.05,
+    },
+    hotbar = {
+        slot_count = 10,
+        slot_size = 48,
+        spacing = 4,
+        position = "bottom_center",
     },
 }
 
 -- ============================================================================
 -- RENDERING CONFIGURATION
 -- ============================================================================
--- Visual rendering settings including background colors and culling margins
--- for performance optimization.
--- ============================================================================
 constants.render = {
-    clear_color = { 0.01, 0.01, 0.025 }, -- Background color (dark blue-black space)
-    star_cull_margin = 4,            -- Extra pixels beyond viewport to render stars (prevents pop-in)
+    clear_color = { 0.01, 0.01, 0.025 },
+    star_cull_margin = 4,
+    entity_cull_margin = 200,
     fonts = {
         primary = "assets/fonts/Orbitron-Regular.ttf",
+        sizes = {
+            small = 12,
+            medium = 16,
+            large = 24,
+            huge = 48,
+        },
     },
+    particle_limit = 5000,
+    trail_segment_limit = 500,
 }
 
 -- ============================================================================
 -- STARFIELD CONFIGURATION
 -- ============================================================================
--- Multi-layered parallax starfield settings. Each layer has different
--- parallax speed, star count, size, and opacity to create depth illusion.
--- ============================================================================
 constants.stars = {
     defaults = {
-        size_range = { 0.5, 2.5 },   -- Default min/max star size in pixels
-        alpha_range = { 40 / 255, 200 / 255 }, -- Default min/max star opacity (0-1)
+        size_range = { 0.5, 2.5 },
+        alpha_range = { 40 / 255, 200 / 255 },
     },
     nebula = {
-        intensity_range = { 0.18, 0.32 },  -- Controls shader brightness/density
-        alpha_range = { 0.32, 0.55 },      -- Limits final nebula opacity when composited
+        intensity_range = { 0.18, 0.32 },
+        alpha_range = { 0.32, 0.55 },
     },
     layers = {
-        -- Far background layer (slowest parallax)
         {
-            parallax = 0.003,        -- Parallax multiplier (lower = slower, farther away)
-            count = 78000,             -- Number of stars in this layer
-            size_range = { 0.7, 1.4 }, -- Min/max star size for this layer
-            alpha_range = { 0.45, 0.7 }, -- Min/max opacity for this layer
+            parallax = 0.003,
+            count = 78000,
+            size_range = { 0.7, 1.4 },
+            alpha_range = { 0.45, 0.7 },
         },
-        -- Middle layer (moderate parallax)
         {
-            parallax = 0.018,        -- Medium parallax speed
-            count = 2000,             -- Star count for middle layer
-            size_range = { 1.0, 2.0 }, -- Slightly larger stars
-            alpha_range = { 0.6, 0.85 }, -- More visible than background
+            parallax = 0.018,
+            count = 2000,
+            size_range = { 1.0, 2.0 },
+            alpha_range = { 0.6, 0.85 },
         },
-        -- Foreground layer (fastest parallax)
         {
-            parallax = 0.055,        -- Fastest parallax (closest to camera)
-            count = 6000,             -- Foreground star count
-            size_range = { 1.4, 2.8 }, -- Largest stars for depth effect
-            alpha_range = { 0.75, 1.0 }, -- Most visible/brightest stars
+            parallax = 0.055,
+            count = 6000,
+            size_range = { 1.4, 2.8 },
+            alpha_range = { 0.75, 1.0 },
         },
     },
     background_props = {
@@ -179,129 +258,74 @@ constants.stars = {
             head_color = { 1.0, 0.95, 0.8 },
             tail_color = { 0.6, 0.8, 1.0 },
         },
-        asteroid_belts = {
-            spawn_chance = 1.0,                -- Probability that belts appear in a playthrough
-            count = { 1, 2 },                  -- Range of belts to create when spawned
-            parallax_range = { 0.008, 0.024 }, -- Parallax multiplier for belt movement
-            arc_span = { 0.45, 0.85 },         -- Fraction of full circle covered by the belt arc
-            radius_range = { 260, 520 },       -- Distance from belt center to arc midpoint
-            thickness_range = { 120, 200 },    -- Radial thickness of the belt
-            squash_range = { 0.7, 0.95 },      -- Vertical squash factor to make ellipses
-            segment_count = { 90, 160 },       -- Number of rubble segments composing the belt
-            segment_size = { 4, 11 },          -- Visual radius of each rubble segment
-            alpha_range = { 0.35, 0.6 },       -- Opacity range for belt segments
-            flicker_speed = { 0.6, 1.4 },      -- Speed of subtle flicker animation
-            spawn_margin = 1400,               -- Radius around the camera to place belt centers
-            color = { 0.55, 0.5, 0.48 },       -- Base rock color
-            highlight = { 0.9, 0.85, 0.8 },    -- Highlight tint for inner glow
-        },
     },
 }
 
 -- ============================================================================
--- ASTEROID CONFIGURATION
+-- DAMAGE SYSTEM
 -- ============================================================================
--- Parameters for procedurally generated asteroids including size, shape,
--- physics properties, durability, and visual feedback settings.
--- ============================================================================
-constants.asteroids = {
-    radius = { min = 22, max = 64 }, -- Min/max asteroid radius in pixels
-    sides = { min = 6, max = 8 },    -- Number of polygon sides for shape generation
-    scale = { min = 0.85, max = 1.1 }, -- Random scale variation per vertex (creates irregular shapes)
-    damping = {
-        linear = 0.45,               -- Linear velocity damping (friction in space)
-        angular = 0.12,              -- Angular velocity damping (rotation slowdown)
-    },
-    durability = {
-        min = 360,                   -- Minimum asteroid health points
-        max = 660,                   -- Maximum asteroid health points
-    },
-    color = { 0.7, 0.65, 0.6 },      -- Base color (RGB, grayish-brown rock)
-    health_bar = {
-        show_duration = 1.5,         -- Seconds to show health bar after taking damage
-        height = 4,                  -- Health bar height in pixels
-        padding = 6,                 -- Vertical padding above asteroid
-    },
-    loot = {
-        rolls = 1,
-        entries = {
-            {
-                id = "resource:ore_chunk",
-                chance = 0.9,
-                quantity = { min = 1, max = 3 },
-            },
-            {
-                id = "resource:rare_crystal",
-                chance = 0.1,
-                quantity = 1,
-            },
-        },
-    },
-    chunks = {
-        enabled = true,
-        max_levels = 1,
-        count = { min = 2, max = 5 }, -- Random chunk count per split
-        size_scale = { min = 0.35, max = 0.55 },
-        health_scale = { min = 0.25, max = 0.4 },
-        speed = { min = 90, max = 160 },
-        offset = { min = 6, max = 24 },
-        angular_velocity = { min = -2.5, max = 2.5 },
-        min_radius = 12,
-        min_health = 30,
-        inherit_loot = true,
-        loot_drop = {
-            id = "resource:ore_chunk",
-            count = { min = 2, max = 5 },
-            quantity = { min = 1, max = 2 },
-            scatter = { min = 12, max = 42 },
-            velocity = { min = 140, max = 280 },
-        },
-    },
-    field = {
-        count = { min = 30, max = 50 }, -- Number of asteroids to spawn in a field
-    },
-}
-
--- ============================================================================
--- WEAPONS CONFIGURATION
--- ============================================================================
--- Weapon system parameters including damage, range, visual effects, and
--- firing mechanics for different weapon types.
--- ============================================================================
-constants.weapons = {
-    laser = {
-        max_range = 720,             -- Maximum laser beam distance in pixels
-        width = 1.2,                 -- Laser beam width in pixels
-        damage_per_second = 64,      -- Damage dealt per second of continuous fire
-        fade_time = 0.08,            -- Beam fade-out duration in seconds
-        color = { 1, 0.3, 0.6 },     -- Primary laser color (RGB, pink-red)
-        glow_color = { 1, 0.7, 0.9 }, -- Glow/highlight color for visual effect
-    },
-    laser_turret = {
-        projectile_speed = 840,      -- Speed of each pulse projectile (pixels/sec)
-        projectile_lifetime = 0.28,  -- Lifetime to approximate short beam reach
-        projectile_size = 5,         -- Visual size of the bolt
-        damage = 44,                 -- Damage per pulse hit
-        fire_rate = 0.32,            -- Time between pulses (seconds)
-        color = { 1, 0.45, 0.3 },    -- Warmer turret bolt color
-        glow_color = { 1, 0.8, 0.6 }, -- Glow color to match
-        offset = 26,                 -- Default muzzle offset
-        forward = 28,                -- Default mount forward offset
-    },
-}
-
 constants.damage = {
-    defaultDamageType = "default",
-    defaultArmorType = "default",
+    default_type = "default",
+    default_armor = "default",
     multipliers = {
-        default = {
-            default = 1.0,
-        },
-        laser = {
-            default = 0.6,
-            rock = 1.5,
-        },
+        default = { default = 1.0 },
+        laser = { default = 0.6, rock = 1.5 },
+        kinetic = { default = 1.0, rock = 0.7, shield = 0.5 },
+        explosive = { default = 1.2, rock = 2.0, shield = 0.3 },
+        energy = { default = 0.8, shield = 1.5 },
     },
+    crit_chance = 0.05,
+    crit_multiplier = 2.0,
+}
+
+-- ============================================================================
+-- ECONOMY & PROGRESSION
+-- ============================================================================
+constants.economy = {
+    base_sell_multiplier = 0.6,
+    base_buy_multiplier = 1.0,
+    reputation_discount_per_level = 0.02,
+    max_reputation_discount = 0.2,
+}
+
+constants.progression = {
+    base_exp_per_level = 1000,
+    exp_scaling = 1.15,
+    max_level = 50,
+}
+
+-- ============================================================================
+-- AUDIO
+-- ============================================================================
+constants.audio = {
+    master_volume = 1.0,
+    music_volume = 0.7,
+    sfx_volume = 0.8,
+    max_simultaneous_sounds = 32,
+    sound_falloff_distance = 1500,
+    sound_max_distance = 3000,
+}
+
+-- ============================================================================
+-- PERFORMANCE
+-- ============================================================================
+constants.performance = {
+    max_active_entities = 1000,
+    entity_pool_size = 2000,
+    spatial_grid_cell_size = 512,
+    update_distance = 3000,
+    collision_distance = 2000,
+}
+
+-- ============================================================================
+-- DEBUG
+-- ============================================================================
+constants.debug = {
+    show_fps = false,
+    show_physics = false,
+    show_bounds = false,
+    show_grid = false,
+    god_mode = false,
 }
 
 -- ============================================================================

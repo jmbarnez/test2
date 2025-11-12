@@ -3,11 +3,10 @@ local constants = require("src.constants.game")
 local theme = require("src.ui.theme")
 local UIButton = require("src.ui.components.button")
 local Starfield = require("src.states.gameplay.starfield")
+local SaveLoad = require("src.util.save_load")
 
 ---@diagnostic disable-next-line: undefined-global
 local love = love
-
-local start_menu = {}
 
 local function load_font(size)
     local font_path = constants.render
@@ -38,6 +37,23 @@ local function point_in_rect(x, y, rect)
         and y <= rect.y + height
 end
 
+local function set_status(self, text, color)
+    if not self then
+        return
+    end
+
+    self.statusText = text
+    self.statusColor = color or { 0.75, 0.78, 0.82, 1 }
+    local timer = love and love.timer and love.timer.getTime and love.timer.getTime()
+    if timer then
+        self.statusExpiry = timer + 3
+    else
+        self.statusExpiry = nil
+    end
+end
+
+local start_menu = {}
+
 function start_menu:start_game()
     if self.transitioning then
         return
@@ -45,6 +61,21 @@ function start_menu:start_game()
     self.transitioning = true
     local gameplay = require("src.states.gameplay")
     Gamestate.switch(gameplay)
+end
+
+function start_menu:load_game()
+    if self.transitioning then
+        return
+    end
+
+    if not SaveLoad.saveExists() then
+        set_status(self, "No save data found", { 1.0, 0.45, 0.45, 1.0 })
+        return
+    end
+
+    self.transitioning = true
+    local gameplay = require("src.states.gameplay")
+    Gamestate.switch(gameplay, { loadGame = true })
 end
 
 local function build_aurora_shader()
@@ -139,11 +170,14 @@ function start_menu:enter()
     self.titleFont = load_font(132)
     self.fonts = theme.get_fonts() or {}
     self.buttonFont = self.fonts.body or load_font(24)
-    self.buttonRect = nil
+    self.buttonRects = {}
     self.buttonHovered = false
     self.transitioning = false
     self.time = 0
     self._was_mouse_down = love.mouse and love.mouse.isDown and love.mouse.isDown(1) or false
+    self.statusText = nil
+    self.statusColor = nil
+    self.statusExpiry = nil
 
     local width, height = love.graphics.getWidth(), love.graphics.getHeight()
     local worldBounds = constants.world and constants.world.bounds or { x = 0, y = 0, width = width, height = height }
@@ -226,43 +260,76 @@ function start_menu:draw()
 
     love.graphics.setShader()
 
-    local button_width = math.min(120, width * 0.14)
-    local button_height = 32
+    local button_width = math.min(140, width * 0.16)
+    local button_height = 36
     local button_x = (width - button_width) * 0.5
     local button_y = height * 0.56
+    local button_spacing = 16
 
     local mouse_x, mouse_y = love.mouse.getPosition()
-    local button_rect = {
-        x = button_x,
-        y = button_y,
-        width = button_width,
-        height = button_height,
-        w = button_width,
-        h = button_height,
-    }
-    self.buttonRect = button_rect
+    self.buttonRects = {}
 
     local is_mouse_down = love.mouse and love.mouse.isDown and love.mouse.isDown(1) or false
     local just_pressed = is_mouse_down and not self._was_mouse_down
     self._was_mouse_down = is_mouse_down
 
-    local button_label = "New Game"
-    local result = UIButton.render {
-        rect = button_rect,
-        label = button_label,
-        font = self.buttonFont,
-        input = {
-            x = mouse_x,
-            y = mouse_y,
-            is_down = is_mouse_down,
-            just_pressed = just_pressed,
-        },
+    local save_available = SaveLoad.saveExists()
+    local buttons = {
+        { label = "New Game", action = "new", disabled = false },
+        { label = "Load Game", action = "load", disabled = not save_available },
     }
 
-    self.buttonHovered = result.hovered
+    self.buttonHovered = false
 
-    if result.clicked then
-        self:start_game()
+    for index = 1, #buttons do
+        local button = buttons[index]
+        local rect = {
+            x = button_x,
+            y = button_y + (index - 1) * (button_height + button_spacing),
+            width = button_width,
+            height = button_height,
+            w = button_width,
+            h = button_height,
+        }
+
+        self.buttonRects[index] = {
+            rect = rect,
+            action = button.action,
+            disabled = button.disabled,
+        }
+
+        local result = UIButton.render {
+            rect = rect,
+            label = button.label,
+            font = self.buttonFont,
+            fonts = self.fonts,
+            disabled = button.disabled,
+            input = {
+                x = mouse_x,
+                y = mouse_y,
+                is_down = is_mouse_down,
+                just_pressed = just_pressed,
+            },
+        }
+
+        self.buttonHovered = self.buttonHovered or result.hovered
+
+        if result.clicked and not button.disabled then
+            if button.action == "new" then
+                self:start_game()
+            elseif button.action == "load" then
+                self:load_game()
+            end
+            break
+        end
+    end
+
+    if self.statusText then
+        local color = self.statusColor or { 0.75, 0.78, 0.82, 1 }
+        love.graphics.setFont(self.fonts.small or self.buttonFont)
+        love.graphics.setColor(color)
+        local statusY = button_y + (#buttons) * (button_height + button_spacing) + 8
+        love.graphics.printf(self.statusText, button_x - 60, statusY, button_width + 120, "center")
     end
 
     love.graphics.pop()
@@ -291,6 +358,15 @@ function start_menu:update(dt)
         cam.x = math.max(bounds.x, math.min(maxX, cam.x))
         cam.y = math.max(bounds.y, math.min(maxY, cam.y))
     end
+
+    if self.statusText and self.statusExpiry then
+        local now = love.timer and love.timer.getTime and love.timer.getTime()
+        if now and now >= self.statusExpiry then
+            self.statusText = nil
+            self.statusColor = nil
+            self.statusExpiry = nil
+        end
+    end
 end
 
 function start_menu:keypressed(key)
@@ -302,8 +378,20 @@ function start_menu:keypressed(key)
 end
 
 function start_menu:mousepressed(x, y, button)
-    if button == 1 and point_in_rect(x, y, self.buttonRect) then
-        self:start_game()
+    if button ~= 1 or not self.buttonRects then
+        return
+    end
+
+    for i = 1, #self.buttonRects do
+        local entry = self.buttonRects[i]
+        if entry and not entry.disabled and point_in_rect(x, y, entry.rect) then
+            if entry.action == "new" then
+                self:start_game()
+            elseif entry.action == "load" then
+                self:load_game()
+            end
+            break
+        end
     end
 end
 

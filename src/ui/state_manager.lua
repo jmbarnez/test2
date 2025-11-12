@@ -46,6 +46,78 @@ local function any_modal_visible(state)
         or (state.skillsUI and state.skillsUI.visible)
 end
 
+local function capture_input(state)
+    if state and state.uiInput then
+        state.uiInput.mouseCaptured = true
+        state.uiInput.keyboardCaptured = true
+    end
+end
+
+local function release_input(state, respect_modals)
+    if not (state and state.uiInput) then
+        return
+    end
+
+    if respect_modals then
+        local keepCaptured = any_modal_visible(state)
+        state.uiInput.mouseCaptured = not not keepCaptured
+        state.uiInput.keyboardCaptured = not not keepCaptured
+    else
+        state.uiInput.mouseCaptured = false
+        state.uiInput.keyboardCaptured = false
+    end
+end
+
+local function is_primary_mouse_down()
+    return love.mouse and love.mouse.isDown and love.mouse.isDown(1) or false
+end
+
+local function create_visibility_handlers(windowKey, config)
+    config = config or {}
+
+    local function set_visibility(state, visible)
+        if not (state and state[windowKey]) then
+            return
+        end
+
+        local window_state = state[windowKey]
+
+        if config.beforeSet and config.beforeSet(state, window_state, visible) == false then
+            return
+        end
+
+        if window_state.visible == visible then
+            if config.onUnchanged then
+                config.onUnchanged(state, window_state, visible)
+            end
+            return
+        end
+
+        window_state.visible = visible
+
+        if config.afterSet then
+            config.afterSet(state, window_state, visible)
+        end
+    end
+
+    return {
+        set = set_visibility,
+        show = function(state)
+            set_visibility(state, true)
+        end,
+        hide = function(state)
+            set_visibility(state, false)
+        end,
+        toggle = function(state)
+            if not (state and state[windowKey]) then
+                return
+            end
+
+            set_visibility(state, not state[windowKey].visible)
+        end,
+    }
+end
+
 local function createDeathUIState()
     return {
         visible = false,
@@ -239,138 +311,100 @@ function UIStateManager.toggleCargoUI(state)
     state.cargoUI.visible = not state.cargoUI.visible
 end
 
-local function setSkillsVisibility(state, visible)
-    if not (state and state.skillsUI) then
-        return
-    end
+local skillsVisibilityController = create_visibility_handlers("skillsUI", {
+    afterSet = function(state, window_state, visible)
+        window_state.dragging = false
 
-    local skillsUI = state.skillsUI
-    if skillsUI.visible == visible then
-        return
-    end
-
-    skillsUI.visible = visible
-    skillsUI.dragging = false
-
-    if not visible then
-        skillsUI._was_mouse_down = love.mouse and love.mouse.isDown and love.mouse.isDown(1) or false
-    end
-
-    if state.uiInput then
-        if visible then
-            state.uiInput.mouseCaptured = true
-            state.uiInput.keyboardCaptured = true
-        else
-            local keepCaptured = any_modal_visible(state)
-            state.uiInput.mouseCaptured = not not keepCaptured
-            state.uiInput.keyboardCaptured = not not keepCaptured
+        if not visible then
+            window_state._was_mouse_down = is_primary_mouse_down()
         end
-    end
+    end,
+})
+
+local function setSkillsVisibility(state, visible)
+    skillsVisibilityController.set(state, visible)
 end
 
 function UIStateManager.showSkillsUI(state)
-    setSkillsVisibility(state, true)
+    skillsVisibilityController.show(state)
 end
 
 function UIStateManager.hideSkillsUI(state)
-    setSkillsVisibility(state, false)
+    skillsVisibilityController.hide(state)
 end
 
 function UIStateManager.toggleSkillsUI(state)
-    if not (state and state.skillsUI) then
-        return
-    end
-
-    setSkillsVisibility(state, not state.skillsUI.visible)
+    skillsVisibilityController.toggle(state)
 end
 
 function UIStateManager.isSkillsUIVisible(state)
     return state and state.skillsUI and state.skillsUI.visible
 end
 
+local pauseVisibilityController = create_visibility_handlers("pauseUI", {
+    beforeSet = function(state, window_state, visible)
+        if visible and UIStateManager.isDeathUIVisible(state) then
+            state.isPaused = window_state.visible
+            return false
+        end
+    end,
+    onUnchanged = function(state, window_state)
+        state.isPaused = window_state.visible
+    end,
+    afterSet = function(state, window_state, visible)
+        window_state.buttonHovered = false
+        window_state._was_mouse_down = is_primary_mouse_down()
+
+        if state.uiInput then
+            state.uiInput.mouseCaptured = visible
+            state.uiInput.keyboardCaptured = visible
+        end
+
+        state.isPaused = visible
+    end,
+})
+
 local function setPauseVisibility(state, visible)
-    if not (state and state.pauseUI) then
-        return
-    end
-
-    local pauseUI = state.pauseUI
-
-    if visible and UIStateManager.isDeathUIVisible(state) then
-        state.isPaused = pauseUI.visible
-        return
-    end
-
-    if pauseUI.visible == visible then
-        state.isPaused = pauseUI.visible
-        return
-    end
-
-    pauseUI.visible = visible
-    pauseUI.buttonHovered = false
-    pauseUI._was_mouse_down = love.mouse and love.mouse.isDown and love.mouse.isDown(1) or false
-
-    if state.uiInput then
-        state.uiInput.mouseCaptured = visible
-        state.uiInput.keyboardCaptured = visible
-    end
-
-    state.isPaused = visible
+    pauseVisibilityController.set(state, visible)
 end
 
 function UIStateManager.showPauseUI(state)
-    setPauseVisibility(state, true)
+    pauseVisibilityController.show(state)
 end
 
 function UIStateManager.hidePauseUI(state)
-    setPauseVisibility(state, false)
+    pauseVisibilityController.hide(state)
 end
 
 function UIStateManager.togglePauseUI(state)
-    if not (state and state.pauseUI) then
-        return
-    end
-
-    setPauseVisibility(state, not state.pauseUI.visible)
+    pauseVisibilityController.toggle(state)
 end
 
+local mapVisibilityController = create_visibility_handlers("mapUI", {
+    afterSet = function(state, window_state, visible)
+        window_state.dragging = false
+        window_state._just_opened = visible
+
+        if not visible then
+            window_state._was_mouse_down = is_primary_mouse_down()
+        end
+    end,
+})
+
 local function setMapVisibility(state, visible)
-    if not (state and state.mapUI) then
-        return
-    end
-
-    local mapUI = state.mapUI
-    if mapUI.visible == visible then
-        return
-    end
-
-    mapUI.visible = visible
-    mapUI.dragging = false
-    mapUI._just_opened = visible
-
-    if not visible then
-        mapUI._was_mouse_down = love.mouse and love.mouse.isDown and love.mouse.isDown(1) or false
-    end
-
-    if state.uiInput then
-        state.uiInput.mouseCaptured = visible
-        state.uiInput.keyboardCaptured = visible
-    end
+    mapVisibilityController.set(state, visible)
 end
 
 function UIStateManager.showMapUI(state)
-    setMapVisibility(state, true)
+    mapVisibilityController.show(state)
 end
 
 function UIStateManager.hideMapUI(state)
-    setMapVisibility(state, false)
+    mapVisibilityController.hide(state)
 end
 
 function UIStateManager.toggleMapUI(state)
-    if not (state and state.mapUI) then
-        return
-    end
-
-    setMapVisibility(state, not state.mapUI.visible)
+    mapVisibilityController.toggle(state)
 end
 
 function UIStateManager.isPauseUIVisible(state)
@@ -445,46 +479,26 @@ function UIStateManager.isAnyUIVisible(state)
     return any_modal_visible(state)
 end
 
+local debugVisibilityController = create_visibility_handlers("debugUI", {
+    afterSet = function(state, window_state, visible)
+        window_state.dragging = false
+    end,
+})
+
 local function setDebugVisibility(state, visible)
-    if not (state and state.debugUI) then
-        return
-    end
-
-    local debugUI = state.debugUI
-
-    if debugUI.visible == visible then
-        return
-    end
-
-    debugUI.visible = visible
-    debugUI.dragging = false
-
-    if state.uiInput then
-        if visible then
-            state.uiInput.mouseCaptured = true
-            state.uiInput.keyboardCaptured = true
-        else
-            local keepCaptured = any_modal_visible(state)
-            state.uiInput.mouseCaptured = not not keepCaptured
-            state.uiInput.keyboardCaptured = not not keepCaptured
-        end
-    end
+    debugVisibilityController.set(state, visible)
 end
 
 function UIStateManager.toggleDebugUI(state)
-    if not (state and state.debugUI) then
-        return
-    end
-
-    setDebugVisibility(state, not state.debugUI.visible)
+    debugVisibilityController.toggle(state)
 end
 
 function UIStateManager.showDebugUI(state)
-    setDebugVisibility(state, true)
+    debugVisibilityController.show(state)
 end
 
 function UIStateManager.hideDebugUI(state)
-    setDebugVisibility(state, false)
+    debugVisibilityController.hide(state)
 end
 
 function UIStateManager.isDebugUIVisible(state)

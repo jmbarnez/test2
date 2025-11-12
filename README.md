@@ -28,6 +28,8 @@ The window title and runtime configuration are pulled from `src/constants/game.l
 | Toggle Skills | **K** |
 | Pause Menu | **Esc** |
 | Fullscreen Toggle | **F11** |
+| Quick Save | **F5** |
+| Quick Load | **F9** |
 
 All bindings can be remapped in the Options window @src/ui/windows/options.lua#32-110.
 

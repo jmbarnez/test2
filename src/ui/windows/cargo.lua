@@ -458,7 +458,9 @@ function cargo_window.draw(context)
         mouse_y >= window_y and mouse_y <= window_y + window_height
 
     if uiInput and state.visible then
-        if mouseInsideWindow or state.dragging or frame.dragging then
+        if state.dragging or frame.dragging then
+            uiInput.mouseCaptured = true
+        elseif is_mouse_down and mouseInsideWindow then
             uiInput.mouseCaptured = true
         end
     end

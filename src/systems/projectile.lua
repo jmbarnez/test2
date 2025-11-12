@@ -54,7 +54,7 @@ local function create_projectile_shape(drawable, size)
     end
 end
 
-local function create_impact_particles(x, y, projectile)
+local function create_impact_particles(x, y, projectile, target)
     local particles = {}
     local numParticles = math.random(8, 16)
     local baseColor = (projectile.drawable and projectile.drawable.color) or { 0.2, 0.8, 1.0 }
@@ -70,21 +70,30 @@ local function create_impact_particles(x, y, projectile)
     if projectile.velocity then
         impactAngle = atan2(projectile.velocity.y or 0, projectile.velocity.x or 0)
     end
+    
+    -- Calculate offset to prevent particles from rendering behind the target
+    -- Offset particles in the opposite direction of projectile velocity
+    local offsetDistance = 8  -- Pixels to offset from collision point
+    local offsetX = -math.cos(impactAngle) * offsetDistance
+    local offsetY = -math.sin(impactAngle) * offsetDistance
 
     for i = 1, numParticles do
         local spreadAngle = impactAngle + math.pi + (math.random() - 0.5) * math.pi * 0.8
         local speed = math.random(80, 200)
-        local lifetime = randf(0.22, 0.45)
-        local size = 0.9 + math.random() * 1.4
+        local lifetime = randf(0.24, 0.52)
+        local size = randf(3.4, 5.1)
+        local glowSize = size * randf(1.4, 1.75)
         local tintShift = randf(0.2, 0.5)
 
         particles[i] = {
-            x = x + math.random(-2, 2),
-            y = y + math.random(-2, 2),
+            x = x + offsetX + math.random(-2, 2),
+            y = y + offsetY + math.random(-2, 2),
             vx = math.cos(spreadAngle) * speed,
             vy = math.sin(spreadAngle) * speed,
             size = size,
             maxSize = size,
+            glowSize = glowSize,
+            maxGlowSize = glowSize,
             lifetime = lifetime,
             maxLifetime = lifetime,
             baseAlpha = 0.85 + math.random() * 0.15,
@@ -233,18 +242,31 @@ return function(context)
             if self.processedCollisions[key] then return end
             self.processedCollisions[key] = true
 
+            -- Create impact particles (before early returns so visual feedback always occurs)
+            local pos = projectile.position or {}
+            local x, y = pos.x or 0, pos.y or 0
+            
+            -- Debug: Log station impacts
+            if target and target.station then
+                print(string.format("[PROJECTILE] Impact on station at (%.1f, %.1f), type=%s, particles before=%d", 
+                    x, y, tostring(targetData.type), #self.impactParticles))
+            end
+            
+            local particles = create_impact_particles(x, y, projectile, target)
+            for i = 1, #particles do
+                self.impactParticles[#self.impactParticles + 1] = particles[i]
+            end
+            
+            -- Debug: Verify particles were added
+            if target and target.station then
+                print(string.format("[PROJECTILE] Particles after=%d, added=%d", 
+                    #self.impactParticles, #particles))
+            end
+
             -- Don't hit the shooter or same playerId
             if projectile.projectile and projectile.projectile.owner == target then return end
             local ownerPlayerId = projectile.projectile and projectile.projectile.ownerPlayerId
             if ownerPlayerId and target.playerId == ownerPlayerId then return end
-
-            -- Create impact particles
-            local pos = projectile.position or {}
-            local x, y = pos.x or 0, pos.y or 0
-            local particles = create_impact_particles(x, y, projectile)
-            for i = 1, #particles do
-                self.impactParticles[#self.impactParticles + 1] = particles[i]
-            end
 
             -- Deactivate and queue physics body/fixture destruction outside the callback
             local body = projectile.body
@@ -435,6 +457,7 @@ return function(context)
         draw = function(self)
             lg.push("all")
             lg.setBlendMode("add")
+            local drawnCount = 0
             for i = 1, #self.impactParticles do
                 local p = self.impactParticles[i]
                 local alpha = p.color[4]
@@ -442,7 +465,13 @@ return function(context)
                     lg.setColor(p.color)
                     lg.setPointSize(math.max(1, p.size))
                     lg.points(p.x, p.y)
+                    drawnCount = drawnCount + 1
                 end
+            end
+            -- Debug: Only log occasionally to avoid spam
+            if #self.impactParticles > 0 and math.random() < 0.01 then
+                print(string.format("[PROJECTILE DRAW] Total particles=%d, drawn=%d", 
+                    #self.impactParticles, drawnCount))
             end
             lg.pop()
         end,

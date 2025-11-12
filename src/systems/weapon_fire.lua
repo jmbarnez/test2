@@ -189,10 +189,7 @@ end
 ---@param beams WeaponBeamContainer
 ---@param impacts WeaponImpactContainer
 local function fire_hitscan(entity, startX, startY, dirX, dirY, weapon, physicsWorld, damageEntity, dt, beams, impacts)
-    local weaponConst = constants.weapons or {}
-    local beamConst = weaponConst[weapon.constantKey or "laser"] or {}
-    
-    local maxRange = weapon.maxRange or beamConst.max_range or 600
+    local maxRange = weapon.maxRange or 600
     local endX = startX + dirX * maxRange
     local endY = startY + dirY * maxRange
 
@@ -212,14 +209,16 @@ local function fire_hitscan(entity, startX, startY, dirX, dirY, weapon, physicsW
                 return -1
             end
             local user = fixture:getUserData()
-            if type(user) == "table" and user.entity then
+            if type(user) == "table" then
                 if user.type == "projectile" then
                     return -1
                 end
+                -- Always record the hit for visual effects, even if there's no entity
                 if fraction < closestFraction then
                     closestFraction = fraction
+                    local targetEntity = user.entity
                     hitInfo = {
-                        entity = user.entity,
+                        entity = targetEntity,  -- May be nil for static/environment fixtures
                         x = x,
                         y = y,
                         collider = user.collider,
@@ -228,6 +227,10 @@ local function fire_hitscan(entity, startX, startY, dirX, dirY, weapon, physicsW
                         nx = xn,
                         ny = yn,
                     }
+                    -- Debug: Log station hits
+                    if targetEntity and targetEntity.station then
+                        print(string.format("[WEAPON] Hit station at (%.1f, %.1f), type=%s", x, y, tostring(user.type)))
+                    end
                 end
                 return fraction
             end
@@ -251,7 +254,7 @@ local function fire_hitscan(entity, startX, startY, dirX, dirY, weapon, physicsW
         end
 
         if shouldDamage and damageEntity and target then
-            local dps = weapon.damagePerSecond or beamConst.damage_per_second or 0
+            local dps = weapon.damagePerSecond or 0
             dps = dps * resolve_damage_multiplier(entity)
             local damage = dps * dt
             if damage > 0 then
@@ -269,10 +272,10 @@ local function fire_hitscan(entity, startX, startY, dirX, dirY, weapon, physicsW
         end
     end
 
-    local beamWidth = weapon.width or beamConst.width or 3
+    local beamWidth = weapon.width or 3
 
-    local beamColor = weapon.color or beamConst.color or { 0.6, 0.85, 1.0 }
-    local beamGlow = weapon.glowColor or beamConst.glow_color or { 1.0, 0.8, 0.6 }
+    local beamColor = weapon.color or { 0.6, 0.85, 1.0 }
+    local beamGlow = weapon.glowColor or { 1.0, 0.8, 0.6 }
 
     if hitInfo and impacts then
         spawn_beam_sparks(impacts, endX, endY, dirX, dirY, beamColor)
@@ -531,33 +534,28 @@ return function(context)
                 love.graphics.rotate(angle)
 
                 local baseWidth = beam.width or 3
-                local outerWidth = math.max(baseWidth, 1)
-                local midWidth = math.max(baseWidth * 0.6, 0.6)
-                local innerWidth = math.max(baseWidth * 0.35, 0.35)
-                local coreWidth = math.max(baseWidth * 0.18, 0.18)
+                local glowWidth = math.max(baseWidth * 1.5, baseWidth + 1.2)
+                local coreWidth = math.max(baseWidth * 0.55, 0.45)
+                local highlightWidth = math.max(coreWidth * 0.45, 0.22)
 
                 local glow = beam.glow or { 1.0, 0.8, 0.6 }
                 local color = beam.color or { 0.6, 0.85, 1.0 }
 
-                -- Outer glow
-                love.graphics.setColor(glow[1], glow[2], glow[3], 0.1)
-                love.graphics.setLineWidth(outerWidth)
-                love.graphics.line(0, 0, length, 0)
+                local halfGlow = glowWidth * 0.5
+                local halfCore = coreWidth * 0.5
+                local halfHighlight = highlightWidth * 0.5
 
-                -- Middle beam
-                love.graphics.setColor(glow[1], glow[2], glow[3], 0.6)
-                love.graphics.setLineWidth(midWidth)
-                love.graphics.line(0, 0, length, 0)
+                -- Soft glow halo
+                love.graphics.setColor(glow[1], glow[2], glow[3], 0.28)
+                love.graphics.rectangle("fill", 0, -halfGlow, length, glowWidth)
 
-                -- Inner core
-                love.graphics.setColor(color[1], color[2], color[3], 0.9)
-                love.graphics.setLineWidth(innerWidth)
-                love.graphics.line(0, 0, length, 0)
+                -- Core body
+                love.graphics.setColor(color[1], color[2], color[3], 0.95)
+                love.graphics.rectangle("fill", 0, -halfCore, length, coreWidth)
 
-                -- Bright center
-                love.graphics.setColor(1, 1, 1, 1)
-                love.graphics.setLineWidth(coreWidth)
-                love.graphics.line(0, 0, length, 0)
+                -- White-hot center
+                love.graphics.setColor(1.0, 1.0, 1.0, 0.6)
+                love.graphics.rectangle("fill", 0, -halfHighlight, length, highlightWidth)
 
                 love.graphics.pop()
             end

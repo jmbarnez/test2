@@ -62,6 +62,133 @@ local function ensure_runtime_modules(entity)
     return runtimeModules
 end
 
+local function apply_module_effects(entity)
+    if not entity then
+        return
+    end
+
+    local modules = ensure_runtime_modules(entity)
+    if not modules or type(modules.slots) ~= "table" then
+        return
+    end
+
+    local totalShieldBonus = 0
+    local totalShieldRegen = 0
+    local moduleRechargeDelay = nil
+    local hasShieldModifier = false
+
+    for i = 1, #modules.slots do
+        local slot = modules.slots[i]
+        local stats = slot and slot.item and slot.item.module
+        if stats then
+            local bonus = tonumber(stats.shield_bonus)
+            if bonus and bonus ~= 0 then
+                totalShieldBonus = totalShieldBonus + bonus
+                hasShieldModifier = true
+            end
+
+            local regen = tonumber(stats.shield_regen)
+            if regen and regen ~= 0 then
+                totalShieldRegen = totalShieldRegen + regen
+                hasShieldModifier = true
+            end
+
+            local delay = tonumber(stats.shield_recharge_delay)
+            if delay then
+                delay = math.max(0, delay)
+                if moduleRechargeDelay == nil then
+                    moduleRechargeDelay = delay
+                else
+                    moduleRechargeDelay = math.min(moduleRechargeDelay, delay)
+                end
+                hasShieldModifier = true
+            end
+        end
+    end
+
+    entity._moduleBase = entity._moduleBase or {}
+
+    local currentShield = entity.shield or (entity.health and entity.health.shield)
+    local baseShield = entity._moduleBase.shield
+
+    if not baseShield then
+        if currentShield then
+            baseShield = {
+                max = math.max(0, tonumber(currentShield.max or currentShield.capacity or currentShield.limit or currentShield.current or 0) or 0),
+                regen = math.max(0, tonumber(currentShield.regen) or 0),
+                rechargeDelay = math.max(0, tonumber(currentShield.rechargeDelay) or 0),
+            }
+        else
+            baseShield = { max = 0, regen = 0, rechargeDelay = 0 }
+        end
+        entity._moduleBase.shield = baseShield
+    end
+
+    local function resolve_shield_component()
+        local shield = entity.shield or (entity.health and entity.health.shield)
+        if not shield then
+            shield = {
+                max = 0,
+                current = 0,
+                regen = 0,
+                rechargeDelay = baseShield.rechargeDelay or 0,
+                rechargeTimer = 0,
+                percent = 0,
+                isDepleted = true,
+            }
+            entity.shield = shield
+            if entity.health then
+                entity.health.shield = shield
+            end
+        end
+        return shield
+    end
+
+    local shieldComponent = resolve_shield_component()
+
+    local previousMax = math.max(0, tonumber(shieldComponent.max or baseShield.max or 0) or 0)
+    local ratio
+    if previousMax > 0 then
+        ratio = math.max(0, math.min(1, (tonumber(shieldComponent.current) or previousMax) / previousMax))
+    else
+        ratio = shieldComponent.percent
+        if not (ratio and ratio > 0) then
+            ratio = 1
+        end
+    end
+
+    local newMax
+    local newRegen
+    local newDelay
+
+    if hasShieldModifier then
+        newMax = math.max(0, (baseShield.max or 0) + totalShieldBonus)
+        newRegen = math.max(0, (baseShield.regen or 0) + totalShieldRegen)
+        if moduleRechargeDelay ~= nil then
+            newDelay = moduleRechargeDelay
+        else
+            newDelay = math.max(0, baseShield.rechargeDelay or 0)
+        end
+    else
+        newMax = math.max(0, baseShield.max or 0)
+        newRegen = math.max(0, baseShield.regen or 0)
+        newDelay = math.max(0, baseShield.rechargeDelay or 0)
+    end
+
+    shieldComponent.max = newMax
+    local newCurrent = newMax > 0 and math.min(newMax, ratio * newMax) or 0
+    shieldComponent.current = newCurrent
+    shieldComponent.regen = newRegen
+
+    local clampedDelay = math.max(0, newDelay)
+    shieldComponent.rechargeDelay = clampedDelay
+    local timer = tonumber(shieldComponent.rechargeTimer) or 0
+    shieldComponent.rechargeTimer = math.min(math.max(0, timer), clampedDelay)
+
+    shieldComponent.percent = newMax > 0 and (newCurrent / newMax) or 0
+    shieldComponent.isDepleted = newCurrent <= 0
+end
+
 local function remove_item_reference(modules, item)
     if not modules or type(modules.slots) ~= "table" then
         return
@@ -73,21 +200,31 @@ local function remove_item_reference(modules, item)
     end
 end
 
-local function detach_from_cargo(entity, item)
-    if not (entity and entity.cargo) or type(item) ~= "table" then
-        return false
+local function get_cargo_items(entity)
+    if not (entity and entity.cargo) then
+        return nil
     end
 
     local cargoComponent = entity.cargo
     local items = cargoComponent.items
     if type(items) ~= "table" then
+        items = {}
+        cargoComponent.items = items
+    end
+
+    return items
+end
+
+local function detach_from_cargo(entity, item)
+    local items = get_cargo_items(entity)
+    if not items or type(item) ~= "table" then
         return false
     end
 
     for index = #items, 1, -1 do
         if items[index] == item then
             table.remove(items, index)
-            cargoComponent.dirty = true
+            entity.cargo.dirty = true
             return true
         end
     end
@@ -96,16 +233,11 @@ local function detach_from_cargo(entity, item)
 end
 
 local function attach_to_cargo(entity, item)
-    if not (entity and entity.cargo) or type(item) ~= "table" then
+    local items = get_cargo_items(entity)
+    if not items or type(item) ~= "table" then
         return false
     end
 
-    local cargoComponent = entity.cargo
-    if type(cargoComponent.items) ~= "table" then
-        cargoComponent.items = {}
-    end
-
-    local items = cargoComponent.items
     for index = 1, #items do
         if items[index] == item then
             return false
@@ -113,7 +245,7 @@ local function attach_to_cargo(entity, item)
     end
 
     items[#items + 1] = item
-    cargoComponent.dirty = true
+    entity.cargo.dirty = true
     return true
 end
 
@@ -234,6 +366,7 @@ function Modules.equip(entity, item, preferredIndex)
         entity.cargo.dirty = true
     end
 
+    apply_module_effects(entity)
     return true
 end
 
@@ -267,6 +400,7 @@ function Modules.unequip(entity, slotOrIndex)
 
     attach_to_cargo(entity, item)
 
+    apply_module_effects(entity)
     return true
 end
 
@@ -276,49 +410,34 @@ function Modules.sync_from_cargo(entity)
         return
     end
 
-    local preserved = {}
     for _, slot in ipairs(modules.slots) do
         if slot.item then
             slot.item.installed = true
             ensure_item_slot_metadata(slot, slot.item)
-            preserved[slot.id] = slot.item
         end
-        slot.item = nil
     end
 
-    local cargo = entity and entity.cargo
-    local items = cargo and cargo.items
-    if type(items) ~= "table" then
+    local cargoItems = get_cargo_items(entity)
+    if not cargoItems then
         return
     end
 
-    for _, item in ipairs(items) do
+    local toEquip = {}
+    for _, item in ipairs(cargoItems) do
         if type(item) == "table" then
             local isModule = (item.type == "module")
                 or (type(item.id) == "string" and item.id:match("^module:"))
             if isModule and item.installed then
-                local slot = find_matching_slot(modules, item, nil)
-                if slot then
-                    slot.item = item
-                    ensure_item_slot_metadata(slot, item)
-                    preserved[slot.id] = nil
-                else
-                    item.installed = false
-                    item.moduleSlotId = nil
-                end
+                toEquip[#toEquip + 1] = item
             end
         end
     end
 
-    for slotId, preservedItem in pairs(preserved) do
-        if preservedItem then
-            local slot = find_slot_by_id(modules, slotId)
-            if slot and not slot.item then
-                slot.item = preservedItem
-                ensure_item_slot_metadata(slot, preservedItem)
-            end
-        end
+    for index = 1, #toEquip do
+        Modules.equip(entity, toEquip[index], nil)
     end
+
+    apply_module_effects(entity)
 end
 
 function Modules.serialize(entity)
