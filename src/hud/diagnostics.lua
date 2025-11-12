@@ -73,7 +73,7 @@ local function build_lines(context, player)
 end
 
 function Diagnostics.draw(context, player)
-    local lines = build_lines(context, player)
+    local lines = Diagnostics.collect(context, player)
     if #lines == 0 then
         return
     end
@@ -94,6 +94,10 @@ function Diagnostics.draw(context, player)
     for i = 1, #lines do
         love.graphics.print(lines[i], x, y + (i - 1) * lineHeight)
     end
+end
+
+function Diagnostics.collect(context, player)
+    return build_lines(context, player)
 end
 
 return Diagnostics

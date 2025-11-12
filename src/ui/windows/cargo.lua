@@ -16,6 +16,60 @@ local theme_spacing = theme.spacing
 local window_metrics = theme.window
 local set_color = theme.utils.set_color
 
+local SORT_MODES = {
+    name = { label = "Name", next = "quantity" },
+    quantity = { label = "Quantity", next = "name" },
+}
+
+local function copy_items(list)
+    local result = {}
+    for i = 1, #list do
+        result[i] = list[i]
+    end
+    return result
+end
+
+local function sort_items(items, mode)
+    if #items <= 1 then
+        return
+    end
+    if mode == "quantity" then
+        table.sort(items, function(a, b)
+            if not a then
+                return false
+            end
+            if not b then
+                return true
+            end
+            local qa = tonumber(a.quantity) or 0
+            local qb = tonumber(b.quantity) or 0
+            if qa == qb then
+                local nameA = tostring(a.name or ""):lower()
+                local nameB = tostring(b.name or ""):lower()
+                return nameA < nameB
+            end
+            return qa > qb
+        end)
+        return
+    end
+    table.sort(items, function(a, b)
+        if not a then
+            return false
+        end
+        if not b then
+            return true
+        end
+        local nameA = tostring(a.name or ""):lower()
+        local nameB = tostring(b.name or ""):lower()
+        if nameA == nameB then
+            local qa = tonumber(a.quantity) or 0
+            local qb = tonumber(b.quantity) or 0
+            return qa > qb
+        end
+        return nameA < nameB
+    end)
+end
+
 local function format_currency(value)
     if type(value) ~= "number" then
         return tostring(value or "--")
@@ -85,21 +139,21 @@ end
 
 local function draw_icon_layer(icon, layer, size)
     love.graphics.push()
-    
+
     local color = layer.color or icon.detail or icon.color or icon.accent
     set_color(color)
-    
+
     local offsetX = (layer.offsetX or 0) * size
     local offsetY = (layer.offsetY or 0) * size
     love.graphics.translate(offsetX, offsetY)
-    
+
     if layer.rotation then
         love.graphics.rotate(layer.rotation)
     end
-    
+
     local shape = layer.shape or "circle"
     local halfSize = size * 0.5
-    
+
     if shape == "circle" then
         local radius = (layer.radius or 0.5) * halfSize
         love.graphics.circle("fill", 0, 0, radius)
@@ -135,7 +189,7 @@ local function draw_icon_layer(icon, layer, size)
         local radius = (layer.radius or 0.4) * halfSize
         love.graphics.circle("fill", 0, 0, radius)
     end
-    
+
     love.graphics.pop()
 end
 
@@ -172,11 +226,11 @@ local function wrap_text(text, font, maxWidth)
     for word in text:gmatch("%S+") do
         table.insert(words, word)
     end
-    
+
     local lines = {}
     local currentLine = ""
-    
-    for i, word in ipairs(words) do
+
+    for _, word in ipairs(words) do
         local testLine = currentLine == "" and word or currentLine .. " " .. word
         if font:getWidth(testLine) <= maxWidth then
             currentLine = testLine
@@ -189,11 +243,11 @@ local function wrap_text(text, font, maxWidth)
             end
         end
     end
-    
+
     if currentLine ~= "" then
         table.insert(lines, currentLine)
     end
-    
+
     return lines
 end
 
@@ -226,11 +280,11 @@ local function calculate_grid_layout(contentWidth, contentHeight, fonts)
     local textAreaHeight = maxLines * lineHeight
     local labelHeight = textAreaHeight + 10
     local slotWithLabelHeight = slotSize + labelHeight
-    
+
     local slotsPerRow = math.max(1, math.floor((contentWidth + slotPadding) / (slotSize + slotPadding)))
     local slotsPerColumn = math.max(1, math.floor((contentHeight + slotPadding) / (slotWithLabelHeight + slotPadding)))
     local totalVisibleSlots = slotsPerRow * slotsPerColumn
-    
+
     return slotsPerRow, slotsPerColumn, totalVisibleSlots, slotSize, slotWithLabelHeight, labelHeight
 end
 
@@ -239,7 +293,7 @@ local function draw_slot_background(slotX, slotY, slotSize, isHovered, isSelecte
         set_color(window_colors.row_hover or { 1, 1, 1, 0.1 })
         love.graphics.rectangle("fill", slotX, slotY, slotSize, slotSize, 3, 3)
     end
-    
+
     if isHovered or isSelected then
         set_color(window_colors.slot_border or { 0.08, 0.08, 0.12, 0.5 })
         love.graphics.setLineWidth(1)
@@ -252,9 +306,8 @@ local function draw_item_in_slot(item, slotX, slotY, slotSize, labelHeight, font
     local iconX = slotX + 5
     local iconY = slotY + 5
 
-    -- Draw icon
     local iconDrawn = false
-    if item.icon then
+    if item and item.icon then
         iconDrawn = draw_item_icon(item.icon, iconX, iconY, iconSize)
     end
 
@@ -265,8 +318,7 @@ local function draw_item_in_slot(item, slotX, slotY, slotSize, labelHeight, font
         love.graphics.circle("line", iconX + iconSize * 0.5, iconY + iconSize * 0.5, placeholderRadius)
     end
 
-    -- Draw quantity badge in bottom-right of slot
-    if item.quantity ~= nil then
+    if item and item.quantity ~= nil then
         local quantityFont = fonts.small_bold or fonts.small or fonts.body
         love.graphics.setFont(quantityFont)
         local quantityText = tostring(item.quantity)
@@ -290,12 +342,15 @@ local function draw_item_in_slot(item, slotX, slotY, slotSize, labelHeight, font
         love.graphics.print(quantityText, badgeX + badgePaddingX, badgeY + badgePaddingY - 1)
     end
 
-    -- Draw item name with text wrapping
+    if not item then
+        return
+    end
+
     local itemName = item.name or "Unknown Item"
     local font = fonts.small or fonts.body
     love.graphics.setFont(font)
     set_color(window_colors.text)
-    
+
     local textLines = wrap_text(itemName, font, slotSize - 4)
     local lineHeight = font:getHeight()
     local textAreaHeight = (labelHeight or ((theme_spacing.slot_text_height or 16) * 2 + 10)) - 4
@@ -312,7 +367,9 @@ local function draw_item_in_slot(item, slotX, slotY, slotSize, labelHeight, font
 end
 
 local function create_item_tooltip(item)
-    if not item then return end
+    if not item then
+        return
+    end
 
     local definition = item.id and Items.get(item.id) or nil
 
@@ -538,6 +595,7 @@ function cargo_window.draw(context)
 
     state.searchQuery = state.searchQuery or ""
     state.isSearchActive = state.isSearchActive or false
+    state.sortMode = state.sortMode or "name"
 
     local uiInput = context.uiInput
 
@@ -625,7 +683,7 @@ function cargo_window.draw(context)
     local topBarHeight = window_metrics.top_bar_height
     local bottomBarHeight = window_metrics.bottom_bar_height
 
-    local frame = window.draw_frame {
+    local frame = window.draw_frame({
         x = state.x or dims.x,
         y = state.y or dims.y,
         width = dims.width,
@@ -642,14 +700,14 @@ function cargo_window.draw(context)
             is_down = is_mouse_down,
             just_pressed = just_pressed,
         },
-    }
+    })
 
     local window_x = state.x or dims.x
     local window_y = state.y or dims.y
     local window_width = state.width or dims.width
     local window_height = state.height or dims.height
-    local mouseInsideWindow = mouse_x and mouse_y and 
-        mouse_x >= window_x and mouse_x <= window_x + window_width and 
+    local mouseInsideWindow = mouse_x and mouse_y and
+        mouse_x >= window_x and mouse_x <= window_x + window_width and
         mouse_y >= window_y and mouse_y <= window_y + window_height
 
     if uiInput and state.visible then
@@ -661,28 +719,52 @@ function cargo_window.draw(context)
     local content = frame.content
     local searchHeight = fonts.body:getHeight() + 12
     local searchSpacing = 6
+    local sortMode = state.sortMode
+    local sortInfo = SORT_MODES[sortMode] or SORT_MODES.name
+    local sortLabel = "Sort: " .. sortInfo.label
+    local buttonWidth = math.max(80, math.min(fonts.body:getWidth(sortLabel) + 24, content.width))
+    local searchWidth = content.width - buttonWidth - searchSpacing
+    if searchWidth < 0 then
+        buttonWidth = content.width
+        searchWidth = 0
+        searchSpacing = 0
+    elseif searchWidth < 80 then
+        searchWidth = math.max(0, content.width - searchSpacing - 80)
+        buttonWidth = content.width - searchWidth - searchSpacing
+    end
+
+    local searchRect = {
+        x = content.x,
+        y = content.y,
+        width = searchWidth,
+        height = searchHeight,
+    }
+
+    local sortRect = {
+        x = searchRect.x + searchRect.width + searchSpacing,
+        y = content.y,
+        width = buttonWidth,
+        height = searchHeight,
+    }
+
     local gridY = content.y + searchHeight + searchSpacing
     local gridHeight = content.height - searchHeight - searchSpacing
     if gridHeight < 0 then
         gridHeight = 0
     end
 
-    local slotsPerRow, slotsPerColumn, totalVisibleSlots, slotSize, slotWithLabelHeight, labelHeight = 
+    local slotsPerRow, slotsPerColumn, totalVisibleSlots, slotSize, slotWithLabelHeight, labelHeight =
         calculate_grid_layout(content.width, gridHeight, fonts)
 
     local slotPadding = theme_spacing.slot_padding
     local gridStartY = gridY
     local gridStartX = content.x
 
-    local searchRect = {
-        x = content.x,
-        y = content.y,
-        width = content.width,
-        height = searchHeight,
-    }
-
-    local searchHovered = mouse_x >= searchRect.x and mouse_x <= searchRect.x + searchRect.width and
+    local searchHovered = searchRect.width > 0 and mouse_x >= searchRect.x and mouse_x <= searchRect.x + searchRect.width and
         mouse_y >= searchRect.y and mouse_y <= searchRect.y + searchRect.height
+
+    local sortHovered = mouse_x >= sortRect.x and mouse_x <= sortRect.x + sortRect.width and
+        mouse_y >= sortRect.y and mouse_y <= sortRect.y + sortRect.height
 
     if searchHovered and just_pressed then
         state.isSearchActive = true
@@ -690,45 +772,71 @@ function cargo_window.draw(context)
             uiInput.keyboardCaptured = true
         end
     elseif just_pressed and not searchHovered then
-        if state.isSearchActive and uiInput then
+        if state.isSearchActive and not sortHovered and uiInput then
             uiInput.keyboardCaptured = false
         end
-        state.isSearchActive = false
+        if not sortHovered then
+            state.isSearchActive = false
+        end
     end
 
     love.graphics.setFont(fonts.body)
-    set_color(window_colors.input_background or { 0.06, 0.07, 0.1, 1 })
-    love.graphics.rectangle("fill", searchRect.x, searchRect.y, searchRect.width, searchRect.height, 4, 4)
-    set_color(window_colors.border or { 0.08, 0.08, 0.12, 0.8 })
-    love.graphics.setLineWidth(1)
-    love.graphics.rectangle("line", searchRect.x + 0.5, searchRect.y + 0.5, searchRect.width - 1, searchRect.height - 1, 4, 4)
+    if searchRect.width > 0 then
+        set_color(window_colors.input_background or { 0.06, 0.07, 0.1, 1 })
+        love.graphics.rectangle("fill", searchRect.x, searchRect.y, searchRect.width, searchRect.height, 4, 4)
+        set_color(window_colors.border or { 0.08, 0.08, 0.12, 0.8 })
+        love.graphics.setLineWidth(1)
+        love.graphics.rectangle("line", searchRect.x + 0.5, searchRect.y + 0.5, searchRect.width - 1, searchRect.height - 1, 4, 4)
 
-    local queryText = state.searchQuery or ""
-    local placeholder = "Search cargo"
-    if queryText == "" and not state.isSearchActive then
-        set_color(window_colors.muted or { 0.5, 0.5, 0.55, 1 })
-        love.graphics.print(placeholder, searchRect.x + 8, searchRect.y + (searchRect.height - fonts.body:getHeight()) * 0.5)
-    else
-        set_color(window_colors.text or { 0.85, 0.85, 0.9, 1 })
-        love.graphics.print(queryText, searchRect.x + 8, searchRect.y + (searchRect.height - fonts.body:getHeight()) * 0.5)
+        local queryText = state.searchQuery or ""
+        local placeholder = "Search cargo"
+        if queryText == "" and not state.isSearchActive then
+            set_color(window_colors.muted or { 0.5, 0.5, 0.55, 1 })
+            love.graphics.print(placeholder, searchRect.x + 8, searchRect.y + (searchRect.height - fonts.body:getHeight()) * 0.5)
+        else
+            set_color(window_colors.text or { 0.85, 0.85, 0.9, 1 })
+            love.graphics.print(queryText, searchRect.x + 8, searchRect.y + (searchRect.height - fonts.body:getHeight()) * 0.5)
 
-        if state.isSearchActive then
-            local textWidth = fonts.body:getWidth(queryText)
-            local caretX = searchRect.x + 8 + textWidth + 2
-            local caretY = searchRect.y + 6
-            local caretHeight = searchRect.height - 12
-            set_color(window_colors.caret or window_colors.text or { 0.85, 0.85, 0.9, 1 })
-            love.graphics.rectangle("fill", caretX, caretY, 2, caretHeight)
+            if state.isSearchActive then
+                local textWidth = fonts.body:getWidth(queryText)
+                local caretX = searchRect.x + 8 + textWidth + 2
+                local caretY = searchRect.y + 6
+                local caretHeight = searchRect.height - 12
+                set_color(window_colors.caret or window_colors.text or { 0.85, 0.85, 0.9, 1 })
+                love.graphics.rectangle("fill", caretX, caretY, 2, caretHeight)
+            end
+        end
+
+        if searchHovered then
+            love.graphics.setLineWidth(2)
+            set_color(window_colors.accent or { 0.2, 0.5, 0.9, 1 })
+            love.graphics.rectangle("line", searchRect.x + 0.5, searchRect.y + 0.5, searchRect.width - 1, searchRect.height - 1, 4, 4)
         end
     end
 
-    if searchHovered then
+    set_color(sortHovered and (window_colors.button_hover or window_colors.row_hover or { 0.12, 0.16, 0.22, 1 })
+        or window_colors.button_background or window_colors.input_background or { 0.06, 0.07, 0.1, 1 })
+    love.graphics.rectangle("fill", sortRect.x, sortRect.y, sortRect.width, sortRect.height, 4, 4)
+
+    set_color(window_colors.border or { 0.08, 0.08, 0.12, 0.8 })
+    love.graphics.setLineWidth(1)
+    love.graphics.rectangle("line", sortRect.x + 0.5, sortRect.y + 0.5, sortRect.width - 1, sortRect.height - 1, 4, 4)
+
+    set_color(window_colors.text or { 0.85, 0.85, 0.9, 1 })
+    love.graphics.printf(sortLabel, sortRect.x, sortRect.y + (sortRect.height - fonts.body:getHeight()) * 0.5, sortRect.width, "center")
+
+    if sortHovered then
         love.graphics.setLineWidth(2)
         set_color(window_colors.accent or { 0.2, 0.5, 0.9, 1 })
-        love.graphics.rectangle("line", searchRect.x + 0.5, searchRect.y + 0.5, searchRect.width - 1, searchRect.height - 1, 4, 4)
+        love.graphics.rectangle("line", sortRect.x + 0.5, sortRect.y + 0.5, sortRect.width - 1, sortRect.height - 1, 4, 4)
     end
 
-    local filteredItems = items
+    if sortHovered and just_pressed then
+        state.sortMode = sortInfo.next or "name"
+    end
+
+    local queryText = state.searchQuery or ""
+    local filteredItems
     if queryText ~= "" then
         local lowerQuery = queryText:lower()
         filteredItems = {}
@@ -738,7 +846,11 @@ function cargo_window.draw(context)
                 filteredItems[#filteredItems + 1] = item
             end
         end
+    else
+        filteredItems = copy_items(items)
     end
+
+    sort_items(filteredItems, state.sortMode)
 
     local hoveredItem
     local hoveredSlotIndex
@@ -751,8 +863,8 @@ function cargo_window.draw(context)
         local slotY = gridStartY + row * (slotWithLabelHeight + slotPadding)
 
         local item = filteredItems[slotNumber]
-        local isMouseOver = mouse_x >= slotX and mouse_x <= slotX + slotSize and 
-                           mouse_y >= slotY and mouse_y <= slotY + slotSize
+        local isMouseOver = mouse_x >= slotX and mouse_x <= slotX + slotSize and
+            mouse_y >= slotY and mouse_y <= slotY + slotSize
 
         if isMouseOver then
             hoveredItem = item
@@ -772,7 +884,6 @@ function cargo_window.draw(context)
     state._hovered_item = hoveredItem
     state._was_mouse_down = is_mouse_down
 
-    -- Bottom bar / capacity display
     local bottomBar = frame.bottom_bar
     if bottomBar then
         local inner = bottomBar.inner or bottomBar

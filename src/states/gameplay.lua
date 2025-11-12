@@ -13,6 +13,7 @@ local UIStateManager = require("src.ui.state_manager")
 local cargo_window = require("src.ui.windows.cargo")
 local options_window = require("src.ui.windows.options")
 local map_window = require("src.ui.windows.map")
+local debug_window = require("src.ui.windows.debug")
 require("src.entities.ship_factory")
 require("src.entities.asteroid_factory")
 require("src.entities.weapon_factory")
@@ -21,10 +22,76 @@ local World = require("src.states.gameplay.world")
 local Entities = require("src.states.gameplay.entities")
 local Systems = require("src.states.gameplay.systems")
 local View = require("src.states.gameplay.view")
-local PlayerEngineTrail = require("src.effects.player_engine_trail")
+local EngineTrail = require("src.effects.engine_trail")
 local FloatingText = require("src.effects.floating_text")
 
 local love = love
+
+local SAMPLE_WINDOW = 120
+
+local function get_time()
+    if love and love.timer and love.timer.getTime then
+        return love.timer.getTime()
+    end
+    return nil
+end
+
+local function record_metric(container, key, value)
+    if not container or type(value) ~= "number" then
+        return
+    end
+
+    local bucket = container[key]
+    if not bucket then
+        bucket = {
+            values = {},
+            cursor = 1,
+            count = 0,
+            sum = 0,
+            window = SAMPLE_WINDOW,
+        }
+        container[key] = bucket
+    end
+
+    local window = bucket.window or SAMPLE_WINDOW
+    local cursor = bucket.cursor or 1
+
+    if bucket.count < window then
+        bucket.count = bucket.count + 1
+    else
+        local old = bucket.values[cursor]
+        if old then
+            bucket.sum = bucket.sum - old
+        end
+    end
+
+    bucket.values[cursor] = value
+    bucket.sum = (bucket.sum or 0) + value
+    bucket.last = value
+
+    if bucket.count > 0 then
+        bucket.avg = bucket.sum / bucket.count
+    else
+        bucket.avg = value
+    end
+
+    local minValue, maxValue = value, value
+    for i = 1, bucket.count do
+        local sample = bucket.values[i]
+        if sample then
+            if sample < minValue then
+                minValue = sample
+            end
+            if sample > maxValue then
+                maxValue = sample
+            end
+        end
+    end
+
+    bucket.min = minValue
+    bucket.max = maxValue
+    bucket.cursor = (cursor % window) + 1
+end
 
 local gameplay = {}
 
@@ -56,6 +123,117 @@ local function is_control_modifier_active()
     return false
 end
 
+local VALID_PHYSICS_CALLBACK_PHASES = {
+    beginContact = true,
+    endContact = true,
+    preSolve = true,
+    postSolve = true,
+}
+
+function gameplay:ensurePhysicsCallbackRouter()
+    local physicsWorld = self.physicsWorld
+    if not physicsWorld then
+        return
+    end
+
+    if not self.physicsCallbackLists then
+        self.physicsCallbackLists = {
+            beginContact = {},
+            endContact = {},
+            preSolve = {},
+            postSolve = {},
+        }
+    end
+
+    if not self._physicsCallbackRouter then
+        local function forward(phase)
+            return function(...)
+                local lists = self.physicsCallbackLists
+                if not lists then
+                    return
+                end
+
+                local handlers = lists[phase]
+                if not handlers then
+                    return
+                end
+
+                for i = 1, #handlers do
+                    local handler = handlers[i]
+                    if handler then
+                        handler(...)
+                    end
+                end
+            end
+        end
+
+        self._physicsCallbackRouter = {
+            beginContact = forward("beginContact"),
+            endContact = forward("endContact"),
+            preSolve = forward("preSolve"),
+            postSolve = forward("postSolve"),
+        }
+    end
+
+    physicsWorld:setCallbacks(
+        self._physicsCallbackRouter.beginContact,
+        self._physicsCallbackRouter.endContact,
+        self._physicsCallbackRouter.preSolve,
+        self._physicsCallbackRouter.postSolve
+    )
+end
+
+function gameplay:registerPhysicsCallback(phase, handler)
+    if not VALID_PHYSICS_CALLBACK_PHASES[phase] then
+        error(string.format("Invalid physics callback phase '%s'", tostring(phase)))
+    end
+
+    if type(handler) ~= "function" then
+        error("Physics callback handler must be a function")
+    end
+
+    if not self.physicsWorld then
+        return function() end
+    end
+
+    self:ensurePhysicsCallbackRouter()
+
+    local list = self.physicsCallbackLists[phase]
+    list[#list + 1] = handler
+
+    return function()
+        self:unregisterPhysicsCallback(phase, handler)
+    end
+end
+
+function gameplay:unregisterPhysicsCallback(phase, handler)
+    local lists = self.physicsCallbackLists
+    if not (lists and VALID_PHYSICS_CALLBACK_PHASES[phase]) then
+        return
+    end
+
+    local handlers = lists[phase]
+    if not handlers then
+        return
+    end
+
+    for i = #handlers, 1, -1 do
+        if handlers[i] == handler then
+            table.remove(handlers, i)
+            break
+        end
+    end
+end
+
+function gameplay:clearPhysicsCallbacks()
+    if self.physicsWorld then
+        self.physicsWorld:setCallbacks()
+    end
+
+    self.physicsCallbackLists = nil
+    self._physicsCallbackRouter = nil
+end
+
 function gameplay:wheelmoved(x, y)
     if UIStateManager.isOptionsUIVisible(self) then
         if options_window.wheelmoved(self, x, y) then
@@ -65,6 +243,12 @@ function gameplay:wheelmoved(x, y)
 
     if UIStateManager.isMapUIVisible(self) then
         if map_window.wheelmoved(self, x, y) then
+            return
+        end
+    end
+
+    if UIStateManager.isDebugUIVisible(self) then
+        if debug_window.wheelmoved(self, x, y) then
             return
         end
     end
@@ -112,10 +296,11 @@ function gameplay:enter(_, config)
     FloatingText.clear(self)
     
     -- Initialize engine trail
-    self.engineTrail = PlayerEngineTrail.new()
+    self.engineTrail = EngineTrail.new()
 
     World.loadSector(self, sectorId)
     World.initialize(self)
+    self:ensurePhysicsCallbackRouter()
     View.initialize(self)
     self.activeTarget = nil
     Systems.initialize(self, Entities.damage)
@@ -138,6 +323,7 @@ function gameplay:leave()
     Entities.destroyWorldEntities(self.world)
     self.activeTarget = nil
     Systems.teardown(self)
+    self:clearPhysicsCallbacks()
     World.teardown(self)
     View.teardown(self)
 
@@ -362,6 +548,15 @@ function gameplay:keypressed(key)
         if options_window.keypressed(self, key) then
             return
         end
+    end
+
+    if key == "f1" then
+        if UIStateManager.isDebugUIVisible(self) then
+            UIStateManager.hideDebugUI(self)
+        else
+            UIStateManager.showDebugUI(self)
+        end
+        return
     end
 
     if key == "f11" then

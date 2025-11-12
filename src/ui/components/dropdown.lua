@@ -16,6 +16,8 @@ function dropdown.create_state(initial)
         open = false,
         itemRects = {},
         rect = nil,
+        selected_index = nil,
+        selected_label = nil,
     }
 
     if type(initial) == "table" then
@@ -120,6 +122,9 @@ function dropdown.render(options)
     if not selected_label or selected_label == "" then
         selected_label = options.placeholder or dropdown.defaults.placeholder
     end
+
+    state.selected_index = selected_index
+    state.selected_label = selected_label
 
     love.graphics.push("all")
 
@@ -227,6 +232,7 @@ function dropdown.handle_mouse(state, input)
         return nil
     end
 
+    local was_open = true
     local item_rects = state.itemRects or {}
     for index, item_rect in ipairs(item_rects) do
         if point_in_rect(mouse_x, mouse_y, item_rect) then
@@ -239,6 +245,8 @@ function dropdown.handle_mouse(state, input)
     state.open = false
 
     if selected_index then
+        state.selected_index = selected_index
+        state.selected_label = nil
         return {
             consumed = true,
             selected_index = selected_index,
@@ -247,7 +255,7 @@ function dropdown.handle_mouse(state, input)
     end
 
     return {
-        consumed = true,
+        consumed = consumed or was_open,
         open = state.open,
     }
 end

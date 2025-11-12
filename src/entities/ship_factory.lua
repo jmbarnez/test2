@@ -3,6 +3,7 @@ local constants = require("src.constants.game")
 local ShipRuntime = require("src.ships.runtime")
 local ShipCargo = require("src.ships.cargo")
 local ShipWreckage = require("src.effects.ship_wreckage")
+local EngineTrail = require("src.effects.engine_trail")
 local table_util = require("src.util.table")
 ---@diagnostic disable-next-line: undefined-global
 local love = love
@@ -230,6 +231,54 @@ function ship_factory.instantiate(blueprint, context)
     if entity.cargo and entity.weapons then
         ShipCargo.add_weapon_items(entity.cargo, entity.weapons, context)
         ShipCargo.refresh_if_needed(entity.cargo)
+    end
+
+    local faction = entity.faction or blueprint.faction or context.faction
+    local isEnemy = faction == "enemy" or entity.enemy or blueprint.enemy
+    local isPlayer = entity.player ~= nil or faction == "player"
+    if not isPlayer and not entity.engineTrail then
+        local trailOptions
+        if isEnemy then
+            trailOptions = {
+                particleColors = {
+                    1.0, 0.3, 0.2, 1.0,
+                    1.0, 0.2, 0.05, 0.8,
+                    0.9, 0.1, 0.05, 0.5,
+                    0.6, 0.05, 0.02, 0.2,
+                    0.4, 0.0, 0.0, 0.05,
+                    0.25, 0.0, 0.0, 0,
+                },
+                textureLayers = {
+                    { radius = 12, color = { 0.5, 0.05, 0.02, 0.04 } },
+                    { radius = 10, color = { 0.7, 0.05, 0.02, 0.08 } },
+                    { radius = 8, color = { 0.9, 0.1, 0.03, 0.12 } },
+                    { radius = 6, color = { 1.0, 0.15, 0.05, 0.22 } },
+                    { radius = 4.5, color = { 1.0, 0.25, 0.1, 0.35 } },
+                    { radius = 3, color = { 1.0, 0.35, 0.2, 0.55 } },
+                    { radius = 2, color = { 1.0, 0.45, 0.3, 0.75 } },
+                    { radius = 1.2, color = { 1.0, 0.55, 0.4, 0.9 } },
+                    { radius = 0.8, color = { 1.0, 0.65, 0.5, 1.0 } },
+                },
+                drawColor = { 1.0, 0.3, 0.2, 1.0 },
+            }
+        elseif not isPlayer then
+            trailOptions = {
+                particleColors = {
+                    0.8, 0.6, 1.0, 1.0,
+                    0.6, 0.4, 0.9, 0.7,
+                    0.4, 0.2, 0.8, 0.4,
+                    0.2, 0.1, 0.6, 0.15,
+                    0.1, 0.05, 0.4, 0.05,
+                    0.05, 0.02, 0.3, 0,
+                },
+                drawColor = { 0.8, 0.6, 1.0, 1.0 },
+            }
+        end
+
+        local trail = EngineTrail.new(trailOptions)
+        trail:attachPlayer(entity)
+        trail:setActive(false)
+        entity.engineTrail = trail
     end
 
     local previous_on_destroyed = entity.onDestroyed

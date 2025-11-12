@@ -1,7 +1,10 @@
--- Player Engine Trail Effect Module
+-- Engine Trail Effect Module
 local math_util = require("src.util.math")
-local PlayerEngineTrail = {}
-PlayerEngineTrail.__index = PlayerEngineTrail
+
+local EngineTrail = {}
+EngineTrail.__index = EngineTrail
+
+local unpack = (table and table.unpack) or unpack
 
 local DEFAULT_TEXTURE_SIZE = 24
 local DEFAULT_TEXTURE_LAYERS = {
@@ -97,11 +100,14 @@ local function createParticleSystem(options)
     ps:setLinearDamping(options.linearDamping or 0.8)
 
     local sizes = options.sizes or { 0.9, 0.6, 0.3, 0.08, 0 }
-    ps:setSizes(table.unpack(sizes))
+    ps:setSizes(unpack(sizes))
     ps:setSizeVariation(options.sizeVariation or 0.6)
 
     local spinMin, spinMax, spinVariation = unpack_quad(options.spin, -3.0, 3.0, 0.5, 0)
-    ps:setSpin(spinMin, spinMax, spinVariation)
+    ps:setSpin(spinMin, spinMax)
+    if spinVariation and spinVariation ~= 0 then
+        ps:setSpinVariation(spinVariation)
+    end
 
     ps:setSpread(options.spread or math.rad(30))
     ps:setRelativeRotation(options.relativeRotation ~= false)
@@ -118,7 +124,7 @@ local function createParticleSystem(options)
 
     local particleColors = options.particleColors or DEFAULT_PARTICLE_COLORS
     if particleColors then
-        ps:setColors(table.unpack(particleColors))
+        ps:setColors(unpack(particleColors))
     end
 
     ps:start()
@@ -126,8 +132,8 @@ local function createParticleSystem(options)
 end
 
 -- Instantiate a new engine trail object
-function PlayerEngineTrail.new(options)
-    local self = setmetatable({}, PlayerEngineTrail)
+function EngineTrail.new(options)
+    local self = setmetatable({}, EngineTrail)
     self.options = options or {}
     self.system = createParticleSystem(self.options)
     self.active = false
@@ -143,11 +149,11 @@ function PlayerEngineTrail.new(options)
     return self
 end
 
-function PlayerEngineTrail:attachPlayer(player)
+function EngineTrail:attachPlayer(player)
     self.player = player
 end
 
-function PlayerEngineTrail:setActive(active)
+function EngineTrail:setActive(active)
     self.active = not not active
     if self.system and not self.active then
         self.fadeTime = 0.15
@@ -157,7 +163,7 @@ function PlayerEngineTrail:setActive(active)
     end
 end
 
-function PlayerEngineTrail:clear()
+function EngineTrail:clear()
     if self.system then
         self.system:reset()
         self.system:setEmissionRate(0)
@@ -167,8 +173,8 @@ function PlayerEngineTrail:clear()
     end
 end
 
--- Align the particle system with the player's rear and read thrust state
-function PlayerEngineTrail:updateFromPlayer()
+-- Align the particle system with the ship's rear and read thrust state
+function EngineTrail:updateFromPlayer()
     if not (self.player and self.system) then return end
 
     local pos = self.player.position
@@ -188,7 +194,7 @@ function PlayerEngineTrail:updateFromPlayer()
             offsetY = self.player.hullSize.y or offsetY
         end
     end
-    
+
     local sinR, cosR = math.sin(rot), math.cos(rot)
     self.position.x = pos.x + cosR * offsetX - sinR * offsetY
     self.position.y = pos.y + sinR * offsetX + cosR * offsetY
@@ -198,7 +204,7 @@ function PlayerEngineTrail:updateFromPlayer()
     local thrust = self.player.currentThrust or 0
     local maxThrust = self.player.maxThrust or thrust
     local strength = 0
-    
+
     if thrusting then
         self.stopTimer = 0
         if maxThrust > 0 then
@@ -212,53 +218,53 @@ function PlayerEngineTrail:updateFromPlayer()
         local pulse = 0.95 + 0.05 * math.sin(time * 6)
         strength = strength * shimmer * pulse
     end
-    
+
     self.thrustStrength = strength
 end
 
--- Update the trail's emission and sync with player
-function PlayerEngineTrail:update(dt)
+-- Update the trail's emission and sync with ship state
+function EngineTrail:update(dt)
     if not self.system then return end
     if self.player then self:updateFromPlayer() end
 
     local targetEmissionRate = 0
-    
+
     if self.active and self.thrustStrength > 0 then
         -- Dramatic emission rate for gorgeous trails
         local baseRate = 250
         local thrustMultiplier = 0.3 + 0.7 * (self.thrustStrength ^ 1.3)
         targetEmissionRate = baseRate * thrustMultiplier
-        
+
         self.system:setDirection(self.direction)
         self.system:setPosition(self.position.x, self.position.y)
-        
+
         -- Dynamic spread for visual interest
         local spread = math.rad(20 + 20 * (1 - self.thrustStrength))
         self.system:setSpread(spread)
-        
+
         self.fadeTime = 0
         self.stopTimer = 0
     else
         targetEmissionRate = 0
         self.stopTimer = self.stopTimer + dt
     end
-    
+
     -- Smooth emission rate transitions
     local lerpFactor = 1 - math.exp(-dt * 25)
     self.lastEmissionRate = self.lastEmissionRate + (targetEmissionRate - self.lastEmissionRate) * lerpFactor
-    
+
     if self.stopTimer > 0.02 or not self.active then
         self.lastEmissionRate = 0
     end
-    
+
     self.system:setEmissionRate(self.lastEmissionRate)
     self.system:update(dt)
 end
 
 -- Enhanced burst emission with size scaling
-function PlayerEngineTrail:emitBurst(count, sizeMultiplier)
+function EngineTrail:emitBurst(count, sizeMultiplier)
     if not (self.system and count and count > 0) then return end
-    
+
     if sizeMultiplier and sizeMultiplier > 1 then
         self.system:setSizes(1.0 * sizeMultiplier, 0.7 * sizeMultiplier, 0.35 * sizeMultiplier, 0.1)
         self.system:emit(count)
@@ -268,12 +274,12 @@ function PlayerEngineTrail:emitBurst(count, sizeMultiplier)
     end
 end
 
-function PlayerEngineTrail:draw()
+function EngineTrail:draw()
     if not self.system then return end
-    
+
     love.graphics.push("all")
     love.graphics.setBlendMode(self.blendMode)
-    
+
     -- Enhanced color modulation with brightness boost
     local baseColor = self.drawColor
     local brightness = 0.9 + 0.1 * self.thrustStrength
@@ -285,8 +291,8 @@ function PlayerEngineTrail:draw()
     local a = baseColor[4] or 1
     love.graphics.setColor(r, g, b, a)
     love.graphics.draw(self.system)
-    
+
     love.graphics.pop()
 end
 
-return PlayerEngineTrail
+return EngineTrail

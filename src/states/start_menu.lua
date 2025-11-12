@@ -48,41 +48,89 @@ function start_menu:start_game()
 end
 
 local function build_aurora_shader()
-    return love.graphics.newShader([[ 
+    return love.graphics.newShader([[
         extern float time;
         extern float intensity;
 
+        float hash(vec2 p) {
+            return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+        }
+
+        float noise(vec2 p) {
+            vec2 i = floor(p);
+            vec2 f = fract(p);
+            float a = hash(i);
+            float b = hash(i + vec2(1.0, 0.0));
+            float c = hash(i + vec2(0.0, 1.0));
+            float d = hash(i + vec2(1.0, 1.0));
+            vec2 u = f * f * (3.0 - 2.0 * f);
+            return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+        }
+
+        float fbm(vec2 p) {
+            float v = 0.0;
+            float a = 0.5;
+            for (int i = 0; i < 5; i++) {
+                v += a * noise(p);
+                p = p * 2.02 + vec2(37.1, 9.2);
+                a *= 0.5;
+            }
+            return v;
+        }
+
+        vec3 palette(float t) {
+            vec3 a = vec3(0.15, 0.55, 0.35); // deep green
+            vec3 b = vec3(0.10, 0.40, 0.95); // blue
+            vec3 c = vec3(0.85, 0.35, 0.85); // purple
+            vec3 g = mix(a, b, smoothstep(0.0, 0.6, t));
+            return mix(g, c, smoothstep(0.6, 1.0, t));
+        }
+
         vec4 effect(vec4 color, Image tex, vec2 texture_coords, vec2 screen_coords) {
             vec4 sample = Texel(tex, texture_coords);
-            float x = texture_coords.x;
-            float y = texture_coords.y;
-            
+
             // Only render aurora inside the letters
-            if (sample.a < 0.1) {
-                return vec4(0.0, 0.0, 0.0, 0.0);
+            if (sample.a < 0.08) {
+                return vec4(0.0);
             }
-            
-            // Enhanced multi-layer noise for more dynamic aurora
-            float noise1 = sin(x * 12.0 + time * 1.2) * 0.5 + 0.5;
-            float noise2 = sin(y * 10.0 + time * 0.9) * 0.5 + 0.5;
-            float noise3 = sin((x + y) * 8.0 + time * 1.5) * 0.5 + 0.5;
-            float combinedNoise = (noise1 + noise2 + noise3) / 3.0;
-            
-            // Flowing aurora waves
-            float wave1 = sin(x * 6.0 + time * 0.8 + y * 4.0) * 0.5 + 0.5;
-            float wave2 = cos(y * 8.0 + time * 1.1 + x * 3.0) * 0.5 + 0.5;
-            float drift = wave1 * wave2 * combinedNoise;
-            
-            // Dynamic color palette with more vibrant aurora colors
-            vec3 color1 = vec3(0.2, 0.8, 0.4); // Green aurora
-            vec3 color2 = vec3(0.4, 0.6, 0.9); // Blue aurora
-            vec3 color3 = vec3(0.8, 0.4, 0.8); // Purple aurora
-            
-            float colorShift = sin(time * 0.5 + x * 2.0) * 0.5 + 0.5;
-            vec3 auroraColor = mix(color1, color2, colorShift);
-            auroraColor = mix(auroraColor, color3, smoothstep(0.6, 1.0, drift));
-            
-            return vec4(auroraColor * intensity, sample.a);
+
+            // Normalized screen UV (built-in love_ScreenSize)
+            vec2 uv = screen_coords / love_ScreenSize.xy;
+
+            // Stretch X for curtain-like flow
+            vec2 p = uv * vec2(1.8, 1.0);
+            float t = time;
+
+            // Domain-warped FBM for organic motion
+            float base = fbm(p * 2.5 + vec2(0.0, t * 0.05));
+            vec2 warp = vec2(
+                fbm(p * 3.0 + vec2(13.2, -7.1) + base * 2.0 + t * 0.08),
+                fbm(p * 3.0 + vec2(-5.7, 21.4) - base * 2.0 - t * 0.07)
+            );
+
+            // Flowing vertical bands
+            float bands = sin(p.y * 10.0 + warp.x * 6.0 + t * 1.25) * 0.5 + 0.5;
+            bands = smoothstep(0.25, 0.85, bands);
+
+            // Aurora energy field
+            float glow = fbm(p + warp * 1.7 + vec2(0.0, t * 0.10));
+            float energy = clamp(glow * 0.8 + bands * 0.7, 0.0, 1.0);
+
+            // Subtle twinkle
+            float twinkle = smoothstep(0.97, 1.0, noise(p * 24.0 + t * 0.4)) * 0.25;
+
+            // Color palette with slow hue shift
+            float hueShift = 0.5 + 0.5 * sin(t * 0.4 + uv.x * 3.0);
+            vec3 aurora = palette(clamp(energy * 0.9 + hueShift * 0.15, 0.0, 1.0));
+
+            // Emphasize bright cores and soften glyph edges
+            float edge = smoothstep(0.05, 0.95, sample.a);
+            float core = pow(energy, 1.2);
+
+            vec3 finalColor = aurora * (core * 1.3 + 0.15) + vec3(twinkle);
+            finalColor *= edge * intensity;
+
+            return vec4(finalColor, sample.a);
         }
     ]])
 end

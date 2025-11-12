@@ -5,97 +5,64 @@ local love = love
 
 local damage_numbers = {}
 
-local DEFAULT_COLOR = { 0.92, 0.36, 0.32, 1 }
-local DEFAULT_DURATION = 1.05
-local DEFAULT_RISE = 32
-local DEFAULT_BATCH_WINDOW = 0.18
-local REFRESH_BUFFER = 0.3
+local DEFAULTS = {
+    color = { 0.92, 0.36, 0.32, 1 },
+    duration = 1.05,
+    rise = 32,
+    batchWindow = 0.18,
+    refreshBuffer = 0.3,
+}
 
 local function get_time()
-    if love and love.timer and love.timer.getTime then
-        return love.timer.getTime()
-    end
-    return os.clock()
+    return (love and love.timer and love.timer.getTime) and love.timer.getTime() or os.clock()
 end
 
 local function ensure_state(host)
-    host.damageNumbers = host.damageNumbers or {}
-    local state = host.damageNumbers
-    state.buckets = state.buckets or {}
-    return state
-end
-
-local function format_amount(total)
-    return string.format("-%d", math.floor(total + 0.5))
+    host.damageNumbers = host.damageNumbers or { buckets = {} }
+    return host.damageNumbers
 end
 
 function damage_numbers.push(state, entity, amount, options)
-    if not (FloatingText and entity and entity.position and amount) then
-        return
-    end
-
+    if not (FloatingText and entity and entity.position and amount) then return end
+    
     options = options or {}
-
     local host = state or FloatingText.getFallback()
-    if not host then
-        return
-    end
-
+    if not host then return end
+    
     local position = options.position or entity.position
-    if not position then
-        return
-    end
-
-    local radius = options.radius
-        or (entity.drawable and entity.drawable.radius)
-        or entity.radius
-        or 24
-
-    local batchWindow = options.batchWindow or DEFAULT_BATCH_WINDOW
+    local radius = options.radius or (entity.drawable and entity.drawable.radius) or entity.radius or 24
+    local batchWindow = options.batchWindow or DEFAULTS.batchWindow
     local key = options.key or entity
-    local stateData = ensure_state(host)
-    local buckets = stateData.buckets
+    local buckets = ensure_state(host).buckets
     local now = get_time()
-
-    local bucket = key and buckets[key] or nil
-    if bucket then
-        local expired = (not bucket.entry)
-            or (not bucket.entry.__alive)
-            or (now - bucket.lastUpdate) > batchWindow
-        if expired then
-            buckets[key] = nil
-            bucket = nil
-        end
-    end
-
     local offsetY = options.position and 0 or radius
-
-    if bucket then
+    
+    local bucket = key and buckets[key]
+    if bucket and bucket.entry and bucket.entry.__alive and (now - bucket.lastUpdate) <= batchWindow then
         bucket.total = bucket.total + amount
         bucket.lastUpdate = now
         bucket.offsetY = offsetY
         bucket.offsetX = options.offsetX or bucket.offsetX or 0
-
+        
         local entry = bucket.entry
-        entry.text = format_amount(bucket.total)
-        entry.x = position.x + (bucket.offsetX or 0)
+        entry.text = string.format("-%d", math.floor(bucket.total + 0.5))
+        entry.x = position.x + bucket.offsetX
         entry.y = position.y - bucket.offsetY
-        entry.age = math.min(entry.age, math.max(0, entry.duration - REFRESH_BUFFER))
-        entry.duration = math.max(entry.duration or DEFAULT_DURATION, options.duration or DEFAULT_DURATION)
-
+        entry.age = math.min(entry.age, math.max(0, entry.duration - DEFAULTS.refreshBuffer))
+        entry.duration = math.max(entry.duration, options.duration or DEFAULTS.duration)
         return
     end
-
-    local entry = FloatingText.add(host, position, format_amount(amount), {
+    
+    local entry = FloatingText.add(host, position, string.format("-%d", math.floor(amount + 0.5)), {
         offsetY = offsetY,
-        color = options.color or DEFAULT_COLOR,
-        rise = options.rise or DEFAULT_RISE,
-        duration = options.duration or DEFAULT_DURATION,
+        color = options.color or DEFAULTS.color,
+        rise = options.rise or DEFAULTS.rise,
+        duration = options.duration or DEFAULTS.duration,
         scale = options.scale,
         shadow = options.shadow,
         vx = options.vx,
     })
-
+    
     if key and entry then
         buckets[key] = {
             entry = entry,

@@ -2,6 +2,9 @@ local window = require("src.ui.components.window")
 local UIStateManager = require("src.ui.state_manager")
 local theme = require("src.ui.theme")
 local dropdown = require("src.ui.components.dropdown")
+local AudioManager = require("src.audio.manager")
+local constants = require("src.constants.game")
+local runtime_settings = require("src.settings.runtime")
 
 ---@diagnostic disable-next-line: undefined-global
 local love = love
@@ -14,6 +17,22 @@ local RESOLUTIONS = {
     { width = 1024, height = 768, label = "1024 x 768" },
     { width = 800, height = 600, label = "800 x 600" },
 }
+
+local FPS_LIMIT_OPTIONS = {
+    { value = 0, label = "Unlimited" },
+    { value = 30 },
+    { value = 45 },
+    { value = 60 },
+    { value = 75 },
+    { value = 90 },
+    { value = 120 },
+    { value = 144 },
+    { value = 165 },
+    { value = 240 },
+    { value = 360 },
+}
+
+local DEFAULT_MAX_FPS = math.max(0, (constants.window and constants.window.max_fps) or 0)
 
 local SCROLLBAR_WIDTH = 10
 
@@ -48,6 +67,54 @@ local STATIC_HOTKEYS = {
 }
 
 local GLOBAL_FULLSCREEN_STATE = {}
+
+local function format_resolution_label(res)
+    if type(res) ~= "table" then
+        return tostring(res or "")
+    end
+
+    if res.label then
+        return res.label
+    end
+
+    if res.width and res.height then
+        return string.format("%d x %d", res.width, res.height)
+    end
+
+    return tostring(res)
+end
+
+local function format_fps_option(option)
+    if type(option) ~= "table" then
+        local value = tonumber(option)
+        if value and value > 0 then
+            return string.format("%d FPS", value)
+        end
+        return "Unlimited"
+    end
+
+    if option.label then
+        return option.label
+    end
+
+    local value = tonumber(option.value)
+    if value and value > 0 then
+        return string.format("%d FPS", value)
+    end
+
+    return "Unlimited"
+end
+
+local function resolve_fps_index(value)
+    local target = tonumber(value) or 0
+    for index, option in ipairs(FPS_LIMIT_OPTIONS) do
+        local optionValue = tonumber(option.value) or 0
+        if optionValue == target then
+            return index
+        end
+    end
+    return nil
+end
 
 local options_window = {}
 
@@ -108,14 +175,30 @@ local function ensure_settings(state, context)
             for k, v in pairs(flags) do
                 settings.flags[k] = v
             end
-            settings.fullscreen = flags.fullscreen or false
-            settings.vsync = flags.vsync or 0
+            settings.fullscreen = not not flags.fullscreen
+            if type(flags.vsync) == "boolean" then
+                settings.vsync = flags.vsync
+            else
+                settings.vsync = flags.vsync ~= 0
+            end
         else
             settings.windowWidth = settings.windowWidth or 1600
             settings.windowHeight = settings.windowHeight or 900
             settings.flags = settings.flags or { fullscreen = false, vsync = 0 }
-            settings.fullscreen = settings.flags.fullscreen
-            settings.vsync = settings.flags.vsync
+            settings.fullscreen = not not settings.flags.fullscreen
+            local vs = settings.flags.vsync
+            if type(vs) == "boolean" then
+                settings.vsync = vs
+            else
+                settings.vsync = vs ~= 0
+            end
+        end
+    else
+        settings.fullscreen = not not settings.fullscreen
+        if type(settings.vsync) == "boolean" then
+            -- keep value
+        else
+            settings.vsync = settings.vsync ~= 0
         end
     end
 
@@ -123,16 +206,54 @@ local function ensure_settings(state, context)
     settings.musicVolume = clamp01(settings.musicVolume)
     settings.sfxVolume = clamp01(settings.sfxVolume)
     settings.fullscreen = not not settings.fullscreen
-    settings.vsync = settings.vsync or 0
+    settings.vsync = not not settings.vsync
     settings.resolutionIndex = resolve_resolution_index(settings.windowWidth, settings.windowHeight) or settings.resolutionIndex or 2
+
+    settings.flags = settings.flags or {}
+    settings.flags.fullscreen = settings.fullscreen
+    settings.flags.vsync = settings.vsync
+
+    runtime_settings.set_vsync_enabled(settings.vsync)
+
+    settings.maxFps = math.max(0, tonumber(settings.maxFps or DEFAULT_MAX_FPS) or 0)
+    runtime_settings.set_max_fps(settings.maxFps)
 
     return settings
 end
 
 local function apply_volume(settings)
-    if love.audio and love.audio.setVolume then
+    if AudioManager and AudioManager.ensure_initialized then
+        AudioManager.ensure_initialized()
+        AudioManager.set_master_volume(settings.masterVolume or 1)
+        AudioManager.set_music_volume(settings.musicVolume or settings.masterVolume or 1)
+        AudioManager.set_sfx_volume(settings.sfxVolume or settings.masterVolume or 1)
+    elseif love.audio and love.audio.setVolume then
         love.audio.setVolume(settings.masterVolume or 1)
     end
+end
+
+local function close_resolution_dropdown(state)
+    if not state then
+        return
+    end
+
+    if state.resolutionDropdown then
+        state.resolutionDropdown.open = false
+    end
+
+    state.resolutionDropdownOpen = false
+end
+
+local function close_fps_dropdown(state)
+    if not state then
+        return
+    end
+
+    if state.fpsDropdown then
+        state.fpsDropdown.open = false
+    end
+
+    state.fpsDropdownOpen = false
 end
 
 local function apply_window_flags(settings, context)
@@ -155,13 +276,15 @@ local function apply_window_flags(settings, context)
     end
 
     flags.fullscreen = settings.fullscreen
-    flags.vsync = settings.vsync
+    flags.vsync = not not settings.vsync
 
     if love.window.setMode(width, height, flags) then
         settings.flags = flags
         settings.windowWidth = width
         settings.windowHeight = height
         settings.resolutionIndex = resolve_resolution_index(width, height) or settings.resolutionIndex
+
+        runtime_settings.set_vsync_enabled(flags.vsync)
 
         if context then
             if type(context.resize) == "function" then
@@ -173,8 +296,23 @@ local function apply_window_flags(settings, context)
     end
 end
 
+local function apply_frame_limit(settings)
+    settings.maxFps = math.max(0, tonumber(settings.maxFps) or 0)
+    runtime_settings.set_max_fps(settings.maxFps)
+end
+
 local function point_in_rect(x, y, rect)
     return x >= rect.x and x <= rect.x + rect.w and y >= rect.y and y <= rect.y + rect.h
+end
+
+local function reset_scroll_interaction(state)
+    if not state then
+        return
+    end
+
+    state.draggingThumb = false
+    state.draggingContent = false
+    state.activeSlider = nil
 end
 
 local function get_binding_text(binding)
@@ -248,6 +386,14 @@ function options_window.draw(context)
 
     local fonts = theme.get_fonts()
     local settings = ensure_settings(state, context)
+
+    state.resolutionDropdown = state.resolutionDropdown or dropdown.create_state()
+    local resolutionDropdownState = state.resolutionDropdown
+    state.resolutionDropdownOpen = resolutionDropdownState and resolutionDropdownState.open or false
+
+    state.fpsDropdown = state.fpsDropdown or dropdown.create_state()
+    local fpsDropdownState = state.fpsDropdown
+    state.fpsDropdownOpen = fpsDropdownState and fpsDropdownState.open or false
 
     if context and context.uiInput then
         context.uiInput.mouseCaptured = true
@@ -352,108 +498,45 @@ function options_window.draw(context)
             h = dropdownHeight,
         }
 
+        local dropdownState = resolutionDropdownState
         local currentIndex = resolve_resolution_index(settings.windowWidth, settings.windowHeight) or settings.resolutionIndex
         local selectedLabel = "Select resolution"
         if currentIndex and RESOLUTIONS[currentIndex] then
-            selectedLabel = RESOLUTIONS[currentIndex].label
+            selectedLabel = format_resolution_label(RESOLUTIONS[currentIndex])
         elseif settings.windowWidth and settings.windowHeight then
-            selectedLabel = string.format("%dx%d", settings.windowWidth, settings.windowHeight)
+            selectedLabel = string.format("%d x %d", settings.windowWidth, settings.windowHeight)
         end
+
+        local dropdownHeightTotal = dropdown.measure {
+            state = dropdownState,
+            items = RESOLUTIONS,
+            selected_index = currentIndex,
+            base_height = dropdownHeight,
+            item_height = dropdownHeight,
+        }
 
         if mode == "draw" then
-            state._resolutionDropdownRect = dropdownRect
-
-            local dropdownItems = params.dropdownItems
-            if dropdownItems then
-                for i = #dropdownItems, 1, -1 do
-                    dropdownItems[i] = nil
-                end
-            end
-
-            local bgColor = windowColors.input_background or { 0.06, 0.07, 0.1, 1 }
-            love.graphics.setColor(bgColor)
-            love.graphics.rectangle("fill", dropdownRect.x, dropdownRect.y, dropdownRect.w, dropdownRect.h, 4, 4)
-
-            love.graphics.setColor(windowColors.border or { 0.12, 0.18, 0.28, 0.9 })
-            love.graphics.setLineWidth(1)
-            love.graphics.rectangle("line", dropdownRect.x + 0.5, dropdownRect.y + 0.5, dropdownRect.w - 1, dropdownRect.h - 1, 4, 4)
-
-            love.graphics.setFont(fonts.body)
-            love.graphics.setColor(windowColors.text or textColor)
-            love.graphics.printf(selectedLabel, dropdownRect.x + 10, dropdownRect.y + (dropdownRect.h - fonts.body:getHeight()) * 0.5, dropdownRect.w - 40, "left")
-
-            local arrowX = dropdownRect.x + dropdownRect.w - 18
-            local arrowY = dropdownRect.y + dropdownRect.h * 0.5
-            love.graphics.setColor(windowColors.title_text or windowColors.text or textColor)
-            if state.resolutionDropdownOpen then
-                love.graphics.polygon("fill", arrowX - 6, arrowY - 2, arrowX + 6, arrowY - 2, arrowX, arrowY + 4)
-            else
-                love.graphics.polygon("fill", arrowX - 6, arrowY + 2, arrowX + 6, arrowY + 2, arrowX, arrowY - 4)
-            end
+            dropdown.render {
+                rect = dropdownRect,
+                state = dropdownState,
+                items = RESOLUTIONS,
+                selected_index = currentIndex,
+                selected_label = selectedLabel,
+                base_height = dropdownHeight,
+                item_height = dropdownHeight,
+                fonts = fonts,
+                placeholder = "Select resolution",
+                label_formatter = format_resolution_label,
+                input = {
+                    x = mouseX,
+                    y = mouseY,
+                },
+            }
         end
 
-        cursorY = cursorY + dropdownHeight
+        cursorY = cursorY + dropdownHeightTotal
 
-        if (mode == "draw" or mode == "measure") and state.resolutionDropdownOpen then
-            local dropdownItems = params.dropdownItems
-            local itemHeight = dropdownHeight
-            for index, res in ipairs(RESOLUTIONS) do
-                local itemRect = {
-                    x = viewportX,
-                    y = viewportY + cursorY + (index - 1) * itemHeight,
-                    w = columnWidth,
-                    h = itemHeight,
-                }
-
-                if mode == "draw" then
-                    if dropdownItems then
-                        dropdownItems[#dropdownItems + 1] = {
-                            x = itemRect.x,
-                            y = itemRect.y,
-                            w = itemRect.w,
-                            h = itemRect.h,
-                            res = res,
-                            index = index,
-                        }
-                    end
-
-                    local isSelected = currentIndex == index
-                    local hovered = point_in_rect(mouseX, mouseY, itemRect)
-                    local fillColor
-                    if hovered then
-                        fillColor = windowColors.button_hover or { 0.18, 0.24, 0.32, 1 }
-                    elseif isSelected then
-                        fillColor = windowColors.button_active or windowColors.button_hover or { 0.18, 0.24, 0.32, 1 }
-                    else
-                        fillColor = windowColors.button or { 0.12, 0.16, 0.22, 1 }
-                    end
-
-                    love.graphics.setColor(fillColor)
-                    love.graphics.rectangle("fill", itemRect.x, itemRect.y, itemRect.w, itemRect.h, 4, 4)
-
-                    love.graphics.setColor(windowColors.border or { 0.12, 0.18, 0.28, 0.9 })
-                    love.graphics.setLineWidth(1)
-                    love.graphics.rectangle("line", itemRect.x + 0.5, itemRect.y + 0.5, itemRect.w - 1, itemRect.h - 1, 4, 4)
-
-                    love.graphics.setFont(fonts.small)
-                    love.graphics.setColor(windowColors.title_text or textColor)
-                    love.graphics.printf(res.label, itemRect.x + 10, itemRect.y + (itemRect.h - fonts.small:getHeight()) * 0.5, itemRect.w - 20, "left")
-                end
-            end
-
-            cursorY = cursorY + #RESOLUTIONS * itemHeight
-        else
-            if mode == "draw" then
-                local dropdownItems = params.dropdownItems
-                if dropdownItems then
-                    for i = #dropdownItems, 1, -1 do
-                        dropdownItems[i] = nil
-                    end
-                end
-            end
-        end
-
-        cursorY = cursorY + 10
+        cursorY = cursorY + 24
 
         local toggleWidth = 120
         local toggleHeight = 32
@@ -472,12 +555,65 @@ function options_window.draw(context)
 
         if mode == "draw" then
             draw_toggle(fonts, "Fullscreen", fullscreenRect, settings.fullscreen)
-            draw_toggle(fonts, "VSync", vsyncRect, (settings.vsync or 0) ~= 0)
-            params.refs.fullscreenRect = fullscreenRect
-            params.refs.vsyncRect = vsyncRect
+            draw_toggle(fonts, "VSync", vsyncRect, not not settings.vsync)
+            params.refs._fullscreenRect = fullscreenRect
+            params.refs._vsyncRect = vsyncRect
         end
 
-        cursorY = cursorY + toggleHeight + 36
+        cursorY = cursorY + toggleHeight + 24
+
+        if mode == "draw" then
+            love.graphics.setFont(fonts.body)
+            love.graphics.print("Frame Limit", viewportX, viewportY + cursorY)
+        end
+        cursorY = cursorY + fonts.body:getHeight() + 12
+
+        local fpsDropdownRect = {
+            x = viewportX,
+            y = viewportY + cursorY,
+            w = columnWidth,
+            h = dropdownHeight,
+        }
+
+        local fpsIndex = resolve_fps_index(settings.maxFps) or 1
+        local fpsLabel
+        if FPS_LIMIT_OPTIONS[fpsIndex] then
+            fpsLabel = format_fps_option(FPS_LIMIT_OPTIONS[fpsIndex])
+        else
+            fpsLabel = format_fps_option(settings.maxFps)
+        end
+
+        local fpsDropdownHeightTotal = dropdown.measure {
+            state = fpsDropdownState,
+            items = FPS_LIMIT_OPTIONS,
+            selected_index = fpsIndex,
+            base_height = dropdownHeight,
+            item_height = dropdownHeight,
+        }
+
+        if mode == "draw" then
+            dropdown.render {
+                rect = fpsDropdownRect,
+                state = fpsDropdownState,
+                items = FPS_LIMIT_OPTIONS,
+                selected_index = fpsIndex,
+                selected_label = fpsLabel,
+                base_height = dropdownHeight,
+                item_height = dropdownHeight,
+                fonts = fonts,
+                placeholder = "Unlimited",
+                label_formatter = format_fps_option,
+                input = {
+                    x = mouseX,
+                    y = mouseY,
+                },
+            }
+            params.refs._fpsDropdownRect = fpsDropdownRect
+        end
+
+        cursorY = cursorY + fpsDropdownHeightTotal
+
+        cursorY = cursorY + 36
 
         heading("Hotkey Configuration")
 
@@ -582,7 +718,7 @@ function options_window.draw(context)
             love.graphics.setColor(windowColors.title_text or textColor)
             love.graphics.print("Restore Defaults", restoreRect.x + 18, restoreRect.y + (restoreRect.h - fonts.body:getHeight()) * 0.5)
 
-            params.refs.restoreRect = restoreRect
+            params.refs._restoreRect = restoreRect
         end
 
         cursorY = cursorY + restoreRect.h + 18
@@ -631,16 +767,11 @@ function options_window.draw(context)
     state._fullscreenRect = nil
     state._vsyncRect = nil
     state._restoreRect = nil
+    state._fpsDropdownRect = nil
     state._viewportRect = viewportRect
     state._maxScroll = maxScroll
     state._viewportHeight = viewportHeight
     state._contentHeight = contentHeight
-    state._resolutionDropdownRect = nil
-    state._resolutionDropdownItems = state._resolutionDropdownItems or {}
-    for i = #state._resolutionDropdownItems, 1, -1 do
-        state._resolutionDropdownItems[i] = nil
-    end
-
     love.graphics.setScissor(viewportRect.x, viewportRect.y, viewportRect.w, viewportRect.h)
     love.graphics.setColor(textColor)
     love.graphics.setFont(fonts.body)
@@ -749,71 +880,124 @@ function options_window.draw(context)
         end
 
         if justPressed then
-            local dropdownHandled = false
-            local dropdownRect = state._resolutionDropdownRect
-            local dropdownItems = state._resolutionDropdownItems
+            local handled = false
 
-            if dropdownRect and point_in_rect(mouseX, mouseY, dropdownRect) then
-                state.resolutionDropdownOpen = not state.resolutionDropdownOpen
-                dropdownHandled = true
-            elseif state.resolutionDropdownOpen then
-                local selectedItem
-                if dropdownItems then
-                    for _, item in ipairs(dropdownItems) do
-                        if point_in_rect(mouseX, mouseY, item) then
-                            selectedItem = item
-                            break
+            if state.resolutionDropdown then
+                local dropdownResult = dropdown.handle_mouse(state.resolutionDropdown, {
+                    x = mouseX,
+                    y = mouseY,
+                    just_pressed = justPressed,
+                })
+
+                if dropdownResult then
+                    handled = handled or dropdownResult.consumed
+
+                    if dropdownResult.open ~= nil then
+                        state.resolutionDropdownOpen = not not dropdownResult.open
+                        if state.resolutionDropdownOpen then
+                            close_fps_dropdown(state)
                         end
+                    else
+                        state.resolutionDropdownOpen = state.resolutionDropdown and state.resolutionDropdown.open or false
+                    end
+
+                    if dropdownResult.selected_index then
+                        local selected = RESOLUTIONS[dropdownResult.selected_index]
+                        if selected then
+                            if settings.fullscreen then
+                                settings.fullscreen = false
+                            end
+                            settings.windowWidth = selected.width
+                            settings.windowHeight = selected.height
+                            settings.resolutionIndex = dropdownResult.selected_index
+                            close_resolution_dropdown(state)
+                            close_fps_dropdown(state)
+                            apply_window_flags(settings, context)
+                            apply_frame_limit(settings)
+                        end
+                        handled = true
+                    elseif dropdownResult.toggled then
+                        handled = true
                     end
                 end
+            end
 
-                if selectedItem then
-                    if settings.fullscreen then
-                        settings.fullscreen = false
+            if not handled and state.fpsDropdown then
+                local fpsResult = dropdown.handle_mouse(state.fpsDropdown, {
+                    x = mouseX,
+                    y = mouseY,
+                    just_pressed = justPressed,
+                })
+
+                if fpsResult then
+                    handled = handled or fpsResult.consumed
+
+                    if fpsResult.open ~= nil then
+                        state.fpsDropdownOpen = not not fpsResult.open
+                        if state.fpsDropdownOpen then
+                            close_resolution_dropdown(state)
+                        end
+                    else
+                        state.fpsDropdownOpen = state.fpsDropdown and state.fpsDropdown.open or false
                     end
-                    settings.windowWidth = selectedItem.res.width
-                    settings.windowHeight = selectedItem.res.height
-                    settings.resolutionIndex = selectedItem.index
-                    apply_window_flags(settings, context)
+
+                    if fpsResult.selected_index then
+                        local option = FPS_LIMIT_OPTIONS[fpsResult.selected_index]
+                        if option then
+                            settings.maxFps = math.max(0, tonumber(option.value) or 0)
+                            apply_frame_limit(settings)
+                        end
+                        close_fps_dropdown(state)
+                        handled = true
+                    elseif fpsResult.toggled then
+                        handled = true
+                    end
                 end
-
-                state.resolutionDropdownOpen = false
-                dropdownHandled = true
             end
 
-            if not dropdownHandled and state.resolutionDropdownOpen then
-                state.resolutionDropdownOpen = false
-            end
-
-            if not dropdownHandled then
+            if not handled then
                 for _, rect in ipairs(state._bindingButtons) do
                     if point_in_rect(mouseX, mouseY, rect) then
                         state.awaitingBindAction = rect.action.id
                         state.awaitingBindActionLabel = rect.action.label
-                        dropdownHandled = true
+                        handled = true
                         break
                     end
                 end
             end
 
-            if dropdownHandled then
-                -- Already handled this click (dropdown or bindings), skip remaining checks
-            else
+            if not handled then
                 if state._fullscreenRect and point_in_rect(mouseX, mouseY, state._fullscreenRect) then
                     settings.fullscreen = not settings.fullscreen
+                    close_resolution_dropdown(state)
+                    close_fps_dropdown(state)
                     apply_window_flags(settings, context)
+                    apply_frame_limit(settings)
+                    reset_scroll_interaction(state)
+                    handled = true
                 elseif state._vsyncRect and point_in_rect(mouseX, mouseY, state._vsyncRect) then
-                    settings.vsync = (settings.vsync or 0) ~= 0 and 0 or 1
+                    settings.vsync = not settings.vsync
+                    close_resolution_dropdown(state)
+                    close_fps_dropdown(state)
                     apply_window_flags(settings, context)
+                    apply_frame_limit(settings)
+                    reset_scroll_interaction(state)
+                    handled = true
                 elseif state._restoreRect and point_in_rect(mouseX, mouseY, state._restoreRect) then
                     settings.masterVolume = 1
                     settings.musicVolume = 1
                     settings.sfxVolume = 1
                     settings.fullscreen = false
-                    settings.vsync = 0
+                    settings.vsync = false
+                    settings.maxFps = DEFAULT_MAX_FPS
                     settings.keybindings = copy_bindings(DEFAULT_KEYBINDINGS)
                     apply_volume(settings)
+                    close_resolution_dropdown(state)
+                    close_fps_dropdown(state)
                     apply_window_flags(settings, context)
+                    apply_frame_limit(settings)
+                    reset_scroll_interaction(state)
+                    handled = true
                 end
             end
         end
@@ -937,7 +1121,10 @@ function options_window.toggle_fullscreen(context)
         settings.windowHeight = settings._windowedHeight
     end
 
+    close_resolution_dropdown(state)
+    close_fps_dropdown(state)
     apply_window_flags(settings, context)
+    apply_frame_limit(settings)
 
     return settings.fullscreen
 end

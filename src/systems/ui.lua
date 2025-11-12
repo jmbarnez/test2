@@ -9,6 +9,7 @@ local pause_window = require("src.ui.windows.pause")
 local options_window = require("src.ui.windows.options")
 local map_window = require("src.ui.windows.map")
 local skills_window = require("src.ui.windows.skills")
+local debug_window = require("src.ui.windows.debug")
 ---@diagnostic disable-next-line: undefined-global
 local love = love
 
@@ -28,6 +29,7 @@ return function(context)
             options_window.draw(context)
             map_window.draw(context)
             skills_window.draw(context)
+            debug_window.draw(context)
             notifications.draw(context)
 
             if uiInput then

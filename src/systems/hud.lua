@@ -1,12 +1,17 @@
 local tiny = require("libs.tiny")
 local Hud = require("src.hud")
 local PlayerManager = require("src.player.manager")
+local UIStateManager = require("src.ui.state_manager")
 ---@diagnostic disable-next-line: undefined-global
 local love = love
 
 return function(context)
     return tiny.system {
         draw = function()
+            if UIStateManager.isAnyUIVisible(context) then
+                return
+            end
+
             local player = PlayerManager.resolveLocalPlayer(context)
 
             love.graphics.push("all")

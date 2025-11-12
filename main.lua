@@ -4,13 +4,26 @@ local constants = require("src.constants.game")
 local AudioManager = require("src.audio.manager")
 local gameplay = require("src.states.gameplay")
 local start_menu = require("src.states.start_menu")
+local runtime_settings = require("src.settings.runtime")
 
-local TARGET_FPS = constants.window.max_fps or 60
-local TARGET_FRAME_TIME = 1 / TARGET_FPS
+local TARGET_FPS = 0
+local TARGET_FRAME_TIME = 0
+local USE_FRAME_LIMIT = false
 
--- Determine if we should manually limit FPS (disable if vsync is enabled)
-local VSYNC_ENABLED = (constants.window and constants.window.vsync or 0) ~= 0
-local USE_FRAME_LIMIT = not VSYNC_ENABLED
+local function refresh_frame_limit_state()
+    local maxFps = runtime_settings.get_max_fps() or 0
+    if maxFps > 0 then
+        TARGET_FPS = maxFps
+        TARGET_FRAME_TIME = 1 / maxFps
+    else
+        TARGET_FPS = 0
+        TARGET_FRAME_TIME = 0
+    end
+
+    USE_FRAME_LIMIT = runtime_settings.should_limit_frame_rate()
+end
+
+refresh_frame_limit_state()
 
 function love.run()
     if love.load then love.load(love.arg.parseGameArguments(arg), arg) end
@@ -54,6 +67,7 @@ function love.run()
         end
 
         -- Manual frame limiting only when vsync is disabled
+        refresh_frame_limit_state()
         if USE_FRAME_LIMIT and love.timer and TARGET_FPS > 0 then
             local elapsed = love.timer.getTime() - frameStart
             local remaining = TARGET_FRAME_TIME - elapsed
@@ -74,9 +88,11 @@ function love.load()
             fullscreen = window.fullscreen,
             msaa = window.msaa,
         })
-        -- Update limiter toggle in case config changed at runtime
-        VSYNC_ENABLED = (window.vsync or 0) ~= 0
-        USE_FRAME_LIMIT = not VSYNC_ENABLED
+        runtime_settings.set_vsync_enabled((window.vsync or 0) ~= 0)
+        if window.max_fps then
+            runtime_settings.set_max_fps(window.max_fps)
+        end
+        refresh_frame_limit_state()
     end
 
     if love.graphics and love.graphics.setDefaultFilter then

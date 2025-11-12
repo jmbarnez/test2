@@ -14,6 +14,21 @@ local function createCargoUIState()
     }
 end
 
+local function createDebugUIState()
+    return {
+        visible = false,
+        dragging = false,
+        width = nil,
+        height = nil,
+        x = nil,
+        y = nil,
+        _was_mouse_down = false,
+        _just_opened = false,
+        scrollOffset = 0,
+        _contentRect = nil,
+    }
+end
+
 local function createSkillsUIState()
     return {
         visible = false,
@@ -64,6 +79,7 @@ local function createOptionsUIState()
         _was_mouse_down = false,
         syncPending = false,
         resolutionDropdown = dropdown.create_state and dropdown.create_state() or nil,
+        fpsDropdown = dropdown.create_state and dropdown.create_state() or nil,
     }
 end
 
@@ -93,6 +109,9 @@ local function reset_window_geometry(windowState)
     windowState.dragging = false
     if windowState.resolutionDropdown and windowState.resolutionDropdown.open then
         windowState.resolutionDropdown.open = false
+    end
+    if windowState.fpsDropdown and windowState.fpsDropdown.open then
+        windowState.fpsDropdown.open = false
     end
 end
 
@@ -144,6 +163,7 @@ function UIStateManager.initialize(state)
     state.optionsUI = state.optionsUI or createOptionsUIState()
     state.mapUI = state.mapUI or createMapUIState()
     state.skillsUI = state.skillsUI or createSkillsUIState()
+    state.debugUI = state.debugUI or createDebugUIState()
     
     -- Initialize input state
     state.uiInput = state.uiInput or {
@@ -170,6 +190,7 @@ function UIStateManager.cleanup(state)
     state.optionsUI = nil
     state.mapUI = nil
     state.skillsUI = nil
+    state.debugUI = nil
     state.uiInput = nil
     state.respawnRequested = nil
     state.isPaused = nil
@@ -424,6 +445,52 @@ function UIStateManager.isAnyUIVisible(state)
     return any_modal_visible(state)
 end
 
+local function setDebugVisibility(state, visible)
+    if not (state and state.debugUI) then
+        return
+    end
+
+    local debugUI = state.debugUI
+
+    if debugUI.visible == visible then
+        return
+    end
+
+    debugUI.visible = visible
+    debugUI.dragging = false
+
+    if state.uiInput then
+        if visible then
+            state.uiInput.mouseCaptured = true
+            state.uiInput.keyboardCaptured = true
+        else
+            local keepCaptured = any_modal_visible(state)
+            state.uiInput.mouseCaptured = not not keepCaptured
+            state.uiInput.keyboardCaptured = not not keepCaptured
+        end
+    end
+end
+
+function UIStateManager.toggleDebugUI(state)
+    if not (state and state.debugUI) then
+        return
+    end
+
+    setDebugVisibility(state, not state.debugUI.visible)
+end
+
+function UIStateManager.showDebugUI(state)
+    setDebugVisibility(state, true)
+end
+
+function UIStateManager.hideDebugUI(state)
+    setDebugVisibility(state, false)
+end
+
+function UIStateManager.isDebugUIVisible(state)
+    return state and state.debugUI and state.debugUI.visible
+end
+
 function UIStateManager.isDeathUIVisible(state)
     return state and state.deathUI and state.deathUI.visible
 end
@@ -460,11 +527,16 @@ function UIStateManager.onResize(state, width, height)
     reset_window_geometry(state.optionsUI)
     reset_window_geometry(state.skillsUI)
     reset_window_geometry(state.deathUI)
+    reset_window_geometry(state.debugUI)
 
     if type(state.mapUI) == "table" then
         reset_window_geometry(state.mapUI)
         state.mapUI.mapDragging = false
         state.mapUI._just_opened = true
+    end
+
+    if type(state.debugUI) == "table" then
+        state.debugUI._contentRect = nil
     end
 
     if type(state.uiInput) == "table" then

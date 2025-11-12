@@ -1,43 +1,42 @@
 local tiny = require("libs.tiny")
 local love = love
+local lg, lp = love.graphics, love.physics
 local damage_util = require("src.util.damage")
 local ProjectileFactory = require("src.entities.projectile_factory")
 
+-- Lua compat helpers
+local unpack = table.unpack or unpack
+local atan2 = math.atan2 or function(y, x) return math.atan(y, x) end
+
 local SQRT = math.sqrt
+local EPS = 1e-8
 
 local function normalize(x, y)
-    local lenSq = (x or 0) * (x or 0) + (y or 0) * (y or 0)
-    if lenSq <= 1e-8 then
+    x, y = x or 0, y or 0
+    local lenSq = x * x + y * y
+    if lenSq <= EPS then
         return 0, -1
     end
-    local len = SQRT(lenSq)
-    return (x or 0) / len, (y or 0) / len
+    local inv = 1 / SQRT(lenSq)
+    return x * inv, y * inv
+end
+
+local function randf(min, max)
+    -- math.random() -> [0,1); scale to [min,max]
+    return min + (max - min) * math.random()
 end
 
 local function queue_spawn(system, owner, x, y, dirX, dirY, weaponConfig)
-    if not system then
-        return
-    end
-
+    if not system then return end
     local pending = system.pendingSpawns
-    if not pending then
-        pending = {}
-        system.pendingSpawns = pending
-    end
-
     pending[#pending + 1] = {
-        owner = owner,
-        x = x,
-        y = y,
-        dirX = dirX,
-        dirY = dirY,
-        weapon = weaponConfig,
+        owner = owner, x = x, y = y, dirX = dirX, dirY = dirY, weapon = weaponConfig,
     }
 end
 
 local function create_projectile_shape(drawable, size)
     local shape = drawable.shape or drawable.form or "orb"
-    
+
     if shape == "beam" or shape == "rectangle" then
         local width = drawable.width or size
         local length = drawable.length or drawable.beamLength
@@ -45,41 +44,39 @@ local function create_projectile_shape(drawable, size)
             local lengthScale = drawable.lengthScale or 7
             length = width * lengthScale
         end
-        return love.physics.newRectangleShape(length, width)
+        -- Box2D uses width, height. Treat "length" as longitudinal axis, "width" as thickness.
+        return lp.newRectangleShape(length, width)
     elseif shape == "polygon" and drawable.vertices then
-        return love.physics.newPolygonShape(unpack(drawable.vertices))
+        return lp.newPolygonShape(unpack(drawable.vertices))
     else
-        -- Default to circle for orb and other shapes
         local radius = (drawable.radius or size) * 0.5
-        return love.physics.newCircleShape(radius)
+        return lp.newCircleShape(radius)
     end
 end
 
-local function create_impact_particles(x, y, projectile, target)
+local function create_impact_particles(x, y, projectile)
     local particles = {}
     local numParticles = math.random(8, 16)
-    local baseColor = projectile.drawable and projectile.drawable.color or {0.2, 0.8, 1.0}
-    
-    -- Desaturate the base color for more muted particles
+    local baseColor = (projectile.drawable and projectile.drawable.color) or { 0.2, 0.8, 1.0 }
+
     local desaturatedColor = {
         baseColor[1] * 0.7,
         baseColor[2] * 0.7,
         baseColor[3] * 0.7
     }
-    
-    -- Calculate impact direction based on projectile velocity
+
+    -- Derive impact direction from velocity
     local impactAngle = 0
     if projectile.velocity then
-        impactAngle = math.atan2(projectile.velocity.y, projectile.velocity.x)
+        impactAngle = atan2(projectile.velocity.y or 0, projectile.velocity.x or 0)
     end
-    
+
     for i = 1, numParticles do
-        -- Create cone of particles spreading from impact direction
         local spreadAngle = impactAngle + math.pi + (math.random() - 0.5) * math.pi * 0.8
         local speed = math.random(80, 200)
-        local lifetime = math.random(0.22, 0.45)
+        local lifetime = randf(0.22, 0.45)
         local size = 0.9 + math.random() * 1.4
-        local tintShift = 0.2 + math.random() * 0.3
+        local tintShift = randf(0.2, 0.5)
 
         particles[i] = {
             x = x + math.random(-2, 2),
@@ -99,7 +96,7 @@ local function create_impact_particles(x, y, projectile, target)
             }
         }
     end
-    
+
     return particles
 end
 
@@ -117,29 +114,23 @@ local function trigger_delayed_spawn(system, projectile, reason, physicsWorld)
     elseif reason == "expire" then
         allowed = delayed.triggerOnExpire ~= false
     end
-
-    if not allowed then
-        return false
-    end
+    if not allowed then return false end
 
     delayed.triggered = true
 
     local weaponConfig = delayed.weaponConfig
-    if not weaponConfig then
-        return false
-    end
+    if not weaponConfig then return false end
 
     local owner = delayed.owner or (projectile.projectile and projectile.projectile.owner) or projectile
     local world = system and system.world
-    if not (world and physicsWorld) then
-        return false
-    end
+    if not (world and physicsWorld) then return false end
 
-    local spawnX = projectile.position.x or 0
-    local spawnY = projectile.position.y or 0
+    local pos = projectile.position or {}
+    local spawnX = pos.x or 0
+    local spawnY = pos.y or 0
 
-    local baseDirX = delayed.baseDirection and delayed.baseDirection.x or 0
-    local baseDirY = delayed.baseDirection and delayed.baseDirection.y or 0
+    local baseDirX = (delayed.baseDirection and delayed.baseDirection.x) or 0
+    local baseDirY = (delayed.baseDirection and delayed.baseDirection.y) or 0
 
     if delayed.useCurrentVelocity then
         if projectile.body and not projectile.body:isDestroyed() then
@@ -154,15 +145,14 @@ local function trigger_delayed_spawn(system, projectile, reason, physicsWorld)
     if baseDirX == 0 and baseDirY == 0 then
         if projectile.rotation then
             local facing = projectile.rotation - math.pi * 0.5
-            baseDirX = math.cos(facing)
-            baseDirY = math.sin(facing)
+            baseDirX, baseDirY = math.cos(facing), math.sin(facing)
         else
             baseDirY = -1
         end
     end
 
     local dirX, dirY = normalize(baseDirX, baseDirY)
-    local baseAngle = math.atan2(dirY, dirX)
+    local baseAngle = atan2(dirY, dirX)
     if delayed.angleOffset then
         baseAngle = baseAngle + delayed.angleOffset
     end
@@ -176,18 +166,13 @@ local function trigger_delayed_spawn(system, projectile, reason, physicsWorld)
     end
 
     if count == 1 then
-        local dirAngle = baseAngle
-        local burstDirX = math.cos(dirAngle)
-        local burstDirY = math.sin(dirAngle)
-        queue_spawn(system, owner, spawnX, spawnY, burstDirX, burstDirY, weaponConfig)
+        queue_spawn(system, owner, spawnX, spawnY, math.cos(baseAngle), math.sin(baseAngle), weaponConfig)
     else
         local step = spread / (count - 1)
         local startAngle = baseAngle - spread * 0.5
         for i = 0, count - 1 do
             local dirAngle = startAngle + step * i
-            local burstDirX = math.cos(dirAngle)
-            local burstDirY = math.sin(dirAngle)
-            queue_spawn(system, owner, spawnX, spawnY, burstDirX, burstDirY, weaponConfig)
+            queue_spawn(system, owner, spawnX, spawnY, math.cos(dirAngle), math.sin(dirAngle), weaponConfig)
         end
     end
 
@@ -199,103 +184,96 @@ return function(context)
     context = context or {}
     local physicsWorld = context.physicsWorld
     local damageEntity = context.damageEntity
-    
+    local registerPhysicsCallback = context.registerPhysicsCallback
+
     return tiny.system {
         filter = tiny.requireAll("projectile", "position"),
-        
+
         init = function(self)
             self.processedCollisions = {}
             self.impactParticles = {}
             self.pendingSpawns = {}
-            
-            -- Setup collision callbacks for projectiles
-            if physicsWorld and not self.collisionSetup then
-                physicsWorld:setCallbacks(
-                    function(fixture1, fixture2, contact)
-                        self:beginContact(fixture1, fixture2, contact)
-                    end,
-                    nil, nil, nil
-                )
+            self._destroyQueue = {}
+
+            -- Centralized collision callback for projectiles
+            if not self.collisionSetup and type(registerPhysicsCallback) == "function" then
+                local function handler(fixture1, fixture2, contact)
+                    self:beginContact(fixture1, fixture2, contact)
+                end
+                self.unregisterPhysicsCallback = registerPhysicsCallback(context, "beginContact", handler)
                 self.collisionSetup = true
             end
         end,
-        
+
+        detachPhysicsCallbacks = function(self)
+            if self.unregisterPhysicsCallback then
+                self.unregisterPhysicsCallback()
+                self.unregisterPhysicsCallback = nil
+            end
+            self.collisionSetup = nil
+        end,
+
         beginContact = function(self, fixture1, fixture2, contact)
             local data1 = fixture1:getUserData()
             local data2 = fixture2:getUserData()
-            
-            if not (data1 and data2) then
-                return
-            end
-            
-            local projectile, target
-            local projectileData, targetData
-            
+            if not (data1 and data2) then return end
+
+            local projectile, projectileData, target, targetData
             if data1.type == "projectile" then
-                projectile = data1.entity
-                projectileData = data1
-                target = data2.entity
-                targetData = data2
+                projectile, projectileData, target, targetData = data1.entity, data1, data2.entity, data2
             elseif data2.type == "projectile" then
-                projectile = data2.entity
-                projectileData = data2
-                target = data1.entity
-                targetData = data1
-            end
-            
-            if not (projectile and target) then
+                projectile, projectileData, target, targetData = data2.entity, data2, data1.entity, data1
+            else
                 return
             end
-            
-            -- Check if this collision was already processed
+            if not (projectile and target) then return end
+
+            -- Avoid double-processing this pair this frame
             local key = tostring(projectile) .. ":" .. tostring(target)
-            if self.processedCollisions[key] then
-                return
-            end
+            if self.processedCollisions[key] then return end
             self.processedCollisions[key] = true
-            
-            -- Don't hit the shooter
-            if projectile.projectile.owner == target then
-                return
+
+            -- Don't hit the shooter or same playerId
+            if projectile.projectile and projectile.projectile.owner == target then return end
+            local ownerPlayerId = projectile.projectile and projectile.projectile.ownerPlayerId
+            if ownerPlayerId and target.playerId == ownerPlayerId then return end
+
+            -- Create impact particles
+            local pos = projectile.position or {}
+            local x, y = pos.x or 0, pos.y or 0
+            local particles = create_impact_particles(x, y, projectile)
+            for i = 1, #particles do
+                self.impactParticles[#self.impactParticles + 1] = particles[i]
             end
 
-            local ownerPlayerId = projectile.projectile.ownerPlayerId
-            if ownerPlayerId and target.playerId == ownerPlayerId then
-                return
-            end
-            
-            -- Create impact particles at collision point
-            local x, y = projectile.position.x, projectile.position.y
-            local particles = create_impact_particles(x, y, projectile, target)
-            for i = 1, #particles do
-                table.insert(self.impactParticles, particles[i])
-            end
-            
-            if projectile.body and not projectile.body:isDestroyed() then
-                projectile.body:destroy()
+            -- Deactivate and queue physics body/fixture destruction outside the callback
+            local body = projectile.body
+            if body and not body:isDestroyed() then
+                self._destroyQueue[#self._destroyQueue + 1] = body
                 projectile.body = nil
+            end
+            local fixture = projectile.fixture
+            if fixture and not fixture:isDestroyed() then
+                self._destroyQueue[#self._destroyQueue + 1] = fixture
+                projectile.fixture = nil
             end
             projectile.pendingDestroy = true
 
             trigger_delayed_spawn(self, projectile, "impact", physicsWorld)
 
-            -- Don't hit boundaries
-            if targetData.type == "boundary" then
-                return
-            end
-            
-            -- Faction check
+            -- Don't damage boundaries
+            if targetData.type == "boundary" then return end
+
+            -- Faction checks
             local shouldDamage = true
-            if target then
-                if projectile.faction and target.faction and projectile.faction == target.faction then
-                    shouldDamage = false
-                elseif projectile.playerProjectile and target.player then
-                    shouldDamage = false
-                elseif projectile.enemyProjectile and target.enemy then
-                    shouldDamage = false
-                end
+            if projectile.faction and target.faction and projectile.faction == target.faction then
+                shouldDamage = false
+            elseif projectile.playerProjectile and target.player then
+                shouldDamage = false
+            elseif projectile.enemyProjectile and target.enemy then
+                shouldDamage = false
             end
-            
+
             -- Apply damage
             if shouldDamage and damageEntity and target then
                 local damageComponent = projectile.projectile or {}
@@ -306,92 +284,85 @@ return function(context)
                     local multiplier = damage_util.resolve_multiplier(damageType, armorType)
                     damage = damage * multiplier
                     if damage > 0 then
-                        local owner = damageComponent.owner or projectile.projectile.owner
-                        damageEntity(target, damage, owner or projectile, {
-                            x = x,
-                            y = y,
-                        })
+                        local owner = damageComponent.owner or (damageComponent and damageComponent.owner)
+                        damageEntity(target, damage, owner or projectile, { x = x, y = y })
                     end
                 end
             end
-            
-            -- Destroy projectile on hit
-            projectile.pendingDestroy = true
         end,
-        
-        onAdd = function(self, entity)
-            if not entity.body or not entity.drawable then
-                return
-            end
 
-            -- Respect fixtures created during instantiation (weapon_fire)
+        onAdd = function(self, entity)
+            if not entity.body or not entity.drawable then return end
+
+            -- Respect pre-made fixture (e.g., weapon_fire)
             if entity.fixture and not entity.fixture:isDestroyed() then
                 local fixture = entity.fixture
                 local data = fixture:getUserData() or {}
                 data.type = data.type or "projectile"
                 data.entity = entity
                 fixture:setUserData(data)
-
                 if not entity.shape then
                     entity.shape = fixture:getShape()
                 end
                 return
             end
 
-            -- Create appropriate physics shape based on drawable configuration
+            -- Create shape from drawable config
             local size = entity.drawable.size or 6
             local shape = create_projectile_shape(entity.drawable, size)
-            local fixture = love.physics.newFixture(entity.body, shape)
+            local fixture = lp.newFixture(entity.body, shape)
 
-            fixture:setUserData({
-                type = "projectile",
-                entity = entity,
-            })
+            fixture:setUserData({ type = "projectile", entity = entity })
 
             entity.shape = shape
             entity.fixture = fixture
         end,
-        
+
         update = function(self, dt)
-            -- Clean up processed collisions table periodically
-            if not self.cleanupTimer then
-                self.cleanupTimer = 0
-            end
-            self.cleanupTimer = self.cleanupTimer + dt
+            -- Periodic cleanup of processed collision pairs
+            self.cleanupTimer = (self.cleanupTimer or 0) + dt
             if self.cleanupTimer > 1.0 then
                 self.processedCollisions = {}
                 self.cleanupTimer = 0
             end
-            
-            -- Update impact particles
-            for i = #self.impactParticles, 1, -1 do
-                local particle = self.impactParticles[i]
-                particle.lifetime = particle.lifetime - dt
-                
-                if particle.lifetime <= 0 then
-                    table.remove(self.impactParticles, i)
-                else
-                    -- Update particle physics with gravity and friction
-                    particle.x = particle.x + particle.vx * dt
-                    particle.y = particle.y + particle.vy * dt
-                    particle.vx = particle.vx * 0.92  -- friction
-                    particle.vy = particle.vy * 0.92 + 50 * dt  -- slight gravity
 
-                    local lifeRatio = math.max(0, particle.lifetime / particle.maxLifetime)
-                    local baseAlpha = particle.baseAlpha or 0.9
-                    if particle.maxSize then
-                        particle.size = particle.maxSize * (lifeRatio ^ 0.4)
+            -- Flush physics destruction safely outside callbacks
+            if #self._destroyQueue > 0 then
+                for i = 1, #self._destroyQueue do
+                    local o = self._destroyQueue[i]
+                    if o and not o:isDestroyed() then
+                        o:destroy()
                     end
-                    particle.color[4] = baseAlpha * lifeRatio
+                    self._destroyQueue[i] = nil
                 end
             end
-            
-            -- Update projectile lifetimes
+
+            -- Update impact particles
+            for i = #self.impactParticles, 1, -1 do
+                local p = self.impactParticles[i]
+                p.lifetime = p.lifetime - dt
+                if p.lifetime <= 0 then
+                    self.impactParticles[i] = self.impactParticles[#self.impactParticles]
+                    self.impactParticles[#self.impactParticles] = nil
+                else
+                    p.x = p.x + p.vx * dt
+                    p.y = p.y + p.vy * dt
+                    p.vx = p.vx * 0.92
+                    p.vy = p.vy * 0.92 + 50 * dt
+
+                    local lifeRatio = math.max(0, p.lifetime / p.maxLifetime)
+                    local baseAlpha = p.baseAlpha or 0.9
+                    if p.maxSize then
+                        p.size = p.maxSize * (lifeRatio ^ 0.4)
+                    end
+                    p.color[4] = baseAlpha * lifeRatio
+                end
+            end
+
+            -- Update projectile lifetimes and delayed spawns
             for entity in pairs(self.__pool) do
                 if entity.projectile and entity.projectile.lifetime then
                     entity.projectile.lifetime = entity.projectile.lifetime - dt
-
-                    -- Remove expired projectiles
                     if entity.projectile.lifetime <= 0 then
                         entity.pendingDestroy = true
                         trigger_delayed_spawn(self, entity, "expire", physicsWorld)
@@ -410,8 +381,9 @@ return function(context)
                 end
             end
 
+            -- Spawn queued projectiles
             local pending = self.pendingSpawns
-            if pending and #pending > 0 then
+            if #pending > 0 then
                 for i = 1, #pending do
                     local entry = pending[i]
                     ProjectileFactory.spawn(self.world, physicsWorld, entry.owner, entry.x, entry.y, entry.dirX, entry.dirY, entry.weapon)
@@ -419,34 +391,31 @@ return function(context)
                 end
             end
         end,
-        
+
         process = function(self, entity, dt)
             local body = entity.body
-            if not body or body:isDestroyed() then
-                return
-            end
-            
-            -- Sync position with physics body
+            if not body or body:isDestroyed() then return end
+
+            -- Sync position
             local x, y = body:getPosition()
-            entity.position.x = x
-            entity.position.y = y
-            
+            local pos = entity.position
+            pos.x, pos.y = x, y
+
+            -- Sync velocity
             if entity.velocity then
                 local vx, vy = body:getLinearVelocity()
-                entity.velocity.x = vx
-                entity.velocity.y = vy
+                entity.velocity.x, entity.velocity.y = vx, vy
             end
-            
-            -- Use frozen rotation if available, otherwise sync with physics body
+
+            -- Sync rotation
             if entity.frozenRotation then
                 entity.rotation = entity.frozenRotation
             else
                 entity.rotation = body:getAngle()
             end
         end,
-        
+
         onRemove = function(self, entity)
-            -- Clean up physics body
             if entity.body and not entity.body:isDestroyed() then
                 entity.body:destroy()
                 entity.body = nil
@@ -457,27 +426,25 @@ return function(context)
             end
             for i = #self.impactParticles, 1, -1 do
                 if self.impactParticles[i].source == entity then
-                    table.remove(self.impactParticles, i)
+                    self.impactParticles[i] = self.impactParticles[#self.impactParticles]
+                    self.impactParticles[#self.impactParticles] = nil
                 end
             end
         end,
-        
+
         draw = function(self)
-            -- Render impact particles with more saturated colors
-            love.graphics.push("all")
-            love.graphics.setBlendMode("add")
-            
+            lg.push("all")
+            lg.setBlendMode("add")
             for i = 1, #self.impactParticles do
-                local particle = self.impactParticles[i]
-                local alpha = particle.color[4]
-                if alpha and alpha > 0 and particle.size and particle.size > 0 then
-                    love.graphics.setColor(particle.color)
-                    love.graphics.setPointSize(math.max(1, particle.size))
-                    love.graphics.points(particle.x, particle.y)
+                local p = self.impactParticles[i]
+                local alpha = p.color[4]
+                if alpha and alpha > 0 and p.size and p.size > 0 then
+                    lg.setColor(p.color)
+                    lg.setPointSize(math.max(1, p.size))
+                    lg.points(p.x, p.y)
                 end
             end
-
-            love.graphics.pop()
+            lg.pop()
         end,
     }
 end

@@ -73,6 +73,10 @@ local function is_target_valid(target)
         return false
     end
 
+    if target.pendingDestroy or target.destroyed then
+        return false
+    end
+
     local dead = (target.health and target.health.current and target.health.current <= 0)
         or (target.body and target.body:isDestroyed())
 

@@ -166,6 +166,9 @@ function Systems.teardown(state)
     state.pickupSystem = nil
     state.renderSystem = nil
     state.weaponSystem = nil
+    if state.projectileSystem and state.projectileSystem.detachPhysicsCallbacks then
+        state.projectileSystem:detachPhysicsCallbacks()
+    end
     state.projectileSystem = nil
     state.lootDropSystem = nil
     state.enemyAISystem = nil
