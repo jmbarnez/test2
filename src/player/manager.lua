@@ -1,5 +1,7 @@
 local PlayerWeapons = require("src.player.weapons")
 local constants = require("src.constants.game")
+local table_util = require("src.util.table")
+local deep_copy = table_util.deep_copy
 
 ---@diagnostic disable-next-line: undefined-global
 local love = love
@@ -37,27 +39,11 @@ local DEFAULT_SKILLS = {
     },
 }
 
-local function copy_table(source)
-    if type(source) ~= "table" then
-        return source
-    end
-
-    local clone = {}
-    for key, value in pairs(source) do
-        if type(value) == "table" then
-            clone[key] = copy_table(value)
-        else
-            clone[key] = value
-        end
-    end
-    return clone
-end
-
 local function normalize_level(levelData)
     if type(levelData) == "number" then
         return { current = levelData }
     elseif type(levelData) == "table" then
-        local clone = copy_table(levelData)
+        local clone = deep_copy(levelData)
         if clone.current == nil then
             clone.current = 1
         end
@@ -76,21 +62,9 @@ local function extract_currency_from_entity(entity)
     if type(wallet) == "table" then
         if type(wallet.balance) == "number" then
             return wallet.balance
-        elseif type(wallet.credits) == "number" then
-            return wallet.credits
         end
     elseif type(wallet) == "number" then
         return wallet
-    end
-
-    local currency = entity.currency
-    if type(currency) == "number" then
-        return currency
-    end
-
-    local credits = entity.credits
-    if type(credits) == "number" then
-        return credits
     end
 
     return nil
@@ -102,8 +76,6 @@ local function apply_currency_to_entity(state, entity)
     end
 
     local currency = state.playerCurrency
-    entity.currency = currency
-    entity.credits = currency
 
     local wallet = entity.wallet
     if type(wallet) ~= "table" then
@@ -112,7 +84,6 @@ local function apply_currency_to_entity(state, entity)
     end
 
     wallet.balance = currency
-    wallet.credits = currency
 end
 
 local function ensure_player_currency(state, entity, defaultValue)
@@ -214,7 +185,7 @@ local function ensure_skills(pilot)
     for categoryId, defaults in pairs(DEFAULT_SKILLS) do
         local category = pilot.skills[categoryId]
         if type(category) ~= "table" then
-            category = copy_table(defaults)
+            category = deep_copy(defaults)
             pilot.skills[categoryId] = category
         else
             category.label = category.label or defaults.label
@@ -224,13 +195,13 @@ local function ensure_skills(pilot)
             for skillId, skillDefaults in pairs(defaults.skills or {}) do
                 local skill = category.skills[skillId]
                 if type(skill) ~= "table" then
-                    skill = copy_table(skillDefaults)
+                    skill = deep_copy(skillDefaults)
                     category.skills[skillId] = skill
                 else
                     for key, defaultValue in pairs(skillDefaults) do
                         if skill[key] == nil then
                             if type(defaultValue) == "table" then
-                                skill[key] = copy_table(defaultValue)
+                                skill[key] = deep_copy(defaultValue)
                             else
                                 skill[key] = defaultValue
                             end
@@ -350,15 +321,21 @@ function PlayerManager.addSkillXP(state, categoryId, skillId, amount, playerId)
         return false
     end
 
-    skill.xp = math.max(0, (skill.xp or 0) + amount)
+    local xpBefore = math.max(0, skill.xp or 0)
+    local xpRequiredBefore = math.max(1, skill.xpRequired or 100)
+    local levelBefore = math.max(1, skill.level or 1)
+
+    skill.xp = math.max(0, xpBefore + amount)
 
     local leveledUp = false
-    local level = math.max(1, skill.level or 1)
-    local xpRequired = math.max(1, skill.xpRequired or 100)
+    local level = levelBefore
+    local xpRequired = xpRequiredBefore
+    local levelsGained = 0
 
     while skill.xp >= xpRequired do
         skill.xp = skill.xp - xpRequired
         level = level + 1
+        levelsGained = levelsGained + 1
         xpRequired = math.max(xpRequired + 50, math.floor(xpRequired * 1.25 + 0.5))
         leveledUp = true
     end
@@ -366,14 +343,105 @@ function PlayerManager.addSkillXP(state, categoryId, skillId, amount, playerId)
     skill.level = level
     skill.xpRequired = xpRequired
 
+    local loveTimer = love and love.timer
+    local timestamp = loveTimer and loveTimer.getTime and loveTimer.getTime() or os.time()
+
     if leveledUp then
-        local loveTimer = love and love.timer
-        if loveTimer and loveTimer.getTime then
-            skill.lastLevelUpTime = loveTimer.getTime()
-        else
-            skill.lastLevelUpTime = os.time()
+        skill.lastLevelUpTime = timestamp
+    end
+
+    local levelData = pilot.level
+    if type(levelData) ~= "table" then
+        levelData = { current = level }
+        pilot.level = levelData
+    end
+
+    levelData.current = math.max(1, level)
+    levelData.experience = skill.xp
+    levelData.max_experience = xpRequired
+    levelData.next_level = xpRequired
+    levelData.skill = skillId
+    levelData.category = categoryId
+
+    local progressBefore = 0
+    if xpRequiredBefore > 0 then
+        progressBefore = math.max(0, math.min(1, xpBefore / xpRequiredBefore))
+    end
+
+    local progressAfter = 0
+    if xpRequired > 0 then
+        progressAfter = math.max(0, math.min(1, skill.xp / xpRequired))
+    end
+
+    local progressTarget = progressAfter
+    if levelsGained > 0 then
+        progressTarget = levelsGained + progressAfter
+    end
+
+    local progressStartFinal = leveledUp and 0 or progressBefore
+
+    local existingGain = type(levelData.lastGain) == "table" and levelData.lastGain or nil
+    local now = timestamp
+    local activeGain = nil
+    if existingGain then
+        local existingExpires = tonumber(existingGain.expiresAt or 0)
+        if not existingExpires or existingExpires <= 0 then
+            local baseTimestamp = tonumber(existingGain.timestamp or 0) or 0
+            local baseDuration = tonumber(existingGain.duration or 0) or 0
+            if baseTimestamp > 0 and baseDuration > 0 then
+                existingExpires = baseTimestamp + baseDuration
+            else
+                existingExpires = nil
+            end
+        end
+
+        if existingExpires and existingExpires > now then
+            activeGain = existingGain
         end
     end
+
+    local gain = activeGain or {}
+    if gain ~= existingGain then
+        levelData.lastGain = gain
+    end
+
+    local visibleDuration = leveledUp and 4.2 or 3.0
+    local animationDuration = leveledUp and 1.6 or 1.05
+
+    local createdAt = tonumber(gain.createdAt or gain.timestamp or 0) or 0
+    if not activeGain or createdAt <= 0 then
+        createdAt = now
+        gain.sequence = 0
+    else
+        gain.sequence = (gain.sequence or 0) + 1
+        createdAt = now
+    end
+
+    local expiresAt = now + visibleDuration
+
+    gain.amount = amount
+    gain.leveledUp = leveledUp
+    gain.levelsGained = levelsGained
+    gain.levelFrom = levelBefore
+    gain.levelTo = level
+    gain.progressFrom = progressBefore
+    gain.progressTo = progressTarget
+    gain.progressStart = progressStartFinal
+    gain.progressEnd = progressAfter
+    gain.xpBefore = xpBefore
+    gain.xpAfter = skill.xp
+    gain.xpRequiredBefore = xpRequiredBefore
+    gain.xpRequiredAfter = xpRequired
+    gain.skill = skill.label or skill.name or skillId
+    gain.category = categoryId
+    gain.createdAt = createdAt
+    gain.animStart = now
+    gain.animDuration = animationDuration
+    gain.visibleDuration = visibleDuration
+    gain.expiresAt = expiresAt
+    gain.timestamp = createdAt
+    gain.duration = visibleDuration
+    gain.lastUpdate = now
 
     return true, leveledUp
 end
@@ -446,7 +514,7 @@ function PlayerManager.attachShip(state, shipEntity, levelData, playerId)
     else
         shipEntity.pilot = nil
         if levelData then
-            shipEntity.level = copy_table(levelData)
+            shipEntity.level = deep_copy(levelData)
         end
     end
 

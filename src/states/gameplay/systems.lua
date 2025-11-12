@@ -1,3 +1,4 @@
+local UIStateManager = require("src.ui.state_manager")
 ---@diagnostic disable: undefined-global
 
 local tiny = require("libs.tiny")
@@ -24,13 +25,48 @@ local PlayerManager = require("src.player.manager")
 
 local Systems = {}
 
-local SALVAGE_PICKUP_XP = {
+local LOOT_DESTRUCTION_XP = {
     ["resource:hull_scrap"] = {
         category = "industry",
         skill = "salvaging",
         xp = 10,
     },
 }
+
+local function resolve_player_id_from_entity(entity)
+    if not entity then
+        return nil
+    end
+
+    if entity.lastDamagePlayerId then
+        return entity.lastDamagePlayerId
+    end
+
+    local source = entity.lastDamageSource
+    if type(source) == "table" then
+        return source.playerId
+            or source.ownerPlayerId
+            or source.lastDamagePlayerId
+    end
+
+    return nil
+end
+
+local function resolve_loot_player_id(drop, sourceEntity)
+    local playerId = resolve_player_id_from_entity(sourceEntity)
+    if playerId then
+        return playerId
+    end
+
+    if drop and type(drop.source) == "table" then
+        return resolve_player_id_from_entity(drop.source)
+            or drop.source.playerId
+            or drop.source.ownerPlayerId
+            or drop.source.lastDamagePlayerId
+    end
+
+    return nil
+end
 
 local function ensure_world(state)
     if not state.world then
@@ -43,24 +79,6 @@ local function add_common_systems(state)
     state.movementSystem = state.world:addSystem(createMovementSystem())
     state.pickupSystem = state.world:addSystem(createPickupSystem({
         state = state,
-        onCollected = function(pickup, ship)
-            if not (pickup and ship and ship.player) then
-                return
-            end
-
-            local item = pickup.item
-            local itemId = (item and item.id) or pickup.itemId
-            if not itemId then
-                return
-            end
-
-            local spec = SALVAGE_PICKUP_XP[itemId]
-            if not spec then
-                return
-            end
-
-            PlayerManager.addSkillXP(state, spec.category, spec.skill, spec.xp, ship.playerId)
-        end,
     }))
     state.weaponSystem = state.world:addSystem(createWeaponSystem(state))
     state.shipSystem = state.world:addSystem(createShipSystem(state))
@@ -69,6 +87,23 @@ local function add_common_systems(state)
         state = state,
         spawnLootItem = function(drop)
             return Entities.spawnLootPickup(state, drop)
+        end,
+        onLootDropped = function(drop, entity)
+            if not drop then
+                return
+            end
+
+            local spec = LOOT_DESTRUCTION_XP[drop.id]
+            if not spec then
+                return
+            end
+
+            local playerId = resolve_loot_player_id(drop, entity)
+            if not playerId then
+                return
+            end
+
+            PlayerManager.addSkillXP(state, spec.category, spec.skill, spec.xp, playerId)
         end,
     }))
     state.destructionSystem = state.world:addSystem(createDestructionSystem(state))

@@ -350,14 +350,41 @@ function Starfield.initialize(state)
     state.nebulaHueShift = love.math.random()
     state.nebulaSaturation = 0.7 + love.math.random() * 0.3
     state.asteroidBelts = generate_asteroid_belts(bounds)
+    state._starfieldBounds = {
+        x = bounds.x,
+        y = bounds.y,
+        width = bounds.width,
+        height = bounds.height,
+    }
 end
 
-function Starfield.refresh(state)
+local function bounds_match(a, b)
+    if not (a and b) then
+        return false
+    end
+
+    return a.x == b.x
+        and a.y == b.y
+        and a.width == b.width
+        and a.height == b.height
+end
+
+function Starfield.refresh(state, options)
     if not state.worldBounds then
         return
     end
 
+    local force_regenerate = false
+    if type(options) == "boolean" then
+        force_regenerate = options
+    elseif type(options) == "table" then
+        force_regenerate = not not (options.force or options.regenerate)
+    end
+
     local bounds = state.worldBounds
+    if not force_regenerate and bounds_match(bounds, state._starfieldBounds) and state.starLayers then
+        return
+    end
 
     state.starLayers = Starfield.generateLayers(bounds)
     state.nebulaSeed = love.math.random() * 1000
@@ -367,6 +394,12 @@ function Starfield.refresh(state)
     state.nebulaHueShift = love.math.random()
     state.nebulaSaturation = 0.7 + love.math.random() * 0.3
     state.asteroidBelts = generate_asteroid_belts(bounds)
+    state._starfieldBounds = {
+        x = bounds.x,
+        y = bounds.y,
+        width = bounds.width,
+        height = bounds.height,
+    }
 end
 
 function Starfield.update(state, dt)

@@ -215,17 +215,23 @@ local function get_dimensions()
     }
 end
 
-local function calculate_grid_layout(contentWidth, contentHeight)
-    local slotSize = theme_spacing.slot_size
+local function calculate_grid_layout(contentWidth, contentHeight, fonts)
+    local baseSlotSize = theme_spacing.slot_size
+    local slotSize = math.floor(baseSlotSize * 1.2 + 0.5)
     local slotPadding = theme_spacing.slot_padding
-    local labelHeight = 32
-    local slotWithLabelHeight = slotSize + labelHeight + 4
+
+    local labelFont = fonts and (fonts.small or fonts.body) or nil
+    local lineHeight = labelFont and labelFont:getHeight() or theme_spacing.slot_text_height or 16
+    local maxLines = 2
+    local textAreaHeight = maxLines * lineHeight
+    local labelHeight = textAreaHeight + 10
+    local slotWithLabelHeight = slotSize + labelHeight
     
     local slotsPerRow = math.max(1, math.floor((contentWidth + slotPadding) / (slotSize + slotPadding)))
     local slotsPerColumn = math.max(1, math.floor((contentHeight + slotPadding) / (slotWithLabelHeight + slotPadding)))
     local totalVisibleSlots = slotsPerRow * slotsPerColumn
     
-    return slotsPerRow, slotsPerColumn, totalVisibleSlots, slotSize, slotWithLabelHeight
+    return slotsPerRow, slotsPerColumn, totalVisibleSlots, slotSize, slotWithLabelHeight, labelHeight
 end
 
 local function draw_slot_background(slotX, slotY, slotSize, isHovered, isSelected)
@@ -241,7 +247,7 @@ local function draw_slot_background(slotX, slotY, slotSize, isHovered, isSelecte
     end
 end
 
-local function draw_item_in_slot(item, slotX, slotY, slotSize, fonts)
+local function draw_item_in_slot(item, slotX, slotY, slotSize, labelHeight, fonts)
     local iconSize = slotSize - 10
     local iconX = slotX + 5
     local iconY = slotY + 5
@@ -292,9 +298,12 @@ local function draw_item_in_slot(item, slotX, slotY, slotSize, fonts)
     
     local textLines = wrap_text(itemName, font, slotSize - 4)
     local lineHeight = font:getHeight()
-    local textStartY = slotY + slotSize + 2
-    
-    for j, line in ipairs(textLines) do
+    local textAreaHeight = (labelHeight or ((theme_spacing.slot_text_height or 16) * 2 + 10)) - 4
+    local maxLines = math.max(1, math.floor(textAreaHeight / lineHeight))
+    local textStartY = slotY + slotSize + 4
+
+    for j = 1, math.min(#textLines, maxLines) do
+        local line = textLines[j]
         local textWidth = font:getWidth(line)
         local textX = slotX + (slotSize - textWidth) * 0.5
         local textY = textStartY + (j - 1) * lineHeight
@@ -588,12 +597,11 @@ function cargo_window.draw(context)
     end
 
     if currencyValue == nil and player then
-        if player.currency ~= nil then
-            currencyValue = player.currency
-        elseif player.credits ~= nil then
-            currencyValue = player.credits
-        elseif player.wallet then
-            currencyValue = player.wallet.balance or player.wallet.credits
+        local wallet = player.wallet
+        if type(wallet) == "table" and wallet.balance ~= nil then
+            currencyValue = wallet.balance
+        elseif type(wallet) == "number" then
+            currencyValue = wallet
         end
     end
 
@@ -659,8 +667,8 @@ function cargo_window.draw(context)
         gridHeight = 0
     end
 
-    local slotsPerRow, slotsPerColumn, totalVisibleSlots, slotSize, slotWithLabelHeight = 
-        calculate_grid_layout(content.width, gridHeight)
+    local slotsPerRow, slotsPerColumn, totalVisibleSlots, slotSize, slotWithLabelHeight, labelHeight = 
+        calculate_grid_layout(content.width, gridHeight, fonts)
 
     local slotPadding = theme_spacing.slot_padding
     local gridStartY = gridY
@@ -756,7 +764,7 @@ function cargo_window.draw(context)
         draw_slot_background(slotX, slotY, slotSize, isMouseOver, isSelected)
 
         if item then
-            draw_item_in_slot(item, slotX, slotY, slotSize, fonts)
+            draw_item_in_slot(item, slotX, slotY, slotSize, labelHeight, fonts)
         end
     end
 

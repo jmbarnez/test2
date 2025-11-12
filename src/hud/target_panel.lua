@@ -74,7 +74,9 @@ function TargetPanel.draw(context, player)
     context = context or {}
     local state = context.state or context
     local cache = state and state.targetingCache
-    local target = cache and cache.entity
+    local active = cache and cache.activeEntity
+    local hovered = cache and cache.hoveredEntity
+    local target = active or hovered or (cache and cache.entity)
 
     if not target then
         return
@@ -90,21 +92,23 @@ function TargetPanel.draw(context, player)
         return
     end
 
+    local isLocked = active ~= nil and target == active
+    local isEnemy = not not target.enemy
+    local showFullPanel = (not isEnemy) or isLocked
+
     local hud_colors = theme.colors.hud or {}
     local set_color = theme.utils.set_color
     local spacing = theme.spacing or {}
 
-    local padding = spacing.window_padding and math.min(12, spacing.window_padding) or 10
-    local width = 320
-    local height = 120
+    local padding = math.min(10, spacing.window_padding or 10)
+    local width = 280
+    local height = showFullPanel and 96 or 68
     local screenWidth = love.graphics.getWidth()
 
     local x = (screenWidth - width) * 0.5
-    local y = 15
+    local y = 18
 
-    local level = resolve_level(target)
-    local distance = resolve_distance(player or PlayerManager.getCurrentShip(state), target)
-    local speed = resolve_speed(target)
+    local playerShip = player or PlayerManager.getCurrentShip(state)
 
     local hull_current, hull_max = Util.resolve_resource(target.health)
     local shield_current, shield_max = Util.resolve_resource(target.shield or target.shields or (target.health and target.health.shield))
@@ -125,29 +129,84 @@ function TargetPanel.draw(context, player)
     love.graphics.rectangle("line", x + 0.5, y + 0.5, width - 1, height - 1)
 
     local text_x = x + padding
-    local text_y = y + padding
     local text_width = width - padding * 2
 
-    love.graphics.setFont(fonts.body)
-    set_color(hud_colors.status_text or hud_colors.diagnostics or { 0.82, 0.88, 0.93, 1 })
-    love.graphics.printf(name, text_x, text_y, text_width, "left")
+    if showFullPanel then
+        local level = resolve_level(target)
+        local distance = resolve_distance(playerShip, target)
+        local speed = resolve_speed(target)
 
-    local info_y = text_y + fonts.body:getHeight() + 6
+        local name = target.name
+            or (target.blueprint and (target.blueprint.name or target.blueprint.id))
+            or "Unknown Target"
 
-    love.graphics.setFont(fonts.small)
-    set_color(hud_colors.status_muted or { 0.6, 0.66, 0.72, 1 })
+        love.graphics.setFont(fonts.body)
+        set_color(hud_colors.status_text or hud_colors.diagnostics or { 0.82, 0.88, 0.93, 1 })
+        love.graphics.printf(name, text_x, y + padding, text_width, "left")
 
-    local levelText = level and string.format("Lv %d", level) or "Lv --"
-    local distanceText = string.format("Dist %s", distance and format_number(distance) or "--")
-    local speedText = string.format("Speed %s", format_number(speed))
+        local info_y = y + padding + fonts.body:getHeight() + 4
 
-    love.graphics.print(levelText, text_x, info_y)
-    love.graphics.print(distanceText, text_x + 90, info_y)
-    love.graphics.print(speedText, text_x + 190, info_y)
+        love.graphics.setFont(fonts.small)
+        set_color(hud_colors.status_muted or { 0.6, 0.66, 0.72, 1 })
 
-    local bar_y = info_y + fonts.small:getHeight() + 12
-    local bar_height = 16
-    local bar_width = width - padding * 2
+        local levelText = level and string.format("Lv %d", level) or "Lv --"
+        local distanceText = string.format("Dist %s", distance and format_number(distance) or "--")
+        local speedText = string.format("Speed %s", format_number(speed))
+
+        love.graphics.print(levelText, text_x, info_y)
+        love.graphics.printf(distanceText, text_x, info_y, text_width, "center")
+        love.graphics.printf(speedText, text_x, info_y, text_width, "right")
+
+        local bar_y = info_y + fonts.small:getHeight() + 6
+        local bar_height = 12
+        local bar_width = text_width
+
+        set_color(hud_colors.status_bar_background or { 0.09, 0.1, 0.14, 1 })
+        love.graphics.rectangle("fill", text_x, bar_y, bar_width, bar_height)
+
+        local hull_pct = Util.clamp01(hull_current / hull_max)
+        if hull_pct > 0 then
+            set_color(hud_colors.hull_fill or { 0.85, 0.4, 0.38, 1 })
+            love.graphics.rectangle("fill", text_x + 1, bar_y + 1, (bar_width - 2) * hull_pct, bar_height - 2)
+        end
+
+        local shield_pct = 0
+        if shield_current and shield_max and shield_max > 0 then
+            shield_pct = Util.clamp01(shield_current / shield_max)
+        end
+
+        if shield_pct > 0 then
+            set_color(hud_colors.shield_fill or { 0.3, 0.6, 0.95, 1 })
+            love.graphics.rectangle("fill", text_x + 1, bar_y + 1, (bar_width - 2) * shield_pct, (bar_height - 2) * 0.5)
+        end
+
+        set_color(hud_colors.status_border or { 0.2, 0.26, 0.34, 0.9 })
+        love.graphics.setLineWidth(1)
+        love.graphics.rectangle("line", text_x + 0.5, bar_y + 0.5, bar_width - 1, bar_height - 1)
+
+        local textBottomY = bar_y + bar_height + 5
+        love.graphics.setFont(fonts.tiny or fonts.small)
+        set_color(hud_colors.status_text or { 0.82, 0.88, 0.93, 1 })
+
+        local hullText = Util.format_resource(hull_current, hull_max)
+        local shieldText = (shield_current and shield_max and shield_max > 0)
+            and Util.format_resource(shield_current, shield_max)
+            or "--"
+
+        love.graphics.print("Hull", text_x, textBottomY)
+        love.graphics.printf(hullText, text_x, textBottomY, text_width, "right")
+
+        local shieldLabelY = textBottomY + (fonts.tiny and fonts.tiny:getHeight() or fonts.small:getHeight()) + 2
+        love.graphics.print("Shield", text_x, shieldLabelY)
+        love.graphics.printf(shieldText, text_x, shieldLabelY, text_width, "right")
+
+        return
+    end
+
+    -- Health-only presentation when target is merely hovered and is an enemy
+    local bar_height = 14
+    local bar_width = text_width
+    local bar_y = y + padding
 
     set_color(hud_colors.status_bar_background or { 0.09, 0.1, 0.14, 1 })
     love.graphics.rectangle("fill", text_x, bar_y, bar_width, bar_height)
@@ -172,18 +231,19 @@ function TargetPanel.draw(context, player)
     love.graphics.setLineWidth(1)
     love.graphics.rectangle("line", text_x + 0.5, bar_y + 0.5, bar_width - 1, bar_height - 1)
 
-    local textBottomY = bar_y + bar_height + 6
     love.graphics.setFont(fonts.small)
     set_color(hud_colors.status_text or { 0.82, 0.88, 0.93, 1 })
 
-    local hullText = Util.format_resource(hull_current, hull_max)
-    local shieldText = shield_pct > 0 and Util.format_resource(shield_current, shield_max) or "--"
+    local label_y = bar_y + bar_height + 6
+    love.graphics.print("Hull", text_x, label_y)
+    love.graphics.printf(Util.format_resource(hull_current, hull_max), text_x, label_y, text_width, "right")
 
-    love.graphics.print("Hull", text_x, textBottomY)
-    love.graphics.print(hullText, text_x + bar_width - fonts.small:getWidth(hullText), textBottomY)
+    if shield_pct > 0 then
+        local shieldLabelY = label_y + fonts.small:getHeight() + 4
+        love.graphics.print("Shield", text_x, shieldLabelY)
+        love.graphics.printf(Util.format_resource(shield_current, shield_max), text_x, shieldLabelY, text_width, "right")
+    end
 
-    love.graphics.print("Shield", text_x, textBottomY + fonts.small:getHeight() + 2)
-    love.graphics.print(shieldText, text_x + bar_width - fonts.small:getWidth(shieldText), textBottomY + fonts.small:getHeight() + 2)
 end
 
 return TargetPanel

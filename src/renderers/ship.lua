@@ -98,6 +98,97 @@ local function compute_part_radius(part)
     return compute_polygon_radius(points)
 end
 
+local function part_has_transform(part)
+    if not part then
+        return false
+    end
+
+    if part.offset then
+        return true
+    end
+
+    if part.rotation then
+        return true
+    end
+
+    if part.scale then
+        return true
+    end
+
+    return false
+end
+
+local function score_polygon_part(part, radius)
+    if not part or not radius or radius <= 0 then
+        return -math.huge
+    end
+
+    local score = radius
+
+    if part.name == "hull" or part.tag == "hull" then
+        score = score + radius * 0.5
+    end
+
+    if not part_has_transform(part) then
+        score = score + radius * 0.25
+    end
+
+    return score
+end
+
+local function select_base_polygon(drawable)
+    local parts = drawable and drawable.parts
+    if type(parts) ~= "table" or #parts == 0 then
+        return nil
+    end
+
+    local best_points
+    local best_score = -math.huge
+
+    for i = 1, #parts do
+        local part = parts[i]
+        if part and (part.type == nil or part.type == "polygon") then
+            local points = part.points
+            if type(points) == "table" and #points >= 6 then
+                local radius = compute_polygon_radius(points)
+                local score = score_polygon_part(part, radius)
+                if score > best_score then
+                    best_score = score
+                    best_points = points
+                end
+            end
+        end
+    end
+
+    return best_points
+end
+
+local function ensure_base_polygon(drawable)
+    if not drawable then
+        return
+    end
+
+    if type(drawable.polygon) == "table" and #drawable.polygon >= 6 then
+        drawable._basePolygonCache = drawable.polygon
+        return
+    end
+
+    if drawable._basePolygonCache ~= nil then
+        if drawable._basePolygonCache ~= false then
+            drawable.polygon = drawable._basePolygonCache
+        end
+        return
+    end
+
+    local polygon = select_base_polygon(drawable)
+    if polygon then
+        drawable._basePolygonCache = polygon
+        drawable.polygon = polygon
+    else
+        drawable._basePolygonCache = false
+    end
+end
+
 local function resolve_drawable_radius(drawable)
     if not drawable then
         return 0
@@ -230,6 +321,8 @@ local function draw_ship_generic(entity, context)
 
     local radius = resolve_drawable_radius(drawable)
 
+    ensure_base_polygon(drawable)
+
     love.graphics.push("all")
 
     love.graphics.translate(entity.position.x, entity.position.y)
@@ -319,13 +412,19 @@ local function draw_health_bar(entity)
     love.graphics.pop()
 end
 
-function ship_renderer.draw(entity, context)
+function ship_renderer.draw_body(entity, context)
     local drawable = entity.drawable
     if not drawable then
-        return
+        return false
     end
 
-    draw_ship_generic(entity, context)
+    return draw_ship_generic(entity, context)
+end
+
+function ship_renderer.draw(entity, context)
+    if not ship_renderer.draw_body(entity, context) then
+        return
+    end
 
     draw_health_bar(entity)
 end

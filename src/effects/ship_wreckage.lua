@@ -203,6 +203,16 @@ local function create_wreckage_piece(context, params)
     local baseHealth = clamp((radius * 0.9) + 12, 18, 140)
     local health = params.health or baseHealth
 
+    local piece_radius = params.pieceRadius or 16
+
+    local health_bar_config = params.healthBar or {}
+    local health_bar = {
+        width = health_bar_config.width or (piece_radius * 1.8),
+        height = health_bar_config.height or 5,
+        offset = health_bar_config.offset or (piece_radius + 8),
+        showDuration = health_bar_config.showDuration or health_bar_config.show_duration or 1.5,
+    }
+
     local entity = {
         position = { x = position.x, y = position.y },
         velocity = { x = params.velocity.x, y = params.velocity.y },
@@ -210,7 +220,9 @@ local function create_wreckage_piece(context, params)
         health = {
             current = health,
             max = health,
+            showTimer = 0,
         },
+        healthBar = health_bar,
         drawable = {
             type = "wreckage",
             polygon = polygon,
@@ -224,6 +236,7 @@ local function create_wreckage_piece(context, params)
             fadeDuration = params.fadeDuration,
             age = 0,
             alpha = 1,
+            pieceRadius = piece_radius,
         },
         loot = params.loot,
         armorType = "wreckage",
@@ -241,6 +254,10 @@ local function create_wreckage_piece(context, params)
             return
         end
         target.health.current = math.max(0, (target.health.current or target.health.max or 0) - amount)
+        if target.healthBar then
+            target.health.showTimer = target.healthBar.showDuration or 0
+        end
+
         if target.health.current <= 0 then
             target.pendingDestroy = true
         end
@@ -264,12 +281,12 @@ function ShipWreckage.spawn(ship, context)
 
     local vx, vy, angular_velocity = gather_base_motion(ship)
 
-    local piece_count = love.math.random(9, 14)
+    local piece_count = love.math.random(2, 4)
     local weights = {}
     local weight_sum = 0
 
     for i = 1, piece_count do
-        local weight = 0.5 + love.math.random() * 0.9
+        local weight = 1.1 + love.math.random() * 1.2
         weights[i] = weight
         weight_sum = weight_sum + weight
     end
@@ -278,8 +295,8 @@ function ShipWreckage.spawn(ship, context)
         return
     end
 
-    local offset_radius = radius * 0.75
-    local min_piece_radius = radius * 0.2
+    local offset_radius = radius * 0.55
+    local min_piece_radius = radius * 0.45
 
     for i = 1, piece_count do
         local area_share = reference_area * (weights[i] / weight_sum)

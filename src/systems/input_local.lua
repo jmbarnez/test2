@@ -3,6 +3,24 @@ local Intent = require("src.input.intent")
 local PlayerManager = require("src.player.manager")
 local math_util = require("src.util.math")
 
+local CONTROL_KEYS = { "lctrl", "rctrl" }
+
+local function is_control_modifier_active()
+    if not (love and love.keyboard and love.keyboard.isDown) then
+        return false
+    end
+
+    for i = 1, #CONTROL_KEYS do
+        local key = CONTROL_KEYS[i]
+        ---@cast key love.KeyConstant
+        if love.keyboard.isDown(key) then
+            return true
+        end
+    end
+
+    return false
+end
+
 local function screen_to_world(x, y, camera)
     if not camera then
         return x, y
@@ -66,7 +84,8 @@ return function(context)
                 local worldX, worldY = screen_to_world(mx, my, context.camera)
 
                 Intent.setAim(intent, worldX, worldY)
-                Intent.setFirePrimary(intent, love.mouse.isDown and love.mouse.isDown(1))
+                local primary_down = love.mouse.isDown and love.mouse.isDown(1)
+                Intent.setFirePrimary(intent, primary_down and not is_control_modifier_active())
                 Intent.setFireSecondary(intent, love.mouse.isDown and love.mouse.isDown(2))
             end
 

@@ -105,6 +105,7 @@ local function draw_legend(rect, fonts, colors)
     local legendItems = {
         { label = "You", color = colors.player },
         { label = "Allies", color = colors.teammate },
+        { label = "Stations", color = colors.station },
         { label = "Enemies", color = colors.enemy },
         { label = "Asteroids", color = colors.asteroid },
     }
@@ -255,6 +256,9 @@ local function draw_entities(context, player, rect, bounds, colors, scale, cente
                 radius = 5
             elseif entity.player then
                 color = colors.teammate
+                radius = 4
+            elseif entity.station or (entity.blueprint and entity.blueprint.category == "stations") then
+                color = colors.station
                 radius = 4
             elseif entity.blueprint and entity.blueprint.category == "asteroids" then
                 color = colors.asteroid

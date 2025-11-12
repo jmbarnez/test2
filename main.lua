@@ -1,6 +1,7 @@
 ---@diagnostic disable: undefined-global
 local Gamestate = require("libs.hump.gamestate")
 local constants = require("src.constants.game")
+local AudioManager = require("src.audio.manager")
 local gameplay = require("src.states.gameplay")
 local start_menu = require("src.states.start_menu")
 
@@ -92,6 +93,8 @@ function love.load()
     elseif love.math then
         love.math.setRandomSeed(os.time())
     end
+
+    AudioManager.initialize()
 
     Gamestate.registerEvents()
     Gamestate.switch(start_menu)

@@ -192,6 +192,7 @@ return {
             items = {
                 { weapon = "cannon" },
                 { weapon = "laser_beam" },
+                { weapon = "shock_burst_launcher" },
             },
         },
         magnet = {

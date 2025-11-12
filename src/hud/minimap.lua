@@ -8,11 +8,11 @@ local Minimap = {}
 
 function Minimap.draw(context, player)
     local screenWidth = love.graphics.getWidth()
-    local minimap_diameter = 120
-    local minimap_radius_pixels = minimap_diameter * 0.5
+    local minimap_size = 120
+    local minimap_half_size = minimap_size * 0.5
     local margin = 24
-    local centerX = screenWidth - minimap_radius_pixels - margin
-    local centerY = margin + minimap_radius_pixels
+    local centerX = screenWidth - minimap_half_size - margin
+    local centerY = margin + minimap_half_size
 
     local world = context.world
     local bounds = context.worldBounds
@@ -22,14 +22,14 @@ function Minimap.draw(context, player)
     end
 
     local visible_radius_world = 4000
-    local scale = minimap_radius_pixels / visible_radius_world
+    local scale = minimap_half_size / visible_radius_world
 
     love.graphics.setColor(hud_colors.minimap_background)
-    love.graphics.circle("fill", centerX, centerY, minimap_radius_pixels)
+    love.graphics.rectangle("fill", centerX - minimap_half_size, centerY - minimap_half_size, minimap_size, minimap_size)
 
     love.graphics.setColor(hud_colors.minimap_border)
     love.graphics.setLineWidth(2)
-    love.graphics.circle("line", centerX, centerY, minimap_radius_pixels)
+    love.graphics.rectangle("line", centerX - minimap_half_size, centerY - minimap_half_size, minimap_size, minimap_size)
 
     love.graphics.setColor(hud_colors.minimap_player)
     love.graphics.circle("fill", centerX, centerY, 3)
@@ -49,9 +49,9 @@ function Minimap.draw(context, player)
                 local dx = mapX - centerX
                 local dy = mapY - centerY
 
-                if (dx * dx + dy * dy) <= (minimap_radius_pixels - 1) * (minimap_radius_pixels - 1) then
-                    if entity.player then
-                        love.graphics.setColor(hud_colors.minimap_teammate)
+                if math.abs(dx) <= minimap_half_size - 1 and math.abs(dy) <= minimap_half_size - 1 then
+                    if entity.station or (entity.blueprint and entity.blueprint.category == "stations") then
+                        love.graphics.setColor(hud_colors.minimap_station)
                         love.graphics.circle("fill", mapX, mapY, 2.5)
                     elseif entity.blueprint and entity.blueprint.category == "asteroids" then
                         love.graphics.setColor(hud_colors.minimap_asteroid)

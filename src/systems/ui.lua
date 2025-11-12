@@ -2,6 +2,7 @@ local tiny = require("libs.tiny")
 local theme = require("src.ui.theme")
 local tooltip = require("src.ui.components.tooltip")
 local notifications = require("src.ui.notifications")
+local UIStateManager = require("src.ui.state_manager")
 local cargo_window = require("src.ui.windows.cargo")
 local death_window = require("src.ui.windows.death")
 local pause_window = require("src.ui.windows.pause")
@@ -28,6 +29,12 @@ return function(context)
             map_window.draw(context)
             skills_window.draw(context)
             notifications.draw(context)
+
+            if uiInput then
+                local shouldCapture = UIStateManager.isAnyUIVisible(context)
+                uiInput.mouseCaptured = shouldCapture or uiInput.mouseCaptured
+                uiInput.keyboardCaptured = shouldCapture or uiInput.keyboardCaptured
+            end
             local mouse_x, mouse_y = love.mouse.getPosition()
             tooltip.draw(mouse_x, mouse_y, theme.get_fonts())
         end,

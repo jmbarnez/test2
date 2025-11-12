@@ -3,15 +3,12 @@ local table_util = require("src.util.table")
 
 local weapon_defaults = (constants.weapons and constants.weapons.laser) or {}
 
-local function with_default(values, default)
-    local copy = table_util.clone_array(values)
-    if copy then
-        return copy
+local function default(key, fallback)
+    local value = weapon_defaults[key]
+    if value ~= nil then
+        return type(value) == "table" and table_util.clone_array(value) or value
     end
-    if type(default) == "table" then
-        return table_util.clone_array(default)
-    end
-    return default
+    return fallback
 end
 
 return {
@@ -36,23 +33,24 @@ return {
             fireMode = "hitscan",
             constantKey = "laser",
             damageType = "laser",
-            width = weapon_defaults.width or 1.2,
-            fadeDuration = weapon_defaults.fade_time or 0.08,
+            width = default("width", 1.2),
+            fadeDuration = default("fade_time", 0.08),
             fade = 0,
             firing = false,
-            maxRange = weapon_defaults.max_range or 600,
-            damagePerSecond = weapon_defaults.damage_per_second or 32,
-            offset = weapon_defaults.offset or 30,
-            color = with_default(weapon_defaults.color, { 0.2, 0.8, 1.0 }),
-            glowColor = with_default(weapon_defaults.glow_color, { 0.5, 0.9, 1.0 }),
+            maxRange = default("max_range", 600),
+            damagePerSecond = default("damage_per_second", 32),
+            energyPerSecond = default("energy_per_second", 24),
+            offset = default("offset", 30),
+            color = default("color", { 0.2, 0.8, 1.0 }),
+            glowColor = default("glow_color", { 0.5, 0.9, 1.0 }),
         },
         weaponMount = {
-            forward = weapon_defaults.forward or 12,
-            inset = weapon_defaults.inset or 0,
-            lateral = weapon_defaults.lateral or 0,
-            vertical = weapon_defaults.vertical or 0,
-            offsetX = weapon_defaults.offset_x or 0,
-            offsetY = weapon_defaults.offset_y or 0,
+            forward = default("forward", 12),
+            inset = default("inset", 0),
+            lateral = default("lateral", 0),
+            vertical = default("vertical", 0),
+            offsetX = default("offset_x", 0),
+            offsetY = default("offset_y", 0),
         },
     },
 }

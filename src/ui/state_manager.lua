@@ -1,5 +1,8 @@
 local UIStateManager = {}
 
+local window = require("src.ui.components.window")
+local dropdown = require("src.ui.components.dropdown")
+
 ---@diagnostic disable-next-line: undefined-global
 local love = love
 
@@ -60,6 +63,7 @@ local function createOptionsUIState()
         returnTo = nil,
         _was_mouse_down = false,
         syncPending = false,
+        resolutionDropdown = dropdown.create_state and dropdown.create_state() or nil,
     }
 end
 
@@ -75,6 +79,21 @@ local function createMapUIState()
         _was_mouse_down = false,
         _just_opened = false,
     }
+end
+
+local function reset_window_geometry(windowState)
+    if type(windowState) ~= "table" then
+        return
+    end
+
+    windowState.x = nil
+    windowState.y = nil
+    windowState.width = nil
+    windowState.height = nil
+    windowState.dragging = false
+    if windowState.resolutionDropdown and windowState.resolutionDropdown.open then
+        windowState.resolutionDropdown.open = false
+    end
 end
 
 local function hash_string(str)
@@ -398,7 +417,11 @@ function UIStateManager.isMapUIVisible(state)
 end
 
 function UIStateManager.isPaused(state)
-    return state and state.isPaused
+    return state and state.isPaused == true
+end
+
+function UIStateManager.isAnyUIVisible(state)
+    return any_modal_visible(state)
 end
 
 function UIStateManager.isDeathUIVisible(state)
@@ -424,6 +447,41 @@ end
 function UIStateManager.clearRespawnRequest(state)
     if state then
         state.respawnRequested = false
+    end
+end
+
+function UIStateManager.onResize(state, width, height)
+    if not state then
+        return
+    end
+
+    reset_window_geometry(state.cargoUI)
+    reset_window_geometry(state.pauseUI)
+    reset_window_geometry(state.optionsUI)
+    reset_window_geometry(state.skillsUI)
+    reset_window_geometry(state.deathUI)
+
+    if type(state.mapUI) == "table" then
+        reset_window_geometry(state.mapUI)
+        state.mapUI.mapDragging = false
+        state.mapUI._just_opened = true
+    end
+
+    if type(state.uiInput) == "table" then
+        state.uiInput.mouseCaptured = false
+        state.uiInput.keyboardCaptured = false
+    end
+
+    state._viewport = state._viewport or {}
+    state._viewport.width = width or (love.graphics and love.graphics.getWidth()) or state._viewport.width
+    state._viewport.height = height or (love.graphics and love.graphics.getHeight()) or state._viewport.height
+
+    if type(state) == "table" then
+        state._pendingCameraRefresh = true
+    end
+
+    if type(state.updateCamera) == "function" then
+        state:updateCamera()
     end
 end
 

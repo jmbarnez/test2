@@ -1,6 +1,7 @@
 local window = require("src.ui.components.window")
 local UIStateManager = require("src.ui.state_manager")
 local theme = require("src.ui.theme")
+local dropdown = require("src.ui.components.dropdown")
 
 ---@diagnostic disable-next-line: undefined-global
 local love = love
@@ -24,6 +25,8 @@ local BINDING_ACTIONS = {
     { id = "cycleWeaponPrev", label = "Cycle Weapon (Previous)" },
     { id = "cycleWeaponNext", label = "Cycle Weapon (Next)" },
     { id = "toggleCargo", label = "Toggle Cargo" },
+    { id = "toggleMap", label = "Toggle Map" },
+    { id = "toggleSkills", label = "Toggle Skills" },
     { id = "pause", label = "Pause / Back" },
 }
 
@@ -35,8 +38,16 @@ local DEFAULT_KEYBINDINGS = {
     cycleWeaponPrev = { "q" },
     cycleWeaponNext = { "e" },
     toggleCargo = { "tab" },
+    toggleMap = { "m" },
+    toggleSkills = { "k" },
     pause = { "escape" },
 }
+
+local STATIC_HOTKEYS = {
+    { key = "F11", description = "Enable Fullscreen" },
+}
+
+local GLOBAL_FULLSCREEN_STATE = {}
 
 local options_window = {}
 
@@ -124,7 +135,7 @@ local function apply_volume(settings)
     end
 end
 
-local function apply_window_flags(settings)
+local function apply_window_flags(settings, context)
     if not (love.window and love.window.setMode and love.window.getMode) then
         return
     end
@@ -151,6 +162,14 @@ local function apply_window_flags(settings)
         settings.windowWidth = width
         settings.windowHeight = height
         settings.resolutionIndex = resolve_resolution_index(width, height) or settings.resolutionIndex
+
+        if context then
+            if type(context.resize) == "function" then
+                context:resize(width, height)
+            else
+                UIStateManager.onResize(context, width, height)
+            end
+        end
     end
 end
 
@@ -325,48 +344,116 @@ function options_window.draw(context)
         end
         cursorY = cursorY + fonts.body:getHeight() + 12
 
-        local buttonsPerRow = 3
-        local resolutionButtonHeight = 32
-        local buttonSpacing = 12
-        local resolutionButtonWidth = (columnWidth - buttonSpacing * (buttonsPerRow - 1)) / buttonsPerRow
-        local rows = math.ceil(#RESOLUTIONS / buttonsPerRow)
+        local dropdownHeight = 32
+        local dropdownRect = {
+            x = viewportX,
+            y = viewportY + cursorY,
+            w = columnWidth,
+            h = dropdownHeight,
+        }
+
+        local currentIndex = resolve_resolution_index(settings.windowWidth, settings.windowHeight) or settings.resolutionIndex
+        local selectedLabel = "Select resolution"
+        if currentIndex and RESOLUTIONS[currentIndex] then
+            selectedLabel = RESOLUTIONS[currentIndex].label
+        elseif settings.windowWidth and settings.windowHeight then
+            selectedLabel = string.format("%dx%d", settings.windowWidth, settings.windowHeight)
+        end
 
         if mode == "draw" then
-            for index, res in ipairs(RESOLUTIONS) do
-                local col = (index - 1) % buttonsPerRow
-                local row = math.floor((index - 1) / buttonsPerRow)
-                local rect = {
-                    x = viewportX + col * (resolutionButtonWidth + buttonSpacing),
-                    y = viewportY + cursorY + row * (resolutionButtonHeight + buttonSpacing),
-                    w = resolutionButtonWidth,
-                    h = resolutionButtonHeight,
-                    res = res,
-                    index = index,
-                }
+            state._resolutionDropdownRect = dropdownRect
 
-                local isSelected = (not settings.fullscreen)
-                    and settings.windowWidth == res.width
-                    and settings.windowHeight == res.height
-                local hovered = point_in_rect(mouseX, mouseY, rect)
+            local dropdownItems = params.dropdownItems
+            if dropdownItems then
+                for i = #dropdownItems, 1, -1 do
+                    dropdownItems[i] = nil
+                end
+            end
 
-                love.graphics.setColor(isSelected and (windowColors.button_hover or { 0.18, 0.24, 0.32, 1 })
-                    or hovered and (windowColors.button_hover or { 0.18, 0.24, 0.32, 1 })
-                    or (windowColors.button or { 0.12, 0.16, 0.22, 1 }))
-                love.graphics.rectangle("fill", rect.x, rect.y, rect.w, rect.h, 6, 6)
+            local bgColor = windowColors.input_background or { 0.06, 0.07, 0.1, 1 }
+            love.graphics.setColor(bgColor)
+            love.graphics.rectangle("fill", dropdownRect.x, dropdownRect.y, dropdownRect.w, dropdownRect.h, 4, 4)
 
-                love.graphics.setColor(windowColors.border or { 0.12, 0.18, 0.28, 0.9 })
-                love.graphics.setLineWidth(1)
-                love.graphics.rectangle("line", rect.x + 0.5, rect.y + 0.5, rect.w - 1, rect.h - 1, 6, 6)
+            love.graphics.setColor(windowColors.border or { 0.12, 0.18, 0.28, 0.9 })
+            love.graphics.setLineWidth(1)
+            love.graphics.rectangle("line", dropdownRect.x + 0.5, dropdownRect.y + 0.5, dropdownRect.w - 1, dropdownRect.h - 1, 4, 4)
 
-                love.graphics.setFont(fonts.small)
-                love.graphics.setColor(windowColors.title_text or textColor)
-                love.graphics.printf(res.label, rect.x, rect.y + (rect.h - fonts.small:getHeight()) * 0.5, rect.w, "center")
+            love.graphics.setFont(fonts.body)
+            love.graphics.setColor(windowColors.text or textColor)
+            love.graphics.printf(selectedLabel, dropdownRect.x + 10, dropdownRect.y + (dropdownRect.h - fonts.body:getHeight()) * 0.5, dropdownRect.w - 40, "left")
 
-                params.resolutionButtons[#params.resolutionButtons + 1] = rect
+            local arrowX = dropdownRect.x + dropdownRect.w - 18
+            local arrowY = dropdownRect.y + dropdownRect.h * 0.5
+            love.graphics.setColor(windowColors.title_text or windowColors.text or textColor)
+            if state.resolutionDropdownOpen then
+                love.graphics.polygon("fill", arrowX - 6, arrowY - 2, arrowX + 6, arrowY - 2, arrowX, arrowY + 4)
+            else
+                love.graphics.polygon("fill", arrowX - 6, arrowY + 2, arrowX + 6, arrowY + 2, arrowX, arrowY - 4)
             end
         end
 
-        cursorY = cursorY + rows * (resolutionButtonHeight + buttonSpacing) + 10
+        cursorY = cursorY + dropdownHeight
+
+        if (mode == "draw" or mode == "measure") and state.resolutionDropdownOpen then
+            local dropdownItems = params.dropdownItems
+            local itemHeight = dropdownHeight
+            for index, res in ipairs(RESOLUTIONS) do
+                local itemRect = {
+                    x = viewportX,
+                    y = viewportY + cursorY + (index - 1) * itemHeight,
+                    w = columnWidth,
+                    h = itemHeight,
+                }
+
+                if mode == "draw" then
+                    if dropdownItems then
+                        dropdownItems[#dropdownItems + 1] = {
+                            x = itemRect.x,
+                            y = itemRect.y,
+                            w = itemRect.w,
+                            h = itemRect.h,
+                            res = res,
+                            index = index,
+                        }
+                    end
+
+                    local isSelected = currentIndex == index
+                    local hovered = point_in_rect(mouseX, mouseY, itemRect)
+                    local fillColor
+                    if hovered then
+                        fillColor = windowColors.button_hover or { 0.18, 0.24, 0.32, 1 }
+                    elseif isSelected then
+                        fillColor = windowColors.button_active or windowColors.button_hover or { 0.18, 0.24, 0.32, 1 }
+                    else
+                        fillColor = windowColors.button or { 0.12, 0.16, 0.22, 1 }
+                    end
+
+                    love.graphics.setColor(fillColor)
+                    love.graphics.rectangle("fill", itemRect.x, itemRect.y, itemRect.w, itemRect.h, 4, 4)
+
+                    love.graphics.setColor(windowColors.border or { 0.12, 0.18, 0.28, 0.9 })
+                    love.graphics.setLineWidth(1)
+                    love.graphics.rectangle("line", itemRect.x + 0.5, itemRect.y + 0.5, itemRect.w - 1, itemRect.h - 1, 4, 4)
+
+                    love.graphics.setFont(fonts.small)
+                    love.graphics.setColor(windowColors.title_text or textColor)
+                    love.graphics.printf(res.label, itemRect.x + 10, itemRect.y + (itemRect.h - fonts.small:getHeight()) * 0.5, itemRect.w - 20, "left")
+                end
+            end
+
+            cursorY = cursorY + #RESOLUTIONS * itemHeight
+        else
+            if mode == "draw" then
+                local dropdownItems = params.dropdownItems
+                if dropdownItems then
+                    for i = #dropdownItems, 1, -1 do
+                        dropdownItems[i] = nil
+                    end
+                end
+            end
+        end
+
+        cursorY = cursorY + 10
 
         local toggleWidth = 120
         local toggleHeight = 32
@@ -447,6 +534,31 @@ function options_window.draw(context)
             cursorY = cursorY + fonts.body:getHeight() + 18
         end
 
+        if #STATIC_HOTKEYS > 0 then
+            cursorY = cursorY + 4
+            if mode == "draw" then
+                love.graphics.setFont(fonts.small)
+                love.graphics.setColor(windowColors.muted or { 0.5, 0.55, 0.6, 1 })
+                love.graphics.print("Additional Hotkeys", viewportX, viewportY + cursorY)
+                love.graphics.setColor(textColor)
+            end
+            cursorY = cursorY + fonts.small:getHeight() + 6
+
+            local keyColumnWidth = 80
+            local rowSpacing = 12
+            for _, entry in ipairs(STATIC_HOTKEYS) do
+                if mode == "draw" then
+                    love.graphics.setFont(fonts.body)
+                    love.graphics.setColor(windowColors.title_text or textColor)
+                    love.graphics.print(entry.key, viewportX, viewportY + cursorY)
+
+                    love.graphics.setColor(textColor)
+                    love.graphics.print(entry.description, viewportX + keyColumnWidth, viewportY + cursorY)
+                end
+                cursorY = cursorY + fonts.body:getHeight() + rowSpacing
+            end
+        end
+
         cursorY = cursorY + 8
 
         heading("Utilities")
@@ -515,7 +627,6 @@ function options_window.draw(context)
     }
 
     state._sliderRects = {}
-    state._resolutionButtons = {}
     state._bindingButtons = {}
     state._fullscreenRect = nil
     state._vsyncRect = nil
@@ -524,6 +635,11 @@ function options_window.draw(context)
     state._maxScroll = maxScroll
     state._viewportHeight = viewportHeight
     state._contentHeight = contentHeight
+    state._resolutionDropdownRect = nil
+    state._resolutionDropdownItems = state._resolutionDropdownItems or {}
+    for i = #state._resolutionDropdownItems, 1, -1 do
+        state._resolutionDropdownItems[i] = nil
+    end
 
     love.graphics.setScissor(viewportRect.x, viewportRect.y, viewportRect.w, viewportRect.h)
     love.graphics.setColor(textColor)
@@ -532,7 +648,7 @@ function options_window.draw(context)
     layout_content("draw", {
         startY = -state.scroll,
         sliderRects = state._sliderRects,
-        resolutionButtons = state._resolutionButtons,
+        dropdownItems = state._resolutionDropdownItems,
         bindingButtons = state._bindingButtons,
         refs = state,
     })
@@ -633,42 +749,72 @@ function options_window.draw(context)
         end
 
         if justPressed then
-            for _, rect in ipairs(state._resolutionButtons) do
-                if point_in_rect(mouseX, mouseY, rect) then
+            local dropdownHandled = false
+            local dropdownRect = state._resolutionDropdownRect
+            local dropdownItems = state._resolutionDropdownItems
+
+            if dropdownRect and point_in_rect(mouseX, mouseY, dropdownRect) then
+                state.resolutionDropdownOpen = not state.resolutionDropdownOpen
+                dropdownHandled = true
+            elseif state.resolutionDropdownOpen then
+                local selectedItem
+                if dropdownItems then
+                    for _, item in ipairs(dropdownItems) do
+                        if point_in_rect(mouseX, mouseY, item) then
+                            selectedItem = item
+                            break
+                        end
+                    end
+                end
+
+                if selectedItem then
                     if settings.fullscreen then
                         settings.fullscreen = false
                     end
-                    settings.windowWidth = rect.res.width
-                    settings.windowHeight = rect.res.height
-                    settings.resolutionIndex = rect.index
-                    apply_window_flags(settings)
-                    break
+                    settings.windowWidth = selectedItem.res.width
+                    settings.windowHeight = selectedItem.res.height
+                    settings.resolutionIndex = selectedItem.index
+                    apply_window_flags(settings, context)
+                end
+
+                state.resolutionDropdownOpen = false
+                dropdownHandled = true
+            end
+
+            if not dropdownHandled and state.resolutionDropdownOpen then
+                state.resolutionDropdownOpen = false
+            end
+
+            if not dropdownHandled then
+                for _, rect in ipairs(state._bindingButtons) do
+                    if point_in_rect(mouseX, mouseY, rect) then
+                        state.awaitingBindAction = rect.action.id
+                        state.awaitingBindActionLabel = rect.action.label
+                        dropdownHandled = true
+                        break
+                    end
                 end
             end
 
-            for _, rect in ipairs(state._bindingButtons) do
-                if point_in_rect(mouseX, mouseY, rect) then
-                    state.awaitingBindAction = rect.action.id
-                    state.awaitingBindActionLabel = rect.action.label
-                    break
+            if dropdownHandled then
+                -- Already handled this click (dropdown or bindings), skip remaining checks
+            else
+                if state._fullscreenRect and point_in_rect(mouseX, mouseY, state._fullscreenRect) then
+                    settings.fullscreen = not settings.fullscreen
+                    apply_window_flags(settings, context)
+                elseif state._vsyncRect and point_in_rect(mouseX, mouseY, state._vsyncRect) then
+                    settings.vsync = (settings.vsync or 0) ~= 0 and 0 or 1
+                    apply_window_flags(settings, context)
+                elseif state._restoreRect and point_in_rect(mouseX, mouseY, state._restoreRect) then
+                    settings.masterVolume = 1
+                    settings.musicVolume = 1
+                    settings.sfxVolume = 1
+                    settings.fullscreen = false
+                    settings.vsync = 0
+                    settings.keybindings = copy_bindings(DEFAULT_KEYBINDINGS)
+                    apply_volume(settings)
+                    apply_window_flags(settings, context)
                 end
-            end
-
-            if state._fullscreenRect and point_in_rect(mouseX, mouseY, state._fullscreenRect) then
-                settings.fullscreen = not settings.fullscreen
-                apply_window_flags(settings)
-            elseif state._vsyncRect and point_in_rect(mouseX, mouseY, state._vsyncRect) then
-                settings.vsync = (settings.vsync or 0) ~= 0 and 0 or 1
-                apply_window_flags(settings)
-            elseif state._restoreRect and point_in_rect(mouseX, mouseY, state._restoreRect) then
-                settings.masterVolume = 1
-                settings.musicVolume = 1
-                settings.sfxVolume = 1
-                settings.fullscreen = false
-                settings.vsync = 0
-                settings.keybindings = copy_bindings(DEFAULT_KEYBINDINGS)
-                apply_volume(settings)
-                apply_window_flags(settings)
             end
         end
     end
@@ -704,6 +850,11 @@ function options_window.keypressed(context, key)
 
         state.awaitingBindAction = nil
         state.awaitingBindActionLabel = nil
+        return true
+    end
+
+    if key == "f11" then
+        options_window.toggle_fullscreen(context)
         return true
     end
 
@@ -750,6 +901,45 @@ end
 
 function options_window.get_default_keybindings()
     return copy_bindings(DEFAULT_KEYBINDINGS)
+end
+
+function options_window.toggle_fullscreen(context)
+    if not (love and love.window and love.window.setMode and love.window.getMode) then
+        return false
+    end
+
+    local state = context and context.optionsUI
+    if not state then
+        if context then
+            state = context._fullscreenOptionsState
+            if not state then
+                state = {}
+                context._fullscreenOptionsState = state
+            end
+        else
+            state = GLOBAL_FULLSCREEN_STATE
+        end
+    end
+
+    local settings = ensure_settings(state, context)
+    settings._windowedWidth = settings._windowedWidth or settings.windowWidth
+    settings._windowedHeight = settings._windowedHeight or settings.windowHeight
+
+    if not settings.fullscreen then
+        settings._windowedWidth = settings.windowWidth
+        settings._windowedHeight = settings.windowHeight
+    end
+
+    settings.fullscreen = not settings.fullscreen
+
+    if not settings.fullscreen and settings._windowedWidth and settings._windowedHeight then
+        settings.windowWidth = settings._windowedWidth
+        settings.windowHeight = settings._windowedHeight
+    end
+
+    apply_window_flags(settings, context)
+
+    return settings.fullscreen
 end
 
 return options_window

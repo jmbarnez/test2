@@ -6,6 +6,7 @@
 ---@diagnostic disable: undefined-global
 
 local constants = require("src.constants.game")
+local AudioManager = require("src.audio.manager")
 local PlayerManager = require("src.player.manager")
 local PlayerWeapons = require("src.player.weapons")
 local UIStateManager = require("src.ui.state_manager")
@@ -37,6 +38,24 @@ local function resolveSectorId(config)
     return nil
 end
 
+local CONTROL_KEYS = { "lctrl", "rctrl" }
+
+local function is_control_modifier_active()
+    if not (love and love.keyboard and love.keyboard.isDown) then
+        return false
+    end
+
+    for i = 1, #CONTROL_KEYS do
+        local key = CONTROL_KEYS[i]
+        ---@cast key love.KeyboardConstant
+        if love.keyboard.isDown(key) then
+            return true
+        end
+    end
+
+    return false
+end
+
 function gameplay:wheelmoved(x, y)
     if UIStateManager.isOptionsUIVisible(self) then
         if options_window.wheelmoved(self, x, y) then
@@ -51,6 +70,31 @@ function gameplay:wheelmoved(x, y)
     end
 
     cargo_window.wheelmoved(self, x, y)
+
+    if not y or y == 0 then
+        return
+    end
+
+    if self.uiInput and self.uiInput.mouseCaptured then
+        return
+    end
+
+    local cam = self.camera
+    if not cam then
+        return
+    end
+
+    local currentZoom = cam.zoom or 1
+    local zoomStep = 0.1
+    local desiredZoom = currentZoom + y * zoomStep
+    local clampedZoom = math.max(0.5, math.min(2, desiredZoom))
+
+    if math.abs(clampedZoom - currentZoom) < 1e-4 then
+        return
+    end
+
+    cam.zoom = clampedZoom
+    View.updateCamera(self)
 end
 
 function gameplay:getLocalPlayer()
@@ -73,7 +117,10 @@ function gameplay:enter(_, config)
     World.loadSector(self, sectorId)
     World.initialize(self)
     View.initialize(self)
+    self.activeTarget = nil
     Systems.initialize(self, Entities.damage)
+
+    AudioManager.play_music("music:adrift", { loop = true, restart = true })
 
     local player = Entities.spawnPlayer(self)
     if player then
@@ -89,9 +136,12 @@ end
 function gameplay:leave()
     PlayerManager.clearShip(self)
     Entities.destroyWorldEntities(self.world)
+    self.activeTarget = nil
     Systems.teardown(self)
     World.teardown(self)
     View.teardown(self)
+
+    AudioManager.stop_music()
 
     if self.engineTrail then
         self.engineTrail:clear()
@@ -108,6 +158,11 @@ end
 function gameplay:update(dt)
     if not self.world then
         return
+    end
+
+    if self._pendingCameraRefresh then
+        View.updateCamera(self)
+        self._pendingCameraRefresh = nil
     end
 
     if UIStateManager.isRespawnRequested(self) then
@@ -209,11 +264,17 @@ function gameplay:onPlayerDestroyed(entity)
 
     UIStateManager.showDeathUI(self)
     UIStateManager.clearRespawnRequest(self)
+    View.updateCamera(self)
 end
 
 function gameplay:draw()
     if not (self.world and self.renderSystem) then
         return
+    end
+
+    if self._pendingCameraRefresh then
+        View.updateCamera(self)
+        self._pendingCameraRefresh = nil
     end
 
     local clearColor = constants.render.clear_color or { 0, 0, 0, 1 }
@@ -241,10 +302,49 @@ end
 
 function gameplay:resize(w, h)
     View.resize(self, w, h)
+    UIStateManager.onResize(self, w, h)
+    View.updateCamera(self)
 end
 
 function gameplay:updateCamera()
     View.updateCamera(self)
+end
+
+function gameplay:mousepressed(_, _, button)
+    if button ~= 1 then
+        return
+    end
+
+    if UIStateManager.isAnyUIVisible(self) then
+        return
+    end
+
+    local uiInput = self.uiInput
+    if uiInput and uiInput.mouseCaptured then
+        return
+    end
+
+    if not is_control_modifier_active() then
+        return
+    end
+
+    local cache = self.targetingCache
+    local hovered = cache and cache.hoveredEntity or nil
+
+    if hovered and hovered.enemy then
+        if hovered ~= self.activeTarget then
+            self.activeTarget = hovered
+        else
+            self.activeTarget = nil
+        end
+    else
+        self.activeTarget = nil
+    end
+
+    if cache then
+        cache.activeEntity = self.activeTarget
+        cache.entity = self.activeTarget or cache.hoveredEntity
+    end
 end
 
 function gameplay:keypressed(key)
@@ -262,6 +362,11 @@ function gameplay:keypressed(key)
         if options_window.keypressed(self, key) then
             return
         end
+    end
+
+    if key == "f11" then
+        options_window.toggle_fullscreen(self)
+        return
     end
 
     if UIStateManager.isPauseUIVisible(self) then

@@ -4,7 +4,7 @@
 -- Manages movement, rotation, and other player actions
 -- Part of the ECS architecture using tiny-ecs
 
----@diagnostic disable: undefined-global, deprecated
+----@diagnostic disable: undefined-global
 local tiny = require("libs.tiny")
 local vector = require("src.util.vector")
 return function(context)

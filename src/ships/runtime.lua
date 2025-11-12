@@ -269,24 +269,9 @@ local function update_energy(entity, dt)
     local current = tonumber(energy.current) or maxEnergy
     local rechargeTimer = math.max(0, tonumber(energy.rechargeTimer) or 0)
     local regenRate = math.max(0, tonumber(energy.regen) or 0)
-    local thrustDrain = math.max(0, tonumber(energy.thrustDrain) or maxEnergy)
 
     if entity.player then
-        local isThrusting = not not entity.isThrusting
-
-        if isThrusting and thrustDrain > 0 then
-            local maxThrust = tonumber(entity.maxThrust) or (entity.stats and entity.stats.main_thrust) or 0
-            local currentThrust = tonumber(entity.currentThrust) or 0
-            local thrustRatio
-            if maxThrust > 0 then
-                thrustRatio = math.min(1, math.max(0, currentThrust / maxThrust))
-            else
-                thrustRatio = 1
-            end
-
-            local drainRate = thrustDrain * thrustRatio
-            current = math.max(0, current - drainRate * dt)
-        elseif regenRate > 0 then
+        if regenRate > 0 then
             current = math.min(maxEnergy, current + regenRate * dt)
         end
     else

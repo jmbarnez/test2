@@ -48,6 +48,7 @@ return {
             offset = 32,
             color = { 1.0, 1.0, 0.2 },
             glowColor = { 1.0, 0.9, 0.5 },
+            energyPerShot = 0,
             projectileBlueprint = {
                 projectile = {
                     lifetime = 2.0,

@@ -5,14 +5,11 @@ local constants = require("src.constants.game")
 local vector = require("src.util.vector")
 local Intent = require("src.input.intent")
 local damage_util = require("src.util.damage")
-local table_util = require("src.util.table")
+local ProjectileFactory = require("src.entities.projectile_factory")
 
 local love = love
 
-local DEFAULT_PROJECTILE_COLOR = { 0.2, 0.8, 1.0 }
-local DEFAULT_PROJECTILE_GLOW = { 0.5, 0.9, 1.0 }
 local DEFAULT_WEAPON_OFFSET = 30
-local PROJECTILE_GROUP_INDEX = -32
 
 local function resolve_damage_multiplier(shooter)
     if shooter and shooter.enemy then
@@ -20,9 +17,6 @@ local function resolve_damage_multiplier(shooter)
     end
     return 1
 end
-
-local clone_array = table_util.clone_array
-local deep_copy = table_util.deep_copy
 
 local function compute_muzzle_origin(entity)
     local weapon = entity.weapon or {}
@@ -61,128 +55,6 @@ local function compute_muzzle_origin(entity)
 
     return startX, startY
 end
-
-local function spawn_projectile(tinyWorld, physicsWorld, shooter, startX, startY, dirX, dirY, weapon)
-    local speed = weapon.projectileSpeed or 450
-    local lifetime = weapon.projectileLifetime or 2.0
-    local size = weapon.projectileSize or 6
-    local damage = weapon.damage or 45
-    local damageMultiplier = resolve_damage_multiplier(shooter)
-
-    local blueprint = weapon.projectileBlueprint
-    local projectile = blueprint and deep_copy(blueprint) or {}
-
-    projectile.position = projectile.position or {}
-    projectile.position.x = startX
-    projectile.position.y = startY
-
-    projectile.velocity = projectile.velocity or {}
-    projectile.velocity.x = dirX * speed
-    projectile.velocity.y = dirY * speed
-
-    projectile.rotation = math.atan2(dirY, dirX) + math.pi * 0.5
-
-    local projectileComponent = projectile.projectile or {}
-    projectileComponent.lifetime = projectileComponent.lifetime or lifetime
-    local copies = clone_array(projectileComponent.effects) or {}
-    projectileComponent.damage = (projectileComponent.damage or damage) * damageMultiplier
-    projectileComponent.owner = shooter
-    projectileComponent.ownerPlayerId = shooter and shooter.playerId or nil
-    projectileComponent.groupIndex = projectileComponent.groupIndex or PROJECTILE_GROUP_INDEX
-    if not projectileComponent.damageType then
-        projectileComponent.damageType = weapon.damageType
-            or (constants.damage and constants.damage.defaultDamageType)
-            or "default"
-    end
-    projectile.projectile = projectileComponent
-
-    local drawable = projectile.drawable or {}
-    drawable.type = drawable.type or "projectile"
-    drawable.size = drawable.size or size
-    drawable.color = drawable.color or clone_array(weapon.color) or clone_array(DEFAULT_PROJECTILE_COLOR)
-    drawable.glowColor = drawable.glowColor or clone_array(weapon.glowColor) or clone_array(DEFAULT_PROJECTILE_GLOW)
-    projectile.drawable = drawable
-
-    local projectileSize = drawable.size or size
-    local physicsConfig = projectile.physics or weapon.projectilePhysics
-
-    -- Copy faction from shooter for friend/foe identification
-    if shooter.faction then
-        projectile.faction = shooter.faction
-    end
-    if shooter.player then
-        projectile.playerProjectile = true
-    end
-    if shooter.enemy then
-        projectile.enemyProjectile = true
-    end
-    
-    -- Create physics body for projectile
-    if physicsWorld then
-        local bodyType = (physicsConfig and physicsConfig.type) or "dynamic"
-        local body = love.physics.newBody(physicsWorld, startX, startY, bodyType)
-        local bulletEnabled = true
-        if physicsConfig and physicsConfig.bullet ~= nil then
-            bulletEnabled = physicsConfig.bullet
-        end
-        body:setBullet(bulletEnabled)
-        body:setLinearVelocity(dirX * speed, dirY * speed)
-        body:setAngle(math.atan2(dirY, dirX) + math.pi * 0.5)
-        if physicsConfig then
-            if physicsConfig.linearDamping or physicsConfig.damping then
-                body:setLinearDamping(physicsConfig.linearDamping or physicsConfig.damping)
-            end
-            if physicsConfig.angularDamping then
-                body:setAngularDamping(physicsConfig.angularDamping)
-            end
-            if physicsConfig.gravityScale then
-                body:setGravityScale(physicsConfig.gravityScale)
-            end
-            if physicsConfig.fixedRotation ~= nil then
-                body:setFixedRotation(physicsConfig.fixedRotation)
-            end
-        end
-        
-        local shape = love.physics.newCircleShape(projectileSize * 0.5)
-        local defaultDensity = weapon.projectileDensity or 1
-        local density = defaultDensity
-        if physicsConfig and physicsConfig.density then
-            density = physicsConfig.density
-        end
-        local fixture = love.physics.newFixture(body, shape, density)
-        if physicsConfig and physicsConfig.friction then
-            fixture:setFriction(physicsConfig.friction)
-        end
-        if physicsConfig and physicsConfig.restitution then
-            fixture:setRestitution(physicsConfig.restitution)
-        end
-        local sensor = true
-        if physicsConfig and physicsConfig.sensor ~= nil then
-            sensor = physicsConfig.sensor
-        end
-        fixture:setSensor(sensor)
-        fixture:setUserData({ 
-            entity = projectile, 
-            type = "projectile",
-            collider = "projectile"
-        })
-        if projectileComponent.groupIndex then
-            fixture:setGroupIndex(projectileComponent.groupIndex)
-        end
-        if physicsConfig and physicsConfig.mass then
-            body:setMassData(physicsConfig.mass, physicsConfig.massCenterX or 0, physicsConfig.massCenterY or 0, physicsConfig.inertia or body:getInertia())
-        else
-            body:resetMassData()
-        end
-        
-        projectile.body = body
-        projectile.fixture = fixture
-    end
-    
-    tinyWorld:add(projectile)
-    return projectile
-end
-
 local function spawn_beam_sparks(container, x, y, dirX, dirY, beamColor)
     if not container then
         return
@@ -468,7 +340,7 @@ return function(context)
                         -- Only server/offline spawns projectiles; clients receive via snapshots
                         local isClient = context.netRole == 'client'
 
-                        if fire and (not weapon.cooldown or weapon.cooldown <= 0) and not isClient then
+                        if fire and (not weapon.cooldown or weapon.cooldown <= 0) then
                             if entity and entity.player then
                                 local shotCost = weapon.energyPerShot or weapon.energyCost or weapon.energyDrain or weapon.energyPerSecond or 14
                                 if not has_energy(entity, shotCost) then
@@ -477,7 +349,7 @@ return function(context)
                             end
 
                             if fire then
-                                spawn_projectile(world, physicsWorld, entity, startX, startY, dirX, dirY, weapon)
+                                ProjectileFactory.spawn(world, physicsWorld, entity, startX, startY, dirX, dirY, weapon)
 
                                 -- Reset cooldown
                                 local fireRate = weapon.fireRate or 0.5
