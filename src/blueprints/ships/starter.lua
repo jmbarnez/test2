@@ -193,6 +193,7 @@ return {
                 { weapon = "cannon" },
                 { weapon = "laser_beam" },
                 { weapon = "shock_burst_launcher" },
+                { module = "shield_t1" },
             },
         },
         magnet = {

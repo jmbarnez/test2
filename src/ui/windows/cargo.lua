@@ -23,6 +23,37 @@ local theme_spacing = theme.spacing
 local window_metrics = theme.window
 local set_color = theme.utils.set_color
 
+local function is_module_item(item)
+    if type(item) ~= "table" then
+        return false
+    end
+
+    if item.type == "module" then
+        return true
+    end
+
+    if type(item.id) == "string" and item.id:match("^module:") then
+        return true
+    end
+
+    return false
+end
+
+local function can_drop_module_item(item, slot)
+    if not (is_module_item(item) and type(slot) == "table") then
+        return false
+    end
+
+    local slotType = slot.type
+    local itemSlot = item.slot or slotType
+
+    if slotType and itemSlot and slotType ~= itemSlot then
+        return false
+    end
+
+    return true
+end
+
 --- Clears search input focus
 ---@param context table The game context
 ---@param state table The cargo UI state
@@ -39,8 +70,9 @@ end
 ---@param fonts table Font table from theme
 ---@param mouse_x number Mouse X position
 ---@param mouse_y number Mouse Y position
----@return table|nil hoveredItem Item hovered in module panel
-local function draw_module_panel(moduleSlots, panel, fonts, mouse_x, mouse_y)
+---@param dragItem table|nil Item currently being dragged
+---@return table|nil result Table containing hover information and slot rects
+local function draw_module_panel(moduleSlots, panel, fonts, mouse_x, mouse_y, dragItem)
     if not panel or panel.width <= 0 or panel.height <= 0 then
         return nil
     end
@@ -72,12 +104,21 @@ local function draw_module_panel(moduleSlots, panel, fonts, mouse_x, mouse_y)
     local maxTextWidth = panel.x + panel.width - textStartX - 12
 
     local hoveredItem
+    local hoveredSlot
+    local hoveredSlotIndex
+    local hoveredSlotNumber
+    local slotRects = {}
     love.graphics.setFont(fonts.small or fonts.body)
 
     if #moduleSlots == 0 then
         set_color(window_colors.muted or { 0.55, 0.57, 0.62, 1 })
         love.graphics.printf("No module slots", panel.x, slotStartY, panel.width, "center")
-        return nil
+        return {
+            hoveredItem = nil,
+            hoveredSlot = nil,
+            hoveredSlotIndex = nil,
+            slotRects = slotRects,
+        }
     end
 
     for index = 1, #moduleSlots do
@@ -87,20 +128,48 @@ local function draw_module_panel(moduleSlots, panel, fonts, mouse_x, mouse_y)
             break
         end
 
-        local isHovered = mouse_x >= panel.x and mouse_x <= panel.x + panel.width
+        local rectX = panel.x + 12
+        local rectWidth = panel.width - 24
+        local rectHeight = slotHeight
+        slotRects[index] = {
+            x = rectX,
+            y = slotY,
+            width = rectWidth,
+            height = rectHeight,
+        }
+
+        local isHovered = mouse_x >= rectX and mouse_x <= rectX + rectWidth
             and mouse_y >= slotY and mouse_y <= slotY + slotHeight
 
         local slotBackground = window_colors.slot_background or { 0.07, 0.09, 0.13, 0.9 }
+        local slotBorder = window_colors.slot_border or window_colors.border or { 0.1, 0.12, 0.16, 0.8 }
+
+        local canDrop = dragItem and can_drop_module_item(dragItem, slot)
         if isHovered then
-            slotBackground = window_colors.row_hover or { 0.12, 0.16, 0.22, 1 }
+            hoveredSlot = slot
+            hoveredSlotIndex = index
+            if dragItem then
+                if canDrop then
+                    slotBackground = window_colors.slot_drop_valid or window_colors.row_hover or { 0.16, 0.32, 0.48, 1 }
+                    slotBorder = window_colors.accent or { 0.2, 0.5, 0.9, 1 }
+                else
+                    slotBackground = window_colors.slot_drop_invalid or { 0.3, 0.12, 0.14, 1 }
+                    slotBorder = window_colors.danger or { 0.85, 0.32, 0.32, 1 }
+                end
+            else
+                slotBackground = window_colors.row_hover or { 0.12, 0.16, 0.22, 1 }
+                slotBorder = window_colors.slot_border or window_colors.border or { 0.1, 0.12, 0.16, 0.8 }
+            end
+        elseif dragItem and canDrop then
+            slotBorder = window_colors.accent or { 0.2, 0.5, 0.9, 1 }
         end
 
         set_color(slotBackground)
-        love.graphics.rectangle("fill", panel.x + 12, slotY, panel.width - 24, slotHeight, 4, 4)
+        love.graphics.rectangle("fill", rectX, slotY, rectWidth, rectHeight, 4, 4)
 
-        set_color(window_colors.slot_border or window_colors.border or { 0.1, 0.12, 0.16, 0.8 })
+        set_color(slotBorder)
         love.graphics.setLineWidth(1)
-        love.graphics.rectangle("line", panel.x + 12.5, slotY + 0.5, panel.width - 25, slotHeight - 1, 4, 4)
+        love.graphics.rectangle("line", rectX + 0.5, slotY + 0.5, rectWidth - 1, rectHeight - 1, 4, 4)
 
         local item = slot and slot.item or nil
         if item and item.icon then
@@ -136,7 +205,12 @@ local function draw_module_panel(moduleSlots, panel, fonts, mouse_x, mouse_y)
         end
     end
 
-    return hoveredItem
+    return {
+        hoveredItem = hoveredItem,
+        hoveredSlot = hoveredSlot,
+        hoveredSlotIndex = hoveredSlotIndex,
+        slotRects = slotRects,
+    }
 end
 
 --- Gets window dimensions
@@ -169,6 +243,8 @@ end
 ---@param uiInput table|nil UI input state
 ---@return table searchRect
 ---@return table sortRect
+---@return boolean searchHovered
+---@return boolean sortHovered
 local function draw_search_and_sort(content, state, fonts, mouse_x, mouse_y, just_pressed, uiInput)
     local searchHeight = fonts.body:getHeight() + 12
     local searchSpacing = 6
@@ -280,7 +356,7 @@ local function draw_search_and_sort(content, state, fonts, mouse_x, mouse_y, jus
         state.sortMode = sortInfo.next or "name"
     end
 
-    return searchRect, sortRect
+    return searchRect, sortRect, searchHovered, sortHovered
 end
 
 --- Draws the cargo window
@@ -325,6 +401,7 @@ function cargo_window.draw(context)
     local mouse_x, mouse_y = love.mouse.getPosition()
     local is_mouse_down = love.mouse.isDown(1)
     local just_pressed = is_mouse_down and not state._was_mouse_down
+    local just_released = (not is_mouse_down) and state._was_mouse_down
 
     if state.isSearchActive and uiInput then
         uiInput.keyboardCaptured = true
@@ -341,6 +418,7 @@ function cargo_window.draw(context)
     local moduleSlotCount = moduleSlots and #moduleSlots or 0
     local currencyValue = CargoData.getCurrency(context, player)
     local currencyText = currencyValue ~= nil and CargoData.formatCurrency(currencyValue) or "--"
+    local dragItem = state.draggedItem
 
     love.graphics.push("all")
     love.graphics.origin()
@@ -421,7 +499,7 @@ function cargo_window.draw(context)
     end
     
     -- Draw search and sort controls
-    local searchRect, sortRect = draw_search_and_sort(itemArea, state, fonts, mouse_x, mouse_y, just_pressed, uiInput)
+    local searchRect, sortRect, searchHovered, sortHovered = draw_search_and_sort(itemArea, state, fonts, mouse_x, mouse_y, just_pressed, uiInput)
     
     local searchHeight = fonts.body:getHeight() + 12
     local searchSpacing = 6
@@ -446,6 +524,8 @@ function cargo_window.draw(context)
     -- Draw item slots
     local hoveredItem
     local hoveredSlotIndex
+    local hoveredSlotRect
+    local cargoSlotRects = {}
 
     for slotNumber = 1, totalVisibleSlots do
         local slotIndex = slotNumber - 1
@@ -455,13 +535,26 @@ function cargo_window.draw(context)
         local slotY = gridStartY + row * (slotWithLabelHeight + slotPadding)
 
         local item = filteredItems[slotNumber]
+        cargoSlotRects[slotNumber] = {
+            x = slotX,
+            y = slotY,
+            width = slotSize,
+            height = slotSize,
+            item = item,
+            index = slotNumber,
+        }
+
         local isMouseOver = mouse_x >= slotX and mouse_x <= slotX + slotSize and
             mouse_y >= slotY and mouse_y <= slotY + slotSize
 
         if isMouseOver then
             hoveredItem = item
             hoveredSlotIndex = slotIndex
-            CargoTooltip.create(item)
+            hoveredSlotNumber = slotNumber
+            hoveredSlotRect = cargoSlotRects[slotNumber]
+            if not dragItem then
+                CargoTooltip.create(item)
+            end
         end
 
         local isSelected = state._hovered_slot == slotIndex
@@ -477,21 +570,58 @@ function cargo_window.draw(context)
     state._was_mouse_down = is_mouse_down
 
     -- Draw module panel if available
+    local modulePanelResult
     if showModulePanel and modulePanel then
-        local hoveredModuleItem = draw_module_panel(moduleSlots, modulePanel, fonts, mouse_x, mouse_y)
-        if hoveredModuleItem then
-            CargoTooltip.create(hoveredModuleItem)
+        modulePanelResult = draw_module_panel(moduleSlots, modulePanel, fonts, mouse_x, mouse_y, dragItem)
+        if modulePanelResult and modulePanelResult.hoveredItem and not dragItem
+            and not searchHovered and not sortHovered then
+            CargoTooltip.create(modulePanelResult.hoveredItem)
+        end
+    end
+
+    -- Initiate dragging when clicking on a module-capable item
+    local clickOverSearchOrSort = (searchHovered or sortHovered)
+    if not dragItem and just_pressed and not clickOverSearchOrSort then
+        if hoveredItem then
+            state.draggedItem = hoveredItem
+            state.dragSource = "cargo"
+            state.dragIndex = hoveredSlotNumber
+        elseif modulePanelResult and modulePanelResult.hoveredSlot and modulePanelResult.hoveredItem
+            and is_module_item(modulePanelResult.hoveredItem) then
+            state.draggedItem = modulePanelResult.hoveredItem
+            state.dragSource = "module"
+            state.dragIndex = modulePanelResult.hoveredSlotIndex
+        end
+        dragItem = state.draggedItem
+    end
+
+    -- Handle drop logic when releasing mouse button
+    if dragItem and just_released then
+        local handled = false
+
+        if modulePanelResult and modulePanelResult.hoveredSlot and can_drop_module_item(dragItem, modulePanelResult.hoveredSlot) then
+            Modules.equip(player, dragItem, modulePanelResult.hoveredSlotIndex)
+            handled = true
+        elseif state.dragSource == "module" then
+            local insideCargoArea = mouse_x >= itemArea.x and mouse_x <= itemArea.x + itemArea.width and
+                mouse_y >= itemArea.y and mouse_y <= itemArea.y + itemArea.height
+            if insideCargoArea then
+                Modules.unequip(player, state.dragIndex)
+                handled = true
+            end
         end
 
-        set_color(window_colors.border or { 0.08, 0.08, 0.12, 0.55 })
-        love.graphics.setLineWidth(1)
-        love.graphics.rectangle(
-            "line",
-            modulePanel.x - panelSpacing * 0.5,
-            content.y,
-            1,
-            content.height
-        )
+        if handled then
+            Modules.sync_from_cargo(player)
+            if player.cargo then
+                player.cargo.dirty = true
+            end
+        end
+
+        state.draggedItem = nil
+        state.dragSource = nil
+        state.dragIndex = nil
+        dragItem = nil
     end
 
     -- Draw bottom bar (capacity and currency)
@@ -501,6 +631,33 @@ function cargo_window.draw(context)
         if barWidth then
             CargoRendering.drawCurrency(bottomBar, barWidth, currencyText, fonts)
         end
+    end
+
+    -- Draw dragged item overlay
+    if dragItem then
+        local iconSize = 44
+        local overlayX = mouse_x + 18
+        local overlayY = mouse_y + 22
+
+        love.graphics.push("all")
+        set_color(window_colors.drag_shadow or { 0, 0, 0, 0.35 })
+        love.graphics.rectangle("fill", overlayX - 6, overlayY - 6, iconSize + 12, iconSize + 12, 4, 4)
+
+        set_color(window_colors.drag_background or { 0.12, 0.16, 0.22, 0.9 })
+        love.graphics.rectangle("fill", overlayX - 4, overlayY - 4, iconSize + 8, iconSize + 8, 4, 4)
+
+        set_color(window_colors.drag_border or window_colors.accent or { 0.2, 0.5, 0.9, 1 })
+        love.graphics.setLineWidth(1)
+        love.graphics.rectangle("line", overlayX - 4 + 0.5, overlayY - 4 + 0.5, iconSize + 8 - 1, iconSize + 8 - 1, 4, 4)
+
+        if dragItem.icon then
+            CargoRendering.drawItemIcon(dragItem.icon, overlayX, overlayY, iconSize)
+        else
+            set_color(window_colors.muted or { 0.5, 0.55, 0.6, 1 })
+            love.graphics.setLineWidth(1.25)
+            love.graphics.circle("line", overlayX + iconSize * 0.5, overlayY + iconSize * 0.5, iconSize * 0.35)
+        end
+        love.graphics.pop()
     end
 
     if frame.close_clicked then

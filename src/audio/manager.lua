@@ -2,25 +2,11 @@
 
 local love = love
 
+-- ============================================================================
+-- CONSTANTS
+-- ============================================================================
+
 local DEFAULT_MASTER_VOLUME = 0.1
-
-local AudioManager = {
-    _initialized = false,
-    _sfx = {},
-    _music = {},
-    _currentMusic = nil,
-    _currentMusicName = nil,
-    _currentMusicVolume = DEFAULT_MASTER_VOLUME,
-    masterVolume = DEFAULT_MASTER_VOLUME,
-    musicVolume = 1,
-    sfxVolume = 1,
-}
-
-AudioManager.DEFAULT_MASTER_VOLUME = DEFAULT_MASTER_VOLUME
-
-function AudioManager.get_default_master_volume()
-    return DEFAULT_MASTER_VOLUME
-end
 
 local SOUND_EXTENSIONS = {
     ogg = true,
@@ -29,22 +15,18 @@ local SOUND_EXTENSIONS = {
     flac = true,
 }
 
+-- ============================================================================
+-- UTILITY FUNCTIONS
+-- ============================================================================
+
 local function clamp01(value)
-    if value == nil then
-        return 1
-    end
-    if value < 0 then
-        return 0
-    elseif value > 1 then
-        return 1
-    end
-    return value
+    if value == nil then return 1 end
+    return math.max(0, math.min(1, value))
 end
 
 local function normalize_id(id)
-    if type(id) ~= "string" then
-        return nil
-    end
+    if type(id) ~= "string" then return nil end
+    
     id = id:gsub("%s+", "_")
     id = id:gsub("::", ":")
     id = id:lower()
@@ -55,10 +37,22 @@ local function ensure_forward_slashes(path)
     return (path or ""):gsub("\\", "/")
 end
 
+local function normalize_directory_key(path)
+    path = ensure_forward_slashes(path or "")
+    path = path:gsub("/+", "/")
+    
+    if #path > 1 and path:sub(-1) == "/" then
+        path = path:sub(1, -2)
+    end
+    
+    return path
+end
+
 local function build_identifier(basePath, filePath, prefix)
     filePath = ensure_forward_slashes(filePath)
     basePath = ensure_forward_slashes(basePath or "")
 
+    -- Extract relative path
     local relative = filePath
     if basePath ~= "" and filePath:sub(1, #basePath) == basePath then
         relative = filePath:sub(#basePath + 1)
@@ -67,15 +61,13 @@ local function build_identifier(basePath, filePath, prefix)
         end
     end
 
+    -- Remove extension and convert path separators
     relative = relative:gsub("%.[%w]+$", "")
     relative = relative:gsub("/", ":")
 
+    -- Add prefix if provided
     if prefix and prefix ~= "" then
-        if relative ~= "" then
-            relative = prefix .. ":" .. relative
-        else
-            relative = prefix
-        end
+        relative = (relative ~= "") and (prefix .. ":" .. relative) or prefix
     end
 
     return normalize_id(relative)
@@ -94,33 +86,6 @@ local function new_source(path, sourceType)
     return source, nil
 end
 
-local function compute_sfx_volume(entryVolume, overrideVolume)
-    entryVolume = entryVolume or 1
-    overrideVolume = overrideVolume or 1
-    return clamp01(entryVolume * overrideVolume * AudioManager.sfxVolume * AudioManager.masterVolume)
-end
-
-local function compute_music_volume(entryVolume, overrideVolume)
-    entryVolume = entryVolume or 1
-    overrideVolume = overrideVolume or 1
-    return clamp01(entryVolume * overrideVolume * AudioManager.musicVolume * AudioManager.masterVolume)
-end
-
-local function update_current_music_volume()
-    if not AudioManager._currentMusic or not AudioManager._currentMusic:isPlaying() then
-        return
-    end
-
-    local entry = AudioManager._music[AudioManager._currentMusicName]
-    if not entry then
-        return
-    end
-
-    local totalVolume = compute_music_volume(entry.volume, entry._lastOverrideVolume)
-    AudioManager._currentMusic:setVolume(totalVolume)
-    AudioManager._currentMusicVolume = totalVolume
-end
-
 local function scan_directory(basePath, onFile)
     if not (love and love.filesystem and love.filesystem.getInfo) then
         return
@@ -133,16 +98,28 @@ local function scan_directory(basePath, onFile)
         return
     end
 
+    local visited = {}
+
     local function recurse(path)
-        local items = love.filesystem.getDirectoryItems(path)
+        local normalizedPath = normalize_directory_key(path)
+        if visited[normalizedPath] then return end
+        
+        visited[normalizedPath] = true
+
+        local ok, items = pcall(love.filesystem.getDirectoryItems, path)
+        if not ok or not items then return end
+
         for _, item in ipairs(items) do
-            local fullPath = path .. "/" .. item
-            local itemInfo = love.filesystem.getInfo(fullPath)
-            if itemInfo then
-                if itemInfo.type == "directory" then
-                    recurse(fullPath)
-                elseif itemInfo.type == "file" then
-                    onFile(fullPath)
+            if item ~= "." and item ~= ".." then
+                local fullPath = path .. "/" .. item
+                local itemInfo = love.filesystem.getInfo(fullPath)
+                
+                if itemInfo then
+                    if itemInfo.type == "directory" then
+                        recurse(fullPath)
+                    elseif itemInfo.type == "file" then
+                        onFile(fullPath)
+                    end
                 end
             end
         end
@@ -150,6 +127,67 @@ local function scan_directory(basePath, onFile)
 
     recurse(basePath)
 end
+
+-- ============================================================================
+-- AUDIO MANAGER
+-- ============================================================================
+
+local AudioManager = {
+    -- State
+    _initialized = false,
+    _sfx = {},
+    _music = {},
+    _currentMusic = nil,
+    _currentMusicName = nil,
+    _currentMusicVolume = DEFAULT_MASTER_VOLUME,
+    
+    -- Volume settings
+    masterVolume = DEFAULT_MASTER_VOLUME,
+    musicVolume = 1,
+    sfxVolume = 1,
+    
+    -- Constants
+    DEFAULT_MASTER_VOLUME = DEFAULT_MASTER_VOLUME,
+}
+
+-- ============================================================================
+-- PRIVATE METHODS
+-- ============================================================================
+
+local function compute_sfx_volume(entryVolume, overrideVolume)
+    return clamp01(
+        (entryVolume or 1) * 
+        (overrideVolume or 1) * 
+        AudioManager.sfxVolume * 
+        AudioManager.masterVolume
+    )
+end
+
+local function compute_music_volume(entryVolume, overrideVolume)
+    return clamp01(
+        (entryVolume or 1) * 
+        (overrideVolume or 1) * 
+        AudioManager.musicVolume * 
+        AudioManager.masterVolume
+    )
+end
+
+local function update_current_music_volume()
+    if not AudioManager._currentMusic or not AudioManager._currentMusic:isPlaying() then
+        return
+    end
+
+    local entry = AudioManager._music[AudioManager._currentMusicName]
+    if not entry then return end
+
+    local totalVolume = compute_music_volume(entry.volume, entry._lastOverrideVolume)
+    AudioManager._currentMusic:setVolume(totalVolume)
+    AudioManager._currentMusicVolume = totalVolume
+end
+
+-- ============================================================================
+-- INITIALIZATION
+-- ============================================================================
 
 function AudioManager.is_initialized()
     return AudioManager._initialized
@@ -164,6 +202,7 @@ end
 function AudioManager.initialize(options)
     options = options or {}
 
+    -- Set volume levels
     AudioManager.masterVolume = clamp01(options.masterVolume or AudioManager.masterVolume)
     AudioManager.musicVolume = clamp01(options.musicVolume or AudioManager.musicVolume)
     AudioManager.sfxVolume = clamp01(options.sfxVolume or AudioManager.sfxVolume)
@@ -173,37 +212,39 @@ function AudioManager.initialize(options)
         return
     end
 
+    -- Auto-scan directories if enabled
     if options.autoScan ~= false then
-        local sfxOptions = {}
-        for key, value in pairs(options.sfx or {}) do
-            sfxOptions[key] = value
-        end
-        if sfxOptions.prefix == nil then
-            sfxOptions.prefix = "sfx"
-        end
-
-        local musicOptions = {}
-        for key, value in pairs(options.music or {}) do
-            musicOptions[key] = value
-        end
-        if musicOptions.prefix == nil then
-            musicOptions.prefix = "music"
-        end
+        local sfxOptions = options.sfx or {}
+        sfxOptions.prefix = sfxOptions.prefix or "sfx"
+        
+        local musicOptions = options.music or {}
+        musicOptions.prefix = musicOptions.prefix or "music"
 
         AudioManager.import_sfx_directory(options.sfxPath or "assets/sounds", sfxOptions)
         AudioManager.import_music_directory(options.musicPath or "assets/music", musicOptions)
     end
 
     AudioManager._initialized = true
+    
     if love and love.audio and love.audio.setVolume then
         love.audio.setVolume(AudioManager.masterVolume)
     end
+    
     update_current_music_volume()
 end
+
+function AudioManager.get_default_master_volume()
+    return DEFAULT_MASTER_VOLUME
+end
+
+-- ============================================================================
+-- IMPORTING AUDIO
+-- ============================================================================
 
 function AudioManager.import_sfx(id, path, options)
     options = options or {}
     local identifier = normalize_id(id) or build_identifier("", path, options.prefix)
+    
     if not identifier or identifier == "" then
         return nil, "Invalid sound identifier"
     end
@@ -229,6 +270,7 @@ end
 function AudioManager.import_music(id, path, options)
     options = options or {}
     local identifier = normalize_id(id) or build_identifier("", path, options.prefix)
+    
     if not identifier or identifier == "" then
         return nil, "Invalid music identifier"
     end
@@ -240,11 +282,7 @@ function AudioManager.import_music(id, path, options)
         return nil, err
     end
 
-    local loop = options.loop
-    if loop == nil then
-        loop = true
-    end
-
+    local loop = (options.loop ~= nil) and options.loop or true
     source:setLooping(loop)
 
     AudioManager._music[identifier] = {
@@ -261,6 +299,7 @@ end
 
 function AudioManager.import_sfx_directory(basePath, options)
     options = options or {}
+    
     scan_directory(basePath, function(filePath)
         local extension = filePath:match("%.([%w]+)$")
         if extension and SOUND_EXTENSIONS[extension:lower()] then
@@ -277,6 +316,7 @@ end
 
 function AudioManager.import_music_directory(basePath, options)
     options = options or {}
+    
     scan_directory(basePath, function(filePath)
         local extension = filePath:match("%.([%w]+)$")
         if extension and SOUND_EXTENSIONS[extension:lower()] then
@@ -292,6 +332,10 @@ function AudioManager.import_music_directory(basePath, options)
     end)
 end
 
+-- ============================================================================
+-- PLAYBACK CONTROL
+-- ============================================================================
+
 function AudioManager.play_sfx(id, options)
     AudioManager.ensure_initialized()
 
@@ -302,15 +346,14 @@ function AudioManager.play_sfx(id, options)
     options = options or {}
     local identifier = normalize_id(id)
     local entry = identifier and AudioManager._sfx[identifier]
+    
     if not entry then
         return nil, "Unknown sound effect: " .. tostring(id)
     end
 
-    local instance
-    if entry.source.clone then
-        instance = entry.source:clone()
-    end
-
+    -- Create instance
+    local instance = entry.source.clone and entry.source:clone()
+    
     if not instance then
         local source, err = new_source(entry.path, "static")
         if not source then
@@ -319,14 +362,13 @@ function AudioManager.play_sfx(id, options)
         instance = source
     end
 
-    local pitch = options.pitch or 1
+    -- Configure and play
     if instance.setPitch then
-        instance:setPitch(pitch)
+        instance:setPitch(options.pitch or 1)
     end
 
     local volume = compute_sfx_volume(entry.volume, options.volume)
     instance:setVolume(volume)
-
     instance:setLooping(false)
     instance:play()
 
@@ -343,36 +385,40 @@ function AudioManager.play_music(id, options)
     options = options or {}
     local identifier = normalize_id(id)
     local entry = identifier and AudioManager._music[identifier]
+    
     if not entry then
         return nil, "Unknown music track: " .. tostring(id)
     end
 
     local source = entry.source
 
+    -- Stop current music if different
     if AudioManager._currentMusic and AudioManager._currentMusic ~= source then
         AudioManager._currentMusic:stop()
     end
 
+    -- Handle restart and force options
     if options.restart then
         source:stop()
-    elseif AudioManager._currentMusicName == identifier and source:isPlaying() and not options.force then
+    elseif AudioManager._currentMusicName == identifier and 
+           source:isPlaying() and 
+           not options.force then
         entry._lastOverrideVolume = options.volume or entry._lastOverrideVolume
         update_current_music_volume()
         return source
     end
 
-    local loop = options.loop
-    if loop == nil then
-        loop = entry.loop
-    end
+    -- Configure looping
+    local loop = (options.loop ~= nil) and options.loop or entry.loop
     source:setLooping(loop)
 
+    -- Set volume and play
     entry._lastOverrideVolume = options.volume or entry._lastOverrideVolume
     local totalVolume = compute_music_volume(entry.volume, entry._lastOverrideVolume)
     source:setVolume(totalVolume)
-
     source:play()
 
+    -- Update state
     AudioManager._currentMusic = source
     AudioManager._currentMusicName = identifier
     AudioManager._currentMusicVolume = totalVolume
@@ -384,6 +430,7 @@ function AudioManager.stop_music()
     if AudioManager._currentMusic then
         AudioManager._currentMusic:stop()
     end
+    
     AudioManager._currentMusic = nil
     AudioManager._currentMusicName = nil
     AudioManager._currentMusicVolume = 0
@@ -402,11 +449,17 @@ function AudioManager.resume_music()
     end
 end
 
+-- ============================================================================
+-- VOLUME CONTROL
+-- ============================================================================
+
 function AudioManager.set_master_volume(value)
     AudioManager.masterVolume = clamp01(value or 1)
+    
     if love and love.audio and love.audio.setVolume then
         love.audio.setVolume(AudioManager.masterVolume)
     end
+    
     update_current_music_volume()
 end
 
@@ -430,6 +483,10 @@ end
 function AudioManager.get_sfx_volume()
     return AudioManager.sfxVolume
 end
+
+-- ============================================================================
+-- GETTERS
+-- ============================================================================
 
 function AudioManager.get_loaded_sfx()
     return AudioManager._sfx

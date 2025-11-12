@@ -73,6 +73,50 @@ local function remove_item_reference(modules, item)
     end
 end
 
+local function detach_from_cargo(entity, item)
+    if not (entity and entity.cargo) or type(item) ~= "table" then
+        return false
+    end
+
+    local cargoComponent = entity.cargo
+    local items = cargoComponent.items
+    if type(items) ~= "table" then
+        return false
+    end
+
+    for index = #items, 1, -1 do
+        if items[index] == item then
+            table.remove(items, index)
+            cargoComponent.dirty = true
+            return true
+        end
+    end
+
+    return false
+end
+
+local function attach_to_cargo(entity, item)
+    if not (entity and entity.cargo) or type(item) ~= "table" then
+        return false
+    end
+
+    local cargoComponent = entity.cargo
+    if type(cargoComponent.items) ~= "table" then
+        cargoComponent.items = {}
+    end
+
+    local items = cargoComponent.items
+    for index = 1, #items do
+        if items[index] == item then
+            return false
+        end
+    end
+
+    items[#items + 1] = item
+    cargoComponent.dirty = true
+    return true
+end
+
 local function find_slot_by_id(modules, id)
     if not modules or type(modules.slots) ~= "table" or not id then
         return nil
@@ -181,6 +225,7 @@ function Modules.equip(entity, item, preferredIndex)
     end
 
     remove_item_reference(modules, item)
+    detach_from_cargo(entity, item)
 
     slot.item = item
     ensure_item_slot_metadata(slot, item)
@@ -220,9 +265,7 @@ function Modules.unequip(entity, slotOrIndex)
         end
     end
 
-    if entity and entity.cargo then
-        entity.cargo.dirty = true
-    end
+    attach_to_cargo(entity, item)
 
     return true
 end
@@ -233,10 +276,12 @@ function Modules.sync_from_cargo(entity)
         return
     end
 
+    local preserved = {}
     for _, slot in ipairs(modules.slots) do
         if slot.item then
             slot.item.installed = true
             ensure_item_slot_metadata(slot, slot.item)
+            preserved[slot.id] = slot.item
         end
         slot.item = nil
     end
@@ -256,10 +301,21 @@ function Modules.sync_from_cargo(entity)
                 if slot then
                     slot.item = item
                     ensure_item_slot_metadata(slot, item)
+                    preserved[slot.id] = nil
                 else
                     item.installed = false
                     item.moduleSlotId = nil
                 end
+            end
+        end
+    end
+
+    for slotId, preservedItem in pairs(preserved) do
+        if preservedItem then
+            local slot = find_slot_by_id(modules, slotId)
+            if slot and not slot.item then
+                slot.item = preservedItem
+                ensure_item_slot_metadata(slot, preservedItem)
             end
         end
     end
