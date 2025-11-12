@@ -5,6 +5,7 @@
 local theme = require("src.ui.theme")
 local window = require("src.ui.components.window")
 local PlayerManager = require("src.player.manager")
+local Modules = require("src.ships.modules")
 local utf8 = require("utf8")
 
 -- Specialized cargo modules
@@ -20,6 +21,7 @@ local cargo_window = {}
 local window_colors = theme.colors.window
 local theme_spacing = theme.spacing
 local window_metrics = theme.window
+local set_color = theme.utils.set_color
 
 --- Clears search input focus
 ---@param context table The game context
@@ -29,6 +31,112 @@ local function clear_search_focus(context, state)
         context.uiInput.keyboardCaptured = false
     end
     state.isSearchActive = false
+end
+
+--- Draws the module side panel showing available slots
+---@param moduleSlots table Module slot array
+---@param panel table Panel rectangle {x, y, width, height}
+---@param fonts table Font table from theme
+---@param mouse_x number Mouse X position
+---@param mouse_y number Mouse Y position
+---@return table|nil hoveredItem Item hovered in module panel
+local function draw_module_panel(moduleSlots, panel, fonts, mouse_x, mouse_y)
+    if not panel or panel.width <= 0 or panel.height <= 0 then
+        return nil
+    end
+
+    set_color(window_colors.panel_background or { 0.05, 0.06, 0.09, 0.95 })
+    love.graphics.rectangle("fill", panel.x, panel.y, panel.width, panel.height, 4, 4)
+
+    set_color(window_colors.border or { 0.08, 0.08, 0.12, 0.8 })
+    love.graphics.setLineWidth(1)
+    love.graphics.rectangle("line", panel.x + 0.5, panel.y + 0.5, panel.width - 1, panel.height - 1, 4, 4)
+
+    local headerFont = fonts.small_caps or fonts.small_bold or fonts.small or fonts.body
+    love.graphics.setFont(headerFont)
+    set_color(window_colors.title_text or window_colors.text or { 0.85, 0.9, 1.0, 1 })
+    local headerText = "MODULE SLOTS"
+    local headerHeight = headerFont:getHeight()
+    love.graphics.print(headerText, panel.x + 12, panel.y + 10)
+
+    local dividerY = panel.y + 12 + headerHeight
+    set_color(window_colors.border or { 0.1, 0.12, 0.16, 0.8 })
+    love.graphics.rectangle("fill", panel.x + 10, dividerY, panel.width - 20, 1)
+
+    local slotStartY = dividerY + 12
+    local slotHeight = 78
+    local slotSpacing = 10
+    local iconSize = 44
+    local iconX = panel.x + 18
+    local textStartX = iconX + iconSize + 12
+    local maxTextWidth = panel.x + panel.width - textStartX - 12
+
+    local hoveredItem
+    love.graphics.setFont(fonts.small or fonts.body)
+
+    if #moduleSlots == 0 then
+        set_color(window_colors.muted or { 0.55, 0.57, 0.62, 1 })
+        love.graphics.printf("No module slots", panel.x, slotStartY, panel.width, "center")
+        return nil
+    end
+
+    for index = 1, #moduleSlots do
+        local slot = moduleSlots[index]
+        local slotY = slotStartY + (index - 1) * (slotHeight + slotSpacing)
+        if slotY > panel.y + panel.height - slotHeight - 8 then
+            break
+        end
+
+        local isHovered = mouse_x >= panel.x and mouse_x <= panel.x + panel.width
+            and mouse_y >= slotY and mouse_y <= slotY + slotHeight
+
+        local slotBackground = window_colors.slot_background or { 0.07, 0.09, 0.13, 0.9 }
+        if isHovered then
+            slotBackground = window_colors.row_hover or { 0.12, 0.16, 0.22, 1 }
+        end
+
+        set_color(slotBackground)
+        love.graphics.rectangle("fill", panel.x + 12, slotY, panel.width - 24, slotHeight, 4, 4)
+
+        set_color(window_colors.slot_border or window_colors.border or { 0.1, 0.12, 0.16, 0.8 })
+        love.graphics.setLineWidth(1)
+        love.graphics.rectangle("line", panel.x + 12.5, slotY + 0.5, panel.width - 25, slotHeight - 1, 4, 4)
+
+        local item = slot and slot.item or nil
+        if item and item.icon then
+            CargoRendering.drawItemIcon(item.icon, iconX, slotY + 16, iconSize)
+        else
+            set_color(window_colors.muted or { 0.4, 0.45, 0.5, 1 })
+            love.graphics.setLineWidth(1.25)
+            love.graphics.circle("line", iconX + iconSize * 0.5, slotY + 16 + iconSize * 0.5, iconSize * 0.32)
+        end
+
+        local slotFont = fonts.small_bold or fonts.small or fonts.body
+        love.graphics.setFont(slotFont)
+        set_color(window_colors.text or { 0.85, 0.85, 0.9, 1 })
+        local slotName = (slot and slot.name) or string.format("Slot %d", index)
+        love.graphics.print(slotName, textStartX, slotY + 12)
+
+        local typeFont = fonts.tiny or fonts.small or fonts.body
+        love.graphics.setFont(typeFont)
+        set_color(window_colors.muted or { 0.55, 0.57, 0.62, 1 })
+        local slotType = slot and slot.type or "--"
+        love.graphics.print(string.upper(slotType), textStartX, slotY + 12 + slotFont:getHeight() + 4)
+
+        love.graphics.setFont(fonts.small or fonts.body)
+        if item then
+            set_color(window_colors.text or { 0.9, 0.92, 0.96, 1 })
+            love.graphics.printf(item.name or "Installed Module", textStartX, slotY + 38, maxTextWidth, "left")
+            if isHovered then
+                hoveredItem = item
+            end
+        else
+            set_color(window_colors.muted or { 0.55, 0.57, 0.62, 1 })
+            love.graphics.printf("Empty", textStartX, slotY + 38, maxTextWidth, "left")
+        end
+    end
+
+    return hoveredItem
 end
 
 --- Gets window dimensions
@@ -118,7 +226,6 @@ local function draw_search_and_sort(content, state, fonts, mouse_x, mouse_y, jus
     
     -- Draw search box
     if searchRect.width > 0 then
-        local set_color = theme.utils.set_color
         set_color(window_colors.input_background or { 0.06, 0.07, 0.1, 1 })
         love.graphics.rectangle("fill", searchRect.x, searchRect.y, searchRect.width, searchRect.height, 4, 4)
         set_color(window_colors.border or { 0.08, 0.08, 0.12, 0.8 })
@@ -152,7 +259,6 @@ local function draw_search_and_sort(content, state, fonts, mouse_x, mouse_y, jus
     end
 
     -- Draw sort button
-    local set_color = theme.utils.set_color
     set_color(sortHovered and (window_colors.button_hover or window_colors.row_hover or { 0.12, 0.16, 0.22, 1 })
         or window_colors.button_background or window_colors.input_background or { 0.06, 0.07, 0.1, 1 })
     love.graphics.rectangle("fill", sortRect.x, sortRect.y, sortRect.width, sortRect.height, 4, 4)
@@ -227,11 +333,12 @@ function cargo_window.draw(context)
     -- Get player and cargo data
     local player = PlayerManager.resolveLocalPlayer(context)
     if not player then
-        love.graphics.pop()
         return
     end
     
     local cargoInfo = CargoData.getCargoInfo(player)
+    local moduleSlots = Modules.get_slots(player)
+    local moduleSlotCount = moduleSlots and #moduleSlots or 0
     local currencyValue = CargoData.getCurrency(context, player)
     local currencyText = currencyValue ~= nil and CargoData.formatCurrency(currencyValue) or "--"
 
@@ -279,25 +386,58 @@ function cargo_window.draw(context)
     end
 
     local content = frame.content
+
+    local panelSpacing = 14
+    local modulePanelWidth = 0
+    local showModulePanel = moduleSlotCount > 0
+    if showModulePanel then
+        modulePanelWidth = math.min(240, math.max(160, content.width * 0.35))
+    end
+    local itemAreaWidth = content.width - modulePanelWidth - (showModulePanel and panelSpacing or 0)
+    if itemAreaWidth < 160 then
+        itemAreaWidth = math.max(120, itemAreaWidth)
+        modulePanelWidth = showModulePanel and math.max(140, content.width - itemAreaWidth - panelSpacing) or 0
+    end
+
+    if itemAreaWidth < 0 then
+        itemAreaWidth = 0
+    end
+
+    local itemArea = {
+        x = content.x,
+        y = content.y,
+        width = itemAreaWidth,
+        height = content.height,
+    }
+
+    local modulePanel
+    if showModulePanel then
+        modulePanel = {
+            x = itemArea.x + itemArea.width + panelSpacing,
+            y = content.y,
+            width = modulePanelWidth,
+            height = content.height,
+        }
+    end
     
     -- Draw search and sort controls
-    local searchRect, sortRect = draw_search_and_sort(content, state, fonts, mouse_x, mouse_y, just_pressed, uiInput)
+    local searchRect, sortRect = draw_search_and_sort(itemArea, state, fonts, mouse_x, mouse_y, just_pressed, uiInput)
     
     local searchHeight = fonts.body:getHeight() + 12
     local searchSpacing = 6
-    local gridY = content.y + searchHeight + searchSpacing
-    local gridHeight = content.height - searchHeight - searchSpacing
+    local gridY = itemArea.y + searchHeight + searchSpacing
+    local gridHeight = itemArea.height - searchHeight - searchSpacing
     if gridHeight < 0 then
         gridHeight = 0
     end
 
     -- Calculate grid layout
     local slotsPerRow, slotsPerColumn, totalVisibleSlots, slotSize, slotWithLabelHeight, labelHeight =
-        CargoRendering.calculateGridLayout(content.width, gridHeight, fonts)
+        CargoRendering.calculateGridLayout(itemArea.width, gridHeight, fonts)
 
     local slotPadding = theme_spacing.slot_padding
     local gridStartY = gridY
-    local gridStartX = content.x
+    local gridStartX = itemArea.x
 
     -- Filter and sort items
     local filteredItems = CargoData.filterItems(cargoInfo.items, state.searchQuery)
@@ -335,6 +475,24 @@ function cargo_window.draw(context)
     state._hovered_slot = hoveredSlotIndex
     state._hovered_item = hoveredItem
     state._was_mouse_down = is_mouse_down
+
+    -- Draw module panel if available
+    if showModulePanel and modulePanel then
+        local hoveredModuleItem = draw_module_panel(moduleSlots, modulePanel, fonts, mouse_x, mouse_y)
+        if hoveredModuleItem then
+            CargoTooltip.create(hoveredModuleItem)
+        end
+
+        set_color(window_colors.border or { 0.08, 0.08, 0.12, 0.55 })
+        love.graphics.setLineWidth(1)
+        love.graphics.rectangle(
+            "line",
+            modulePanel.x - panelSpacing * 0.5,
+            content.y,
+            1,
+            content.height
+        )
+    end
 
     -- Draw bottom bar (capacity and currency)
     local bottomBar = frame.bottom_bar
