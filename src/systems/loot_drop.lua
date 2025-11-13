@@ -39,7 +39,7 @@ end
 
 local function instantiate_item(entry, quantity)
     if not entry.id then
-        return nil, "missing_id"
+        return nil, nil
     end
 
     local overrides
@@ -80,15 +80,36 @@ local function roll_loot(loot_config)
             local entry = entries[index]
             if type(entry) == "table" and should_drop(entry.chance) then
                 local quantity = resolve_quantity(entry.quantity, 1)
-                if quantity > 0 then
-                    local item, err = instantiate_item(entry, quantity)
+                local item, err
+                if entry.id and quantity > 0 then
+                    item, err = instantiate_item(entry, quantity)
+                end
+
+                local creditSpec = entry.credit_reward or entry.credits
+                local creditReward
+                if creditSpec ~= nil then
+                    if type(creditSpec) == "table" then
+                        creditReward = resolve_quantity(creditSpec, 0)
+                    else
+                        creditReward = tonumber(creditSpec)
+                    end
+                    if creditReward and creditReward <= 0 then
+                        creditReward = nil
+                    end
+                end
+
+                local hasItem = item ~= nil
+                local hasCredits = creditReward ~= nil
+
+                if hasItem or hasCredits then
                     local drop = {
                         id = entry.id,
-                        quantity = quantity,
+                        quantity = hasItem and quantity or nil,
                         item = item,
                         error = err,
                         offset = entry.offset or entry.positionOffset,
                         scatter = entry.scatter or entry.scatterRadius,
+                        credit_reward = creditReward,
                         raw = entry,
                     }
                     drops[#drops + 1] = drop
@@ -160,10 +181,12 @@ return function(context)
                     drop.item.quantity = drop.quantity
                 end
 
-                if spawnLootItem then
-                    spawnLootItem(drop, entity, context)
-                else
-                    pending[#pending + 1] = drop
+                if drop.item then
+                    if spawnLootItem then
+                        spawnLootItem(drop, entity, context)
+                    else
+                        pending[#pending + 1] = drop
+                    end
                 end
 
                 if onLootDropped then

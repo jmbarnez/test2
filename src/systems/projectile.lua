@@ -51,7 +51,7 @@ local function is_target_valid(target)
     return true
 end
 
-local function apply_homing(entity, dt)
+local function apply_homing(entity, dt, damageEntity)
     local homing = entity.homing
     if not homing or dt <= 0 then
         return
@@ -157,7 +157,20 @@ local function apply_homing(entity, dt)
     if homing.hitRadius then
         local distanceSq = dirLenSq
         if distanceSq <= homing.hitRadius * homing.hitRadius then
+            if damageEntity and entity.projectile then
+                local projectileComponent = entity.projectile
+                local baseDamage = projectileComponent.damage or 0
+                if baseDamage > 0 then
+                    local owner = projectileComponent.owner or entity
+                    damageEntity(target, baseDamage, owner, {
+                        x = tx,
+                        y = ty,
+                    })
+                end
+            end
+
             entity.pendingDestroy = true
+            return
         end
     end
 end
@@ -630,7 +643,7 @@ return function(context)
             if not body or body:isDestroyed() then return end
 
             if entity.homing then
-                apply_homing(entity, dt)
+                apply_homing(entity, dt, damageEntity)
             end
 
             -- Sync position

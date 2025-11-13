@@ -336,6 +336,53 @@ local function resolve_shield(entity)
     return shield
 end
 
+local DEFAULT_RETALIATION_DURATION = 6
+
+local function assign_retaliation_target(entity, source)
+    if not (entity and entity.enemy) then
+        return
+    end
+    if type(source) ~= "table" then
+        return
+    end
+
+    local attacker = source
+    if type(attacker.owner) == "table" then
+        attacker = attacker.owner
+    end
+
+    if attacker == entity or type(attacker) ~= "table" then
+        return
+    end
+
+    if not attacker.player then
+        return
+    end
+
+    if not attacker.position then
+        local body = attacker.body
+        if not (body and not body:isDestroyed()) then
+            return
+        end
+    end
+
+    entity.retaliationTarget = attacker
+
+    local ai = entity.ai or {}
+    local stats = entity.stats or {}
+    local duration = ai.retaliationDuration
+        or stats.retaliation_duration
+        or DEFAULT_RETALIATION_DURATION
+
+    if duration and duration > 0 then
+        entity.retaliationTimer = duration
+    else
+        entity.retaliationTimer = DEFAULT_RETALIATION_DURATION
+    end
+
+    entity.currentTarget = attacker
+end
+
 function Entities.damage(entity, amount, source, context)
     if not entity or not entity.health then
         return
@@ -386,6 +433,8 @@ function Entities.damage(entity, amount, source, context)
             end
         end
 
+        assign_retaliation_target(entity, source)
+
         if entity.healthBar then
             entity.health.showTimer = entity.healthBar.showDuration or 0
         end
@@ -415,6 +464,8 @@ function Entities.damage(entity, amount, source, context)
             entity.lastDamagePlayerId = playerId
         end
     end
+
+    assign_retaliation_target(entity, source)
 
     if entity.healthBar then
         entity.health.showTimer = entity.healthBar.showDuration or 0

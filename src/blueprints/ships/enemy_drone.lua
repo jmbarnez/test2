@@ -139,6 +139,13 @@ return {
                 points = physics_polygon,
             },
         },
+        loot = {
+            entries = {
+                {
+                    credit_reward = constants.enemies.credit_rewards.enemy_drone,
+                },
+            },
+        },
     },
     weapons = {
         {

@@ -120,6 +120,7 @@ local function ensure_ai_state(entity)
         state = {
             strafeTimer = random() * 1.2 + 0.4,
             strafeDir = random() < 0.5 and -1 or 1,
+            retaliationCooldown = 0,
         }
         entity.aiState = state
     end
@@ -443,7 +444,12 @@ local function create_behavior_tree(context)
         local target = entity.currentTarget
 
         if not is_target_valid(target) then
-            local preferred = get_local_player(context)
+            local preferred
+            if entity.retaliationTarget and is_target_valid(entity.retaliationTarget) then
+                preferred = entity.retaliationTarget
+            else
+                preferred = get_local_player(context)
+            end
             target = find_target(blackboard.world, ai.targetTag or "player", preferred, position, detectionRange)
             entity.currentTarget = target
         end
@@ -502,11 +508,14 @@ local function create_behavior_tree(context)
         local disengageRange = ai.disengageRange or stats.disengage_range or (detectionRange and detectionRange * 1.25)
         local dropRange = disengageRange or detectionRange or engagementRange
         if dropRange and dropRange > 0 and distance > dropRange then
-            entity.currentTarget = nil
-            disable_weapon(entity)
-            apply_damping(body, dt, 4)
-            update_engine_trail(entity, false)
-            return BTStatus.failure
+            if not (entity.retaliationTimer and entity.retaliationTimer > 0 and entity.retaliationTarget and is_target_valid(entity.retaliationTarget)) then
+                entity.retaliationTarget = nil
+                entity.currentTarget = nil
+                disable_weapon(entity)
+                apply_damping(body, dt, 4)
+                update_engine_trail(entity, false)
+                return BTStatus.failure
+            end
         end
 
         preferredDistance = max(80, preferredDistance or 0)
@@ -562,7 +571,7 @@ local function create_behavior_tree(context)
         newVX, newVY = clamp_vector(newVX, newVY, maxSpeed)
         body:setLinearVelocity(newVX, newVY)
 
-        desiredSpeed = vector.length(desiredVX, desiredVY)
+        local desiredSpeed = vector.length(desiredVX, desiredVY)
         update_engine_trail(entity, true, impulseX, impulseY, dt, desiredSpeed)
 
         if entity.weapon then
@@ -643,6 +652,13 @@ return function(context)
             local tree = ensure_behavior_tree(ai, context)
             local blackboard = ensure_blackboard(ai, context)
             blackboard.world = self.world
+
+            if entity.retaliationTimer and entity.retaliationTimer > 0 then
+                entity.retaliationTimer = math.max(0, entity.retaliationTimer - dt)
+                if entity.retaliationTimer <= 0 then
+                    entity.retaliationTarget = nil
+                end
+            end
 
             local status = tree:tick(entity, blackboard, dt)
 
