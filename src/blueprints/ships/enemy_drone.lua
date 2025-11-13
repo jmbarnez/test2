@@ -2,6 +2,14 @@ local constants = require("src.constants.game")
 
 local scale = 8
 
+local function default_weapon(id, mount)
+    return {
+        id = id,
+        useDefaultWeapon = true,
+        mount = mount,
+    }
+end
+
 local hull_points = {
     0, -1.1 * scale,
     0.9 * scale, -0.1 * scale,
@@ -149,21 +157,9 @@ return {
         },
     },
     weapons = {
-        {
-            id = "laser_beam",
-            overrides = {
-                weapon = {
-                    damagePerSecond = 16,
-                    maxRange = 360,
-                    color = { 1, 0.2, 0.25 },
-                    glowColor = { 1, 0.45, 0.5 },
-                    width = 0.55,
-                },
-                weaponMount = {
-                    anchor = { x = 0, y = 0.6 },
-                    inset = 1,
-                },
-            },
-        },
+        default_weapon("laser_beam", {
+            anchor = { x = 0, y = 0.6 },
+            inset = 1,
+        }),
     },
 }

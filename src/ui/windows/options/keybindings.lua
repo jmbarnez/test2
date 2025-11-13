@@ -21,6 +21,10 @@ local BINDING_ACTIONS = {
     { id = "toggleMap", label = "Toggle Map" },
     { id = "toggleSkills", label = "Toggle Skills" },
     { id = "pause", label = "Pause / Back" },
+    { id = "interact", label = "Interact / Station Dock" },
+    { id = "respawn", label = "Respawn" },
+    { id = "saveGame", label = "Quicksave" },
+    { id = "loadGame", label = "Quickload" },
 }
 
 -- Static hotkeys (not rebindable)

@@ -111,9 +111,19 @@ function WeaponPanel.draw(context, player)
     local name = entry.name or (entry.blueprintId and entry.blueprintId:gsub("_", " ")) or "Weapon"
     local countText = string.format("%d/%d", index, total)
     
+    local swapText = nil
+    if total > 1 then
+        swapText = "[C] Prev   [V] Next"
+    end
+
     local textWidth = 0
     if fonts.body then textWidth = math.max(textWidth, fonts.body:getWidth(name)) end
-    if fonts.small then textWidth = math.max(textWidth, fonts.small:getWidth(countText)) end
+    if fonts.small then
+        textWidth = math.max(textWidth, fonts.small:getWidth(countText))
+        if swapText then
+            textWidth = math.max(textWidth, fonts.small:getWidth(swapText))
+        end
+    end
     
     local panelWidth = math.max(slotSize + textWidth + padding * 3, 180)
     local panelHeight = slotSize + padding * 2
@@ -165,6 +175,9 @@ function WeaponPanel.draw(context, player)
 
     love.graphics.setFont(fonts.small)
     set_color(window_colors.muted or { 0.6, 0.6, 0.65, 1 })
+    if swapText then
+        love.graphics.print(swapText, textX, iconY + slotSize - 30)
+    end
     love.graphics.print(countText, textX, iconY + slotSize - 16)
     
     -- Indicators

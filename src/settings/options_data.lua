@@ -20,12 +20,16 @@ local DEFAULT_KEYBINDINGS = {
     moveRight = { "d", "right" },
     moveUp = { "w", "up" },
     moveDown = { "s", "down" },
-    cycleWeaponPrev = { "q" },
-    cycleWeaponNext = { "e" },
+    cycleWeaponPrev = { "c" },
+    cycleWeaponNext = { "v" },
     toggleCargo = { "tab" },
     toggleMap = { "m" },
     toggleSkills = { "k" },
     pause = { "escape" },
+    interact = { "e" },
+    respawn = { "return" },
+    saveGame = { "f5" },
+    loadGame = { "f9" },
 }
 
 --- Creates a deep copy of keybindings

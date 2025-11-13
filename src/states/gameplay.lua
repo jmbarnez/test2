@@ -923,8 +923,8 @@ function gameplay:keypressed(key)
         return
     end
 
-    -- Interaction/weapon cycle
-    if key == "e" then
+    -- Interact with stations / cycle weapons forward
+    if key == "e" or key == "v" then
         if self.uiInput and self.uiInput.keyboardCaptured then
             return
         end
@@ -944,7 +944,7 @@ function gameplay:keypressed(key)
     end
     
     -- Cycle weapons backward
-    if key == "q" then
+    if key == "c" then
         if self.uiInput and self.uiInput.keyboardCaptured then
             return
         end

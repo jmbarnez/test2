@@ -2,6 +2,14 @@ local constants = require("src.constants.game")
 
 local scale = 28
 
+local function default_weapon(id, mount)
+    return {
+        id = id,
+        useDefaultWeapon = true,
+        mount = mount,
+    }
+end
+
 local hull_outer = {
     0, -1.8 * scale,
     1.1 * scale, -0.9 * scale,
@@ -135,7 +143,7 @@ return {
         hull = {
             max = 450,
             current = 450,
-            regen = 4,
+            regen = 0,
         },
         energy = {
             max = 600,
@@ -168,36 +176,10 @@ return {
         },
     },
     weapons = {
-        {
-            id = "shock_burst_launcher",
-            overrides = {
-                weapon = {
-                    fireRate = 1.8,
-                    damage = 16,
-                    energyPerShot = 48,
-                    projectileBlueprint = {
-                        projectile = {
-                            damage = 16,
-                        },
-                        drawable = {
-                            size = 3.2,
-                        },
-                    },
-                    shotgunPatternConfig = {
-                        count = 22,
-                        spreadDegrees = 28,
-                        baseJitterDegrees = 14,
-                        lateralJitter = 32,
-                        speedMultiplierMin = 0.9,
-                        speedMultiplierMax = 1.3,
-                    },
-                },
-                weaponMount = {
-                    anchor = { x = 0, y = 0.9 },
-                    inset = 0,
-                },
-            },
-        },
+        default_weapon("shock_burst_launcher", {
+            anchor = { x = 0, y = 0.9 },
+            inset = 0,
+        }),
     },
     physics = {
         body = {

@@ -2,6 +2,14 @@ local constants = require("src.constants.game")
 
 local scale = 12
 
+local function default_weapon(id, mount)
+    return {
+        id = id,
+        useDefaultWeapon = true,
+        mount = mount,
+    }
+end
+
 local hull_points = {
     0, -1.2 * scale,
     0.9 * scale, -0.1 * scale,
@@ -118,28 +126,10 @@ return {
         },
     },
     weapons = {
-        {
-            id = "cannon",
-            overrides = {
-                weapon = {
-                    offset = 1.2 * scale,
-                    projectileSize = 3,
-                    color = { 1.0, 0.25, 0.25 },
-                    glowColor = { 1.0, 0.5, 0.4 },
-                    projectileBlueprint = {
-                        drawable = {
-                            size = 3,
-                            color = { 1.0, 0.25, 0.25 },
-                            glowColor = { 1.0, 0.5, 0.4 },
-                        },
-                    },
-                },
-                weaponMount = {
-                    anchor = { x = 0, y = 1.0 },
-                    inset = 0,
-                },
-            },
-        },
+        default_weapon("cannon", {
+            anchor = { x = 0, y = 1.0 },
+            inset = 0,
+        }),
     },
     physics = {
         body = {
