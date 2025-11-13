@@ -179,6 +179,7 @@ return {
             max_speed = 210,
             linear_damping = 0.65,
             angular_damping = 0.18,
+            targetingTime = 1.2,
         },
         energy = {
             max = 140,

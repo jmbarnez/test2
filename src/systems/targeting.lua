@@ -133,6 +133,11 @@ local function update_targeting_cache(cache, world_x, world_y, best_entity, best
     cache.highlightMode = nil
     cache.highlightRadius = nil
     cache.hoverRadius = cache.activeEntity and cache.activeRadius or cache.hoveredRadius
+
+    cache.lockCandidate = state and state.targetLockTarget or cache.lockCandidate
+    cache.lockProgress = state and state.targetLockTimer and cache.lockDuration and cache.lockDuration > 0
+        and math.max(0, math.min(1, 1 - state.targetLockTimer / cache.lockDuration))
+        or cache.lockProgress
 end
 
 return function(context)

@@ -57,18 +57,6 @@ local function resolve_active_quest(state)
     return nil
 end
 
-local function draw_background(x, y, width, height)
-    local bg = resolve_color("background")
-    local border = resolve_color("border")
-
-    love.graphics.setColor(bg[1], bg[2], bg[3], bg[4] or 1)
-    love.graphics.rectangle("fill", x, y, width, height, 6, 6)
-
-    love.graphics.setColor(border[1], border[2], border[3], border[4] or 1)
-    love.graphics.setLineWidth(1)
-    love.graphics.rectangle("line", x + 0.5, y + 0.5, width - 1, height - 1, 6, 6)
-end
-
 local function draw_text(font, text, x, y, color)
     love.graphics.setFont(font)
     love.graphics.setColor(color[1], color[2], color[3], color[4] or 1)
@@ -102,12 +90,8 @@ function quest_overlay.draw(context, minimap_rect)
     local progress_label = QuestGenerator.progressLabel(quest)
     local reward_label = QuestGenerator.rewardLabel(quest)
 
-    local overlay_height = padding * 2 + title_height + spacing + line_height * 2
-
-    draw_background(overlay_x, overlay_y, overlay_width, overlay_height)
-
-    local cursor_x = overlay_x + padding
-    local cursor_y = overlay_y + padding
+    local cursor_x = overlay_x
+    local cursor_y = overlay_y
 
     draw_text(title_font, quest.title or "Active Contract", cursor_x, cursor_y, resolve_color("text"))
 

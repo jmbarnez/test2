@@ -142,12 +142,6 @@ function FloatingText.draw(state)
         local textX = entry.x
         local textY = entry.y
 
-        if entry.icon == "currency" then
-            local iconSize = font:getHeight() * scale * 0.9
-            CurrencyIcon.draw(textX, textY, iconSize, alpha)
-            textX = textX + iconSize + 4
-        end
-
         if entry.shadow then
             love.graphics.setColor(0, 0, 0, alpha * 0.55)
             love.graphics.print(entry.text, textX + 1, textY + 1, 0, scale, scale)
@@ -156,6 +150,13 @@ function FloatingText.draw(state)
         local color = entry.color
         love.graphics.setColor(color[1], color[2], color[3], (color[4] or 1) * alpha)
         love.graphics.print(entry.text, textX, textY, 0, scale, scale)
+
+        if entry.icon == "currency" then
+            local textWidth = font:getWidth(entry.text) * scale
+            local iconSize = font:getHeight() * scale * 0.9
+            local iconX = textX + textWidth + 4
+            CurrencyIcon.draw(iconX, textY, iconSize, alpha)
+        end
     end
 
     love.graphics.pop()

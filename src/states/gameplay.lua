@@ -602,6 +602,56 @@ function gameplay:update(dt)
         self:respawnPlayer()
     end
 
+    if self.targetLockTarget then
+        local target = self.targetLockTarget
+        local cache = self.targetingCache
+
+        local invalid = not target
+            or target.pendingDestroy
+            or (target.health and target.health.current and target.health.current <= 0)
+
+        if invalid then
+            self.targetLockTarget = nil
+            self.targetLockTimer = nil
+            self.targetLockDuration = nil
+            if cache then
+                cache.lockCandidate = nil
+                cache.lockProgress = nil
+                cache.lockDuration = nil
+                cache.activeEntity = self.activeTarget
+                cache.entity = self.activeTarget or cache.hoveredEntity
+            end
+        else
+            if cache and cache.lockCandidate ~= target then
+                cache.lockCandidate = target
+                cache.lockProgress = 0
+                cache.lockDuration = self.targetLockDuration or self.targetLockTimer or 0
+            end
+
+            if self.targetLockTimer then
+                self.targetLockTimer = self.targetLockTimer - dt
+                if cache and cache.lockDuration and cache.lockDuration > 0 then
+                    local progress = 1 - (self.targetLockTimer or 0) / cache.lockDuration
+                    cache.lockProgress = math.max(0, math.min(1, progress))
+                end
+            end
+
+            if not self.targetLockTimer or self.targetLockTimer <= 0 then
+                self.activeTarget = target
+                self.targetLockTarget = nil
+                self.targetLockTimer = nil
+                self.targetLockDuration = nil
+                if cache then
+                    cache.activeEntity = target
+                    cache.entity = target
+                    cache.lockCandidate = nil
+                    cache.lockProgress = nil
+                    cache.lockDuration = nil
+                end
+            end
+        end
+    end
+
     -- Skip update if paused
     if UIStateManager.isPaused(self) then
         finalize_update_metrics(self, updateStart)
@@ -771,19 +821,49 @@ function gameplay:mousepressed(_, _, button)
         return
     end
 
-    -- Handle target selection with ctrl+click
     local cache = self.targetingCache
     local hovered = cache and cache.hoveredEntity or nil
 
-    if hovered and hovered.enemy then
-        self.activeTarget = (hovered ~= self.activeTarget) and hovered or nil
-    else
+    if not hovered or not hovered.enemy then
         self.activeTarget = nil
+        self.targetLockTarget = nil
+        self.targetLockTimer = nil
+        if cache then
+            cache.activeEntity = nil
+            cache.entity = cache.hoveredEntity
+        end
+        return
     end
 
+    if hovered == self.activeTarget then
+        self.activeTarget = nil
+        self.targetLockTarget = nil
+        self.targetLockTimer = nil
+        if cache then
+            cache.activeEntity = nil
+            cache.entity = cache.hoveredEntity
+        end
+        return
+    end
+
+    local player = PlayerManager.getCurrentShip(self)
+    local targetingTime
+    if player and player.stats and player.stats.targetingTime then
+        targetingTime = player.stats.targetingTime
+    end
+    targetingTime = targetingTime or 0.6
+
+    self.targetLockTarget = hovered
+    self.targetLockTimer = targetingTime
+    self.targetLockDuration = targetingTime
+    self.activeTarget = nil
+
     if cache then
-        cache.activeEntity = self.activeTarget
-        cache.entity = self.activeTarget or cache.hoveredEntity
+        cache.activeEntity = nil
+        cache.entity = hovered
+        cache.lockCandidate = hovered
+        cache.lockProgress = 0
+        cache.lockDuration = targetingTime
     end
 end
 

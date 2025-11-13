@@ -36,6 +36,21 @@ local LOOT_DESTRUCTION_XP = {
         skill = "salvaging",
         xp = 10,
     },
+    ["enemy_scout"] = {
+        category = "combat",
+        skill = "weapons",
+        xp = 25,
+    },
+    ["enemy_drone"] = {
+        category = "combat",
+        skill = "weapons",
+        xp = 20,
+    },
+    ["enemy_boss"] = {
+        category = "combat",
+        skill = "weapons",
+        xp = 150,
+    },
 }
 
 local function resolve_player_id_from_entity(entity)
@@ -97,11 +112,30 @@ local function add_common_systems(state, context)
                 return
             end
 
+            local localPlayer = PlayerManager.getLocalPlayer(state)
+            local position
+            if drop.position then
+                position = drop.position
+            elseif entity and entity.position then
+                position = entity.position
+            elseif localPlayer then
+                position = localPlayer.position
+            end
+
             local spec = LOOT_DESTRUCTION_XP[drop.id]
             if spec then
                 local playerId = resolve_loot_player_id(drop, entity)
                 if playerId then
                     PlayerManager.addSkillXP(state, spec.category, spec.skill, spec.xp, playerId)
+
+                    if position and FloatingText and FloatingText.add then
+                        FloatingText.add(state, position, string.format("+%d XP", spec.xp), {
+                            offsetY = (localPlayer and localPlayer.mountRadius or 36) + 18,
+                            color = { 0.3, 0.9, 0.4, 1 },
+                            rise = 40,
+                            scale = 1.1,
+                        })
+                    end
                 end
             end
 
@@ -110,21 +144,11 @@ local function add_common_systems(state, context)
                 return
             end
 
-            local localPlayer = PlayerManager.getLocalPlayer(state)
             if not localPlayer then
                 return
             end
 
             PlayerManager.adjustCurrency(state, credits)
-
-            local position
-            if drop.position then
-                position = drop.position
-            elseif entity and entity.position then
-                position = entity.position
-            else
-                position = localPlayer.position
-            end
 
             if not (position and FloatingText and FloatingText.add) then
                 return
