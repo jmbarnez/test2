@@ -3,6 +3,7 @@ local love = love
 local lg, lp = love.graphics, love.physics
 local damage_util = require("src.util.damage")
 local ProjectileFactory = require("src.entities.projectile_factory")
+local math_util = require("src.util.math")
 
 -- Lua compat helpers
 local unpack = table.unpack or unpack
@@ -19,6 +20,146 @@ local function normalize(x, y)
     end
     local inv = 1 / SQRT(lenSq)
     return x * inv, y * inv
+end
+
+local function resolve_entity_position(entity)
+    if not entity then
+        return nil, nil
+    end
+
+    local pos = entity.position
+    if pos and pos.x and pos.y then
+        return pos.x, pos.y
+    end
+
+    local body = entity.body
+    if body and not body:isDestroyed() then
+        return body:getPosition()
+    end
+
+    return nil, nil
+end
+
+local function is_target_valid(target)
+    if not target or target.pendingDestroy then
+        return false
+    end
+    local health = target.health
+    if health and health.current and health.current <= 0 then
+        return false
+    end
+    return true
+end
+
+local function apply_homing(entity, dt)
+    local homing = entity.homing
+    if not homing or dt <= 0 then
+        return
+    end
+
+    local body = entity.body
+    if not (body and not body:isDestroyed()) then
+        return
+    end
+
+    local target = homing.target
+    if target and not is_target_valid(target) then
+        target = nil
+        homing.target = nil
+    end
+
+    if not target and type(homing.acquireTarget) == "function" then
+        local ok, resolved = pcall(homing.acquireTarget, homing, entity)
+        if ok and resolved then
+            target = resolved
+            homing.target = resolved
+        end
+    end
+
+    if not target then
+        return
+    end
+
+    local tx, ty = resolve_entity_position(target)
+    if not (tx and ty) then
+        return
+    end
+
+    local x, y = body:getPosition()
+    local toTargetX = tx - x
+    local toTargetY = ty - y
+    local dirLenSq = toTargetX * toTargetX + toTargetY * toTargetY
+    if dirLenSq <= EPS then
+        return
+    end
+
+    local desiredDirX, desiredDirY = normalize(toTargetX, toTargetY)
+    local desiredAngle = atan2(desiredDirY, desiredDirX)
+
+    local vx, vy = body:getLinearVelocity()
+    local speed = math.sqrt(vx * vx + vy * vy)
+    local currentAngle
+    if speed > EPS then
+        currentAngle = atan2(vy, vx)
+    else
+        currentAngle = (body:getAngle() or 0) - math.pi * 0.5
+        speed = homing.initialSpeed or homing.speed or 0
+    end
+
+    local turnRate = homing.turnRate or math.rad(220)
+    local maxTurn = turnRate * dt
+    local delta = math_util.clamp_angle(desiredAngle - currentAngle)
+    if delta > maxTurn then
+        delta = maxTurn
+    elseif delta < -maxTurn then
+        delta = -maxTurn
+    end
+
+    local newAngle = currentAngle + delta
+
+    local targetSpeed = homing.speed or speed
+    local acceleration = homing.acceleration or homing.accel
+    if acceleration and acceleration ~= 0 and targetSpeed then
+        if targetSpeed > speed then
+            speed = math.min(targetSpeed, speed + acceleration * dt)
+        else
+            speed = math.max(targetSpeed, speed - math.abs(acceleration) * dt)
+        end
+    elseif homing.speed then
+        speed = homing.speed
+    end
+
+    if homing.maxSpeed then
+        speed = math.min(speed, homing.maxSpeed)
+    end
+    if homing.minSpeed then
+        speed = math.max(speed, homing.minSpeed)
+    end
+
+    if speed <= EPS then
+        speed = EPS
+    end
+
+    local newVelX = math.cos(newAngle) * speed
+    local newVelY = math.sin(newAngle) * speed
+    body:setLinearVelocity(newVelX, newVelY)
+    body:setAngle(newAngle + math.pi * 0.5)
+
+    if entity.velocity then
+        entity.velocity.x = newVelX
+        entity.velocity.y = newVelY
+    end
+
+    if homing.faceTarget then
+        entity.rotation = newAngle + math.pi * 0.5
+    end
+
+    if homing.hitRadius then
+        local distanceSq = dirLenSq
+        if distanceSq <= homing.hitRadius * homing.hitRadius then
+            entity.pendingDestroy = true
+        end
+    end
 end
 
 local function randf(min, max)
@@ -488,10 +629,45 @@ return function(context)
             local body = entity.body
             if not body or body:isDestroyed() then return end
 
+            if entity.homing then
+                apply_homing(entity, dt)
+            end
+
             -- Sync position
             local x, y = body:getPosition()
             local pos = entity.position
             pos.x, pos.y = x, y
+
+            local trail = entity.projectileTrail
+            if trail then
+                local points = trail.points or {}
+                trail.points = points
+                local segment = trail.segment or 6
+                local maxPoints = trail.maxPoints or 24
+                local lifetime = trail.pointLifetime or 0.45
+                local segSq = segment * segment
+                local last = points[#points]
+                if not last or ((x - last.x) * (x - last.x) + (y - last.y) * (y - last.y)) >= segSq then
+                    points[#points + 1] = {
+                        x = x,
+                        y = y,
+                        life = lifetime,
+                        maxLife = lifetime,
+                    }
+                end
+
+                for i = #points, 1, -1 do
+                    local p = points[i]
+                    p.life = (p.life or lifetime) - dt
+                    if p.life <= 0 then
+                        table.remove(points, i)
+                    end
+                end
+
+                while #points > maxPoints do
+                    table.remove(points, 1)
+                end
+            end
 
             -- Sync velocity
             if entity.velocity then

@@ -191,6 +191,7 @@ return {
             capacity = 50,
             items = {
                 { weapon = "cannon" },
+                { weapon = "missile_launcher" },
                 { weapon = "laser_beam" },
                 { weapon = "firework_launcher" },
                 { weapon = "shock_burst_launcher" },

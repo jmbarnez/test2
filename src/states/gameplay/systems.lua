@@ -22,6 +22,7 @@ local createUiSystem = require("src.systems.ui")
 local createTargetingSystem = require("src.systems.targeting")
 local createDestructionSystem = require("src.systems.destruction")
 local createLootDropSystem = require("src.systems.loot_drop")
+local FloatingText = require("src.effects.floating_text")
 local createPickupSystem = require("src.systems.pickup")
 local createParticleEffectsSystem = require("src.systems.particle_effects")
 local Entities = require("src.states.gameplay.entities")
@@ -97,16 +98,45 @@ local function add_common_systems(state, context)
             end
 
             local spec = LOOT_DESTRUCTION_XP[drop.id]
-            if not spec then
+            if spec then
+                local playerId = resolve_loot_player_id(drop, entity)
+                if playerId then
+                    PlayerManager.addSkillXP(state, spec.category, spec.skill, spec.xp, playerId)
+                end
+            end
+
+            local credits = drop.credit_reward or (drop.raw and drop.raw.credit_reward)
+            if type(credits) ~= "number" or credits <= 0 then
                 return
             end
 
-            local playerId = resolve_loot_player_id(drop, entity)
-            if not playerId then
+            local localPlayer = PlayerManager.getLocalPlayer(state)
+            if not localPlayer then
                 return
             end
 
-            PlayerManager.addSkillXP(state, spec.category, spec.skill, spec.xp, playerId)
+            PlayerManager.adjustCurrency(state, credits)
+
+            local position
+            if drop.position then
+                position = drop.position
+            elseif entity and entity.position then
+                position = entity.position
+            else
+                position = localPlayer.position
+            end
+
+            if not (position and FloatingText and FloatingText.add) then
+                return
+            end
+
+            FloatingText.add(state, position, nil, {
+                amount = credits,
+                offsetY = (localPlayer and localPlayer.mountRadius or 36) + 18,
+                color = { 0.8, 0.95, 0.3, 1 },
+                rise = 40,
+                scale = 1.1,
+            })
         end,
     })))
     state.destructionSystem = state.world:addSystem(createDestructionSystem(GameContext.extend(sharedContext)))

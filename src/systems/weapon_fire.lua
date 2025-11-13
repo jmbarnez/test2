@@ -695,7 +695,10 @@ return function(context)
                     end
 
                     if isLocalPlayer and not fire and love.mouse and love.mouse.isDown then
-                        fire = love.mouse.isDown(1)
+                        local isControlHeld = love.keyboard and love.keyboard.isDown and (love.keyboard.isDown("lctrl") or love.keyboard.isDown("rctrl"))
+                        if not isControlHeld then
+                            fire = love.mouse.isDown(1)
+                        end
                     end
 
                     if weapon.lockOnTarget and gameplayState then

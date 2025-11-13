@@ -155,6 +155,12 @@ return {
             max = 4000,
             showTimer = 0,
         },
+        shield = {
+            current = 10000,
+            max = 10000,
+            regen = 0,
+            rechargeDelay = 0,
+        },
         healthBar = {
             showDuration = 0,
             width = 240,

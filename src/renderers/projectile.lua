@@ -97,27 +97,112 @@ function projectile_renderer.draw(entity)
         love.graphics.setColor(highlightColor[1], highlightColor[2], highlightColor[3], highlightAlpha)
         love.graphics.rectangle("fill", -halfLength, -highlightWidth * 0.5, length, highlightWidth)
 
-        love.graphics.pop()
-        return
+    elseif shape == "missile" then
+        local length = drawable.length or size * 4.2
+        local width = drawable.width or size * 0.9
+        local halfWidth = width * 0.5
+        local glowThickness = drawable.glowThickness or width
+        local finLength = drawable.finLength or length * 0.28
+
+        local bodyColor = drawable.bodyColor or color
+        local noseColor = drawable.noseColor or highlightColor
+        local finColor = drawable.finColor or glowColor
+        local outlineColor = drawable.outlineColor or { 0, 0, 0, 0.75 }
+        local exhaustColor = drawable.exhaustColor or { 1.0, 0.9, 0.7, 0.8 }
+        local glow = drawable.glowColor or glowColor
+
+        local vx = entity.velocity and entity.velocity.x or 0
+        local vy = entity.velocity and entity.velocity.y or 0
+        local angle
+        if vx ~= 0 or vy ~= 0 then
+            angle = math.atan2(vy, vx)
+        else
+            angle = (entity.rotation or 0) - math.pi * 0.5
+        end
+
+        love.graphics.translate(x, y)
+        love.graphics.rotate(angle)
+
+        love.graphics.setColor(glow[1], glow[2], glow[3], glow[4] or 0.4)
+        love.graphics.rectangle("fill", -length * 0.55, -glowThickness * 0.5, length * 1.1, glowThickness)
+
+        love.graphics.setColor(bodyColor[1], bodyColor[2], bodyColor[3], bodyColor[4] or 1)
+        love.graphics.rectangle("fill", -length * 0.4, -halfWidth, length * 0.7, width)
+
+        love.graphics.setColor(finColor[1], finColor[2], finColor[3], finColor[4] or 1)
+        local finY = halfWidth + width * 0.35
+        love.graphics.polygon("fill",
+            -length * 0.25, -halfWidth,
+            -length * 0.25 - finLength, -finY,
+            -length * 0.15, -halfWidth * 0.4)
+        love.graphics.polygon("fill",
+            -length * 0.25, halfWidth,
+            -length * 0.25 - finLength, finY,
+            -length * 0.15, halfWidth * 0.4)
+
+        love.graphics.setColor(noseColor[1], noseColor[2], noseColor[3], noseColor[4] or 1)
+        love.graphics.polygon("fill",
+            length * 0.3, 0,
+            -length * 0.15, -halfWidth,
+            -length * 0.15, halfWidth)
+
+        love.graphics.setColor(outlineColor[1], outlineColor[2], outlineColor[3], outlineColor[4] or 1)
+        love.graphics.setLineWidth(1.6)
+        love.graphics.rectangle("line", -length * 0.4, -halfWidth, length * 0.7, width)
+        love.graphics.polygon("line",
+            length * 0.3, 0,
+            -length * 0.15, -halfWidth,
+            -length * 0.15, halfWidth)
+
+        love.graphics.setColor(exhaustColor[1], exhaustColor[2], exhaustColor[3], exhaustColor[4] or 1)
+        love.graphics.circle("fill", -length * 0.45, 0, width * 0.42)
+
+    else
+
+        -- Outer glow
+        love.graphics.setColor(glowColor[1], glowColor[2], glowColor[3], outerAlpha)
+        love.graphics.circle("fill", x, y, size * outerScale)
+
+        -- Middle glow
+        love.graphics.setColor(glowColor[1], glowColor[2], glowColor[3], innerAlpha)
+        love.graphics.circle("fill", x, y, size * innerScale)
+
+        -- Core
+        love.graphics.setColor(coreColor[1], coreColor[2], coreColor[3], coreAlpha)
+        love.graphics.circle("fill", x, y, size * coreScale)
+
+        -- Bright center
+        love.graphics.setColor(highlightColor[1], highlightColor[2], highlightColor[3], highlightAlpha)
+        love.graphics.circle("fill", x, y, size * highlightScale)
     end
 
-    -- Outer glow
-    love.graphics.setColor(glowColor[1], glowColor[2], glowColor[3], outerAlpha)
-    love.graphics.circle("fill", x, y, size * outerScale)
-
-    -- Middle glow
-    love.graphics.setColor(glowColor[1], glowColor[2], glowColor[3], innerAlpha)
-    love.graphics.circle("fill", x, y, size * innerScale)
-
-    -- Core
-    love.graphics.setColor(coreColor[1], coreColor[2], coreColor[3], coreAlpha)
-    love.graphics.circle("fill", x, y, size * coreScale)
-
-    -- Bright center
-    love.graphics.setColor(highlightColor[1], highlightColor[2], highlightColor[3], highlightAlpha)
-    love.graphics.circle("fill", x, y, size * highlightScale)
-
     love.graphics.pop()
+
+    local trail = entity.projectileTrail
+    if trail and trail.points and #trail.points > 1 then
+        local baseColor = trail.color or { 1.0, 0.8, 0.4, 0.8 }
+        local fadeColor = trail.fadeColor or { baseColor[1], baseColor[2], baseColor[3], 0 }
+        local width = trail.width or 3
+
+        love.graphics.push("all")
+        love.graphics.setBlendMode("add")
+        love.graphics.setLineJoin("bevel")
+
+        for i = 1, #trail.points - 1 do
+            local p1 = trail.points[i]
+            local p2 = trail.points[i + 1]
+            local t1 = (p1.life or 0) / (p1.maxLife or 1)
+            local r = fadeColor[1] + (baseColor[1] - fadeColor[1]) * t1
+            local g = fadeColor[2] + (baseColor[2] - fadeColor[2]) * t1
+            local b = fadeColor[3] + (baseColor[3] - fadeColor[3]) * t1
+            local a = fadeColor[4] + (baseColor[4] - fadeColor[4]) * t1
+            love.graphics.setColor(r, g, b, a)
+            love.graphics.setLineWidth(width * t1)
+            love.graphics.line(p1.x, p1.y, p2.x, p2.y)
+        end
+
+        love.graphics.pop()
+    end
 end
 
 return projectile_renderer

@@ -179,6 +179,13 @@ function TargetPanel.draw(context, player)
             local shield_color = hud_colors.shield_fill or { 0.3, 0.6, 0.95, 1 }
             love.graphics.setColor(shield_color[1], shield_color[2], shield_color[3], (shield_color[4] or 1) * 0.65)
             love.graphics.rectangle("fill", text_x + 1, bar_y + 1, (bar_width - 2) * shield_pct, bar_height - 2)
+
+            -- Add subtle additive glow similar to player HUD shield overlay
+            love.graphics.setBlendMode("add")
+            love.graphics.setColor(0.45, 0.98, 1.0, 0.45)
+            love.graphics.rectangle("fill", text_x + 3, bar_y + 3, math.max(0, (bar_width - 6) * shield_pct), math.max(0, bar_height - 6))
+            love.graphics.setBlendMode("alpha")
+
             set_color(hud_colors.status_border or { 0.2, 0.26, 0.34, 0.9 })
             love.graphics.setLineWidth(1)
             love.graphics.rectangle("line", text_x + 0.5, bar_y + 0.5, bar_width - 1, bar_height - 1)
@@ -230,6 +237,12 @@ function TargetPanel.draw(context, player)
         local shield_color = hud_colors.shield_fill or { 0.3, 0.6, 0.95, 1 }
         love.graphics.setColor(shield_color[1], shield_color[2], shield_color[3], (shield_color[4] or 1) * 0.65)
         love.graphics.rectangle("fill", text_x + 1, bar_y + 1, (bar_width - 2) * shield_pct, bar_height - 2)
+
+        love.graphics.setBlendMode("add")
+        love.graphics.setColor(0.45, 0.98, 1.0, 0.45)
+        love.graphics.rectangle("fill", text_x + 3, bar_y + 3, math.max(0, (bar_width - 6) * shield_pct), math.max(0, bar_height - 6))
+        love.graphics.setBlendMode("alpha")
+
         set_color(hud_colors.status_border or { 0.2, 0.26, 0.34, 0.9 })
         love.graphics.setLineWidth(1)
         love.graphics.rectangle("line", text_x + 0.5, bar_y + 0.5, bar_width - 1, bar_height - 1)

@@ -7,6 +7,80 @@ local PlayerCurrency = {}
 
 local STARTING_CURRENCY = (constants.player and constants.player.starting_currency) or 0
 
+---@diagnostic disable-next-line: undefined-global
+local love = love
+
+local function get_time()
+    if love and love.timer and love.timer.getTime then
+        return love.timer.getTime()
+    end
+    return os.clock()
+end
+
+local function ensure_gain_state(state)
+    if not state then
+        return nil
+    end
+
+    local container = state.currencyGain
+    if type(container) ~= "table" then
+        container = {}
+        state.currencyGain = container
+    end
+
+    if container.active ~= nil and type(container.active) ~= "table" then
+        container.active = nil
+    end
+
+    return container
+end
+
+local function record_gain(state, delta, balance)
+    if not (state and delta and delta > 0) then
+        return
+    end
+
+    local container = ensure_gain_state(state)
+    if not container then
+        return
+    end
+
+    local now = get_time()
+    local visibleDuration = 2.6
+    local animDuration = 0.45
+
+    local entry = container.active
+    if type(entry) ~= "table" then
+        entry = nil
+    end
+
+    if entry then
+        local expiresAt = tonumber(entry.expiresAt or 0) or 0
+        if expiresAt > 0 and now >= expiresAt then
+            entry = nil
+        end
+    end
+
+    if not entry then
+        entry = {
+            amount = 0,
+            createdAt = now,
+            sequence = (container.sequence or 0) + 1,
+        }
+        container.sequence = entry.sequence
+        container.active = entry
+    end
+
+    entry.amount = (entry.amount or 0) + delta
+    entry.lastAmount = delta
+    entry.balance = balance
+    entry.animStart = now
+    entry.animDuration = animDuration
+    entry.visibleDuration = visibleDuration
+    entry.expiresAt = now + visibleDuration
+    entry.updatedAt = now
+end
+
 --- Extracts currency value from an entity's wallet
 ---@param entity table|nil The entity to extract from
 ---@return number|nil The currency amount, or nil if not found
@@ -125,8 +199,18 @@ function PlayerCurrency.adjust(state, delta, playerShip)
         return state.playerCurrency
     end
 
+    if state.playerCurrency == nil and playerShip then
+        ensure_player_currency(state, playerShip, nil)
+    end
+
     local current = state.playerCurrency or 0
-    return PlayerCurrency.set(state, current + change, playerShip)
+    local newTotal = PlayerCurrency.set(state, current + change, playerShip)
+
+    if change > 0 then
+        record_gain(state, change, newTotal)
+    end
+
+    return newTotal
 end
 
 --- Synchronizes currency between state and entity
@@ -154,6 +238,31 @@ function PlayerCurrency.initializeForEntity(state, entity, isLocalPlayer)
     if isLocalPlayer then
         ensure_player_currency(state, entity, STARTING_CURRENCY)
     end
+end
+
+--- Gets the active currency gain entry if still visible
+---@param state table The game state or context
+---@return table|nil gainEntry
+function PlayerCurrency.getActiveGain(state)
+    local container = state and state.currencyGain
+    if type(container) ~= "table" then
+        return nil
+    end
+
+    local entry = container.active
+    if type(entry) ~= "table" then
+        container.active = nil
+        return nil
+    end
+
+    local now = get_time()
+    local expiresAt = tonumber(entry.expiresAt or 0) or 0
+    if expiresAt > 0 and now >= expiresAt then
+        container.active = nil
+        return nil
+    end
+
+    return entry
 end
 
 return PlayerCurrency

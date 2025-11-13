@@ -2,6 +2,7 @@ local UIStateManager = {}
 
 local window = require("src.ui.components.window")
 local dropdown = require("src.ui.components.dropdown")
+local QuestGenerator = require("src.stations.quest_generator")
 
 ---@diagnostic disable-next-line: undefined-global
 local love = love
@@ -75,7 +76,61 @@ local function createStationUIState()
         width = nil,
         height = nil,
         _was_mouse_down = false,
+        quests = nil,
+        selectedQuestId = nil,
+        activeQuestId = nil,
+        _lastStationSignature = nil,
     }
+end
+
+local function resolve_station_signature(station)
+    if not station then
+        return nil
+    end
+
+    return station.id
+        or station.stationId
+        or station.blueprintId
+        or station.stationType
+        or station.name
+        or station.callsign
+        or tostring(station)
+end
+
+local function regenerate_station_quests(state)
+    if not (state and state.stationUI) then
+        return
+    end
+
+    local stationUI = state.stationUI
+    local station = state.stationDockTarget
+
+    stationUI.quests = QuestGenerator.generate(state, station)
+    stationUI.selectedQuestId = nil
+    stationUI.activeQuestId = nil
+    stationUI._lastStationSignature = resolve_station_signature(station)
+
+    if stationUI.quests and #stationUI.quests > 0 then
+        stationUI.selectedQuestId = stationUI.quests[1].id
+    end
+end
+
+function UIStateManager.refreshStationQuests(state)
+    regenerate_station_quests(state)
+end
+
+local function ensure_station_quests(state)
+    if not (state and state.stationUI) then
+        return
+    end
+
+    local stationUI = state.stationUI
+    local station = state.stationDockTarget
+    local signature = resolve_station_signature(station)
+
+    if not stationUI.quests or stationUI._lastStationSignature ~= signature then
+        regenerate_station_quests(state)
+    end
 end
 
 local function any_modal_visible(state)
@@ -605,7 +660,6 @@ end
 function UIStateManager.showStationUI(state)
     local resolved, proxy = resolve_state_pair(state)
     if not (resolved and resolved.stationUI) then
-        print("[UI] showStationUI: no stationUI on state", resolved)
         return
     end
 
@@ -614,7 +668,7 @@ function UIStateManager.showStationUI(state)
     stationUI.visible = true
     stationUI._was_mouse_down = love.mouse and love.mouse.isDown and love.mouse.isDown(1) or false
 
-    print("[UI] showStationUI: stationUI.visible set to true")
+    ensure_station_quests(state)
 
     if state.uiInput then
         state.uiInput.mouseCaptured = true
@@ -625,7 +679,6 @@ end
 function UIStateManager.hideStationUI(state)
     local resolved, proxy = resolve_state_pair(state)
     if not (resolved and resolved.stationUI) then
-        print("[UI] hideStationUI: no stationUI on state", resolved)
         return
     end
 
@@ -633,8 +686,6 @@ function UIStateManager.hideStationUI(state)
     local stationUI = state.stationUI
     stationUI.visible = false
     stationUI.dragging = false
-
-    print("[UI] hideStationUI: stationUI.visible set to false")
 
     if state.uiInput then
         local keepCaptured = any_modal_visible(state)
