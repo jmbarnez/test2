@@ -1,9 +1,7 @@
 -- Station Window: Interface for interacting with space stations
--- Provides access to station services like trading, repairs, and missions
 
 local theme = require("src.ui.theme")
 local window = require("src.ui.components.window")
-local PlayerManager = require("src.player.manager")
 
 ---@diagnostic disable-next-line: undefined-global
 local love = love
@@ -12,227 +10,134 @@ local station_window = {}
 
 local window_colors = theme.colors.window
 local theme_spacing = theme.spacing
-local window_metrics = theme.window
 local set_color = theme.utils.set_color
 
---- Gets the station name from the station entity
----@param station table The station entity
----@return string The station name
-local function get_station_name(station)
-    if not station then
-        return "Unknown Station"
+local DEFAULT_WIDTH = 420
+local DEFAULT_HEIGHT = 320
+
+local function resolve_fonts()
+    local fonts = theme.get_fonts and theme.get_fonts() or theme.fonts or {}
+    if not fonts.body then
+        fonts.body = love.graphics.getFont()
     end
-    
-    if station.name then
-        return station.name
+    return fonts
+end
+
+local function resolve_station_name(context)
+    local station = context and context.stationDockTarget
+    if station then
+        if station.name then
+            return station.name
+        end
+        if station.stationName then
+            return station.stationName
+        end
     end
-    
-    if station.stationName then
-        return station.stationName
-    end
-    
     return "Space Station"
 end
 
 --- Draws the station window
 ---@param context table The game context
 function station_window.draw(context)
+    print("[STATION WINDOW] draw called - context:", context ~= nil, "stationUI:", context and context.stationUI ~= nil, "visible:", context and context.stationUI and context.stationUI.visible)
+    
     if not (context and context.stationUI and context.stationUI.visible) then
         return
     end
-    
+
     local state = context.stationUI
-    local fonts = theme.fonts
-    
-    -- Get viewport dimensions
-    local vw = love.graphics.getWidth()
-    local vh = love.graphics.getHeight()
-    
-    -- Calculate window dimensions
-    local windowWidth = math.min(600, vw * 0.8)
-    local windowHeight = math.min(500, vh * 0.8)
-    
-    -- Initialize window position if not set
-    if not state.x then
-        state.x = (vw - windowWidth) / 2
-        state.y = (vh - windowHeight) / 2
-        state.width = windowWidth
-        state.height = windowHeight
-    end
-    
-    -- Get mouse position
+    print("[STATION WINDOW] draw - state visible:", state.visible, "x:", state.x, "y:", state.y, "w:", state.width, "h:", state.height)
+    local fonts = resolve_fonts()
+    local default_font = fonts.body or love.graphics.getFont()
+
+    local vw, vh = love.graphics.getWidth(), love.graphics.getHeight()
+
+    state.width = state.width or math.min(DEFAULT_WIDTH, vw * 0.9)
+    state.height = state.height or math.min(DEFAULT_HEIGHT, vh * 0.9)
+    state.x = state.x or (vw - state.width) * 0.5
+    state.y = state.y or (vh - state.height) * 0.5
+
     local mouse_x, mouse_y = love.mouse.getPosition()
-    
-    -- Draw window frame
-    local frame = window.draw_frame(
-        state.x,
-        state.y,
-        state.width,
-        state.height,
-        get_station_name(context.stationInfluenceSource),
-        fonts,
-        state.dragging
-    )
-    
+    local mouse_down = love.mouse.isDown(1)
+    local previous_down = state._mouse_down_prev or false
+
+    -- DEBUG: Draw a bright rectangle to make sure we can see SOMETHING
+    love.graphics.setColor(1, 0, 0, 0.8)  -- Bright red
+    love.graphics.rectangle("fill", state.x, state.y, state.width, state.height)
+    love.graphics.setColor(1, 1, 1, 1)    -- Reset color
+
+    local frame = window.draw_frame {
+        x = state.x,
+        y = state.y,
+        width = state.width,
+        height = state.height,
+        title = resolve_station_name(context),
+        state = state,
+        fonts = fonts,
+        input = {
+            x = mouse_x,
+            y = mouse_y,
+            just_pressed = mouse_down and not previous_down,
+            is_down = mouse_down,
+        },
+    }
+
+    state._mouse_down_prev = mouse_down
+
     if not frame then
         return
     end
-    
-    -- Handle window dragging
-    local is_mouse_down = love.mouse.isDown(1)
-    local was_mouse_down = state._was_mouse_down or false
-    state._was_mouse_down = is_mouse_down
-    
-    if frame.titlebar then
-        local tb = frame.titlebar
-        local inTitlebar = mouse_x >= tb.x and mouse_x <= tb.x + tb.width
-            and mouse_y >= tb.y and mouse_y <= tb.y + tb.height
-        
-        if inTitlebar and is_mouse_down and not was_mouse_down then
-            state.dragging = true
-            state.dragOffsetX = mouse_x - state.x
-            state.dragOffsetY = mouse_y - state.y
-        end
+
+    if frame.close_clicked then
+        station_window.close(context)
+        return
     end
-    
-    if state.dragging then
-        if is_mouse_down then
-            state.x = mouse_x - (state.dragOffsetX or 0)
-            state.y = mouse_y - (state.dragOffsetY or 0)
-        else
-            state.dragging = false
-        end
-    end
-    
-    -- Handle close button
-    if frame.closeButton then
-        local cb = frame.closeButton
-        local inClose = mouse_x >= cb.x and mouse_x <= cb.x + cb.width
-            and mouse_y >= cb.y and mouse_y <= cb.y + cb.height
-        
-        if inClose and is_mouse_down and not was_mouse_down then
-            station_window.close(context)
-            return
-        end
-    end
-    
-    -- Draw content area
+
     local content = frame.content
     if not content then
         return
     end
-    
-    love.graphics.setFont(fonts.body or fonts.small)
-    
-    -- Draw station services
+
     local padding = theme_spacing.medium or 16
-    local contentY = content.y + padding
-    local contentX = content.x + padding
-    local availableWidth = content.width - padding * 2
-    
-    -- Welcome message
+    local inner_x = content.x + padding
+    local inner_width = math.max(0, content.width - padding * 2)
+    local cursor_y = content.y + padding
+
     set_color(window_colors.text or { 0.85, 0.9, 1.0, 1 })
-    love.graphics.setFont(fonts.body_bold or fonts.body)
-    love.graphics.printf(
-        "Welcome to " .. get_station_name(context.stationInfluenceSource),
-        contentX,
-        contentY,
-        availableWidth,
-        "center"
-    )
-    
-    contentY = contentY + (fonts.body_bold or fonts.body):getHeight() + padding * 2
-    
-    -- Station services section
-    love.graphics.setFont(fonts.small or fonts.body)
+    love.graphics.setFont((fonts.body_bold or fonts.title or default_font))
+    love.graphics.printf("Station Services", inner_x, cursor_y, inner_width, "center")
+
+    cursor_y = cursor_y + ((fonts.body_bold or fonts.title or default_font):getHeight()) + padding
+
     set_color(window_colors.muted or { 0.65, 0.7, 0.8, 1 })
-    
-    local services = {
-        "• Trading & Market Access",
-        "• Ship Repairs & Maintenance",
-        "• Module Installation & Upgrades",
-        "• Mission Board",
-        "• Refuel & Resupply",
-    }
-    
-    for i, service in ipairs(services) do
-        love.graphics.print(service, contentX + padding, contentY)
-        contentY = contentY + (fonts.small or fonts.body):getHeight() + theme_spacing.small
-    end
-    
-    contentY = contentY + padding
-    
-    -- Status message
-    set_color(window_colors.muted or { 0.65, 0.7, 0.8, 1 })
-    love.graphics.setFont(fonts.small_italic or fonts.small or fonts.body)
+    love.graphics.setFont(default_font)
     love.graphics.printf(
-        "Station services are currently under development.\nCheck back soon for full functionality.",
-        contentX,
-        contentY,
-        availableWidth,
-        "center"
-    )
-    
-    -- Close button hint
-    contentY = content.y + content.height - padding - (fonts.small or fonts.body):getHeight()
-    set_color(window_colors.muted or { 0.55, 0.6, 0.7, 1 })
-    love.graphics.setFont(fonts.small or fonts.body)
-    love.graphics.printf(
-        "Press ESC or click X to close",
-        contentX,
-        contentY,
-        availableWidth,
+        "Docking functionality coming soon.\nPress Esc or click X to undock.",
+        inner_x,
+        cursor_y,
+        inner_width,
         "center"
     )
 end
 
---- Opens the station window
+--- Opens the station window via UI state manager
 ---@param context table The game context
 function station_window.open(context)
     if not context then
         return
     end
-    
-    if not context.stationUI then
-        context.stationUI = {
-            visible = false,
-            dragging = false,
-            x = nil,
-            y = nil,
-            width = nil,
-            height = nil,
-            _was_mouse_down = false,
-        }
-    end
-    
-    context.stationUI.visible = true
-    context.stationUI._was_mouse_down = love.mouse and love.mouse.isDown and love.mouse.isDown(1) or false
-    
-    -- Capture input
-    if context.uiInput then
-        context.uiInput.mouseCaptured = true
-        context.uiInput.keyboardCaptured = true
-    end
+    local UIStateManager = require("src.ui.state_manager")
+    UIStateManager.showStationUI(context)
 end
 
---- Closes the station window
+--- Closes the station window via UI state manager
 ---@param context table The game context
 function station_window.close(context)
-    if not (context and context.stationUI) then
+    if not context then
         return
     end
-    
-    context.stationUI.visible = false
-    context.stationUI.dragging = false
-    
-    -- Release input if no other modals are visible
-    if context.uiInput then
-        local UIStateManager = require("src.ui.state_manager")
-        if not UIStateManager.isAnyUIVisible(context) then
-            context.uiInput.mouseCaptured = false
-            context.uiInput.keyboardCaptured = false
-        end
-    end
+    local UIStateManager = require("src.ui.state_manager")
+    UIStateManager.hideStationUI(context)
 end
 
 --- Toggles the station window visibility
@@ -241,50 +146,44 @@ function station_window.toggle(context)
     if not context then
         return
     end
-    
-    if context.stationUI and context.stationUI.visible then
-        station_window.close(context)
+    local UIStateManager = require("src.ui.state_manager")
+    if UIStateManager.isStationUIVisible(context) then
+        UIStateManager.hideStationUI(context)
     else
-        station_window.open(context)
+        UIStateManager.showStationUI(context)
     end
 end
 
 --- Checks if the station window is visible
 ---@param context table The game context
----@return boolean True if visible
+---@return boolean
 function station_window.is_visible(context)
-    return context and context.stationUI and context.stationUI.visible
+    local UIStateManager = require("src.ui.state_manager")
+    return UIStateManager.isStationUIVisible(context)
 end
 
---- Handles keypressed events
+--- Handles key input
 ---@param context table The game context
----@param key string The key that was pressed
----@return boolean True if the event was handled
+---@param key string
+---@return boolean
 function station_window.keypressed(context, key)
-    if not station_window.is_visible(context) then
-        return false
-    end
-    
-    if key == "escape" then
+    if key == "escape" and station_window.is_visible(context) then
         station_window.close(context)
         return true
     end
-    
     return false
 end
 
 --- Handles wheel scrolling
----@param context table The game context
----@param x number Horizontal scroll amount
----@param y number Vertical scroll amount
----@return boolean True if the event was handled
+---@param context table
+---@param x number
+---@param y number
+---@return boolean
 function station_window.wheelmoved(context, x, y)
-    if not station_window.is_visible(context) then
-        return false
+    if station_window.is_visible(context) then
+        return true
     end
-    
-    -- Could implement scrolling here if needed
-    return true
+    return false
 end
 
 return station_window

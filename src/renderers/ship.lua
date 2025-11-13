@@ -166,6 +166,7 @@ local function select_base_polygon(drawable)
         return nil
     end
 
+    local explicit_points
     local best_points
     local best_score = -math.huge
 
@@ -174,6 +175,13 @@ local function select_base_polygon(drawable)
         if part and (part.type == nil or part.type == "polygon") then
             local points = part.points
             if type(points) == "table" and #points >= 6 then
+                if not explicit_points then
+                    local tag = part.tag
+                    if part.highlightBase or part.basePolygon or tag == "base" then
+                        explicit_points = points
+                    end
+                end
+
                 local radius = compute_polygon_radius(points)
                 local score = score_polygon_part(part, radius)
                 if score > best_score then
@@ -184,7 +192,7 @@ local function select_base_polygon(drawable)
         end
     end
 
-    return best_points
+    return explicit_points or best_points
 end
 
 local function ensure_base_polygon(drawable)

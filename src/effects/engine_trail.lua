@@ -6,6 +6,19 @@ EngineTrail.__index = EngineTrail
 
 local unpack = (table and table.unpack) or unpack
 
+local function copy_array(source)
+    if type(source) ~= "table" then
+        return nil
+    end
+
+    local out = {}
+    for i = 1, #source do
+        out[i] = source[i]
+    end
+
+    return out
+end
+
 local DEFAULT_TEXTURE_SIZE = 24
 local DEFAULT_TEXTURE_LAYERS = {
     { radius = 12, color = { 0.1, 0.4, 1.0, 0.05 } },
@@ -148,8 +161,11 @@ function EngineTrail.new(options)
     self.fadeTime = 0
     self.lastEmissionRate = 0
     self.stopTimer = 0
-    self.drawColor = self.options.drawColor or DEFAULT_DRAW_COLOR
+    self.drawColor = copy_array(self.options.drawColor) or copy_array(DEFAULT_DRAW_COLOR)
+    self.defaultDrawColor = copy_array(self.drawColor)
     self.blendMode = self.options.blendMode or DEFAULT_BLEND_MODE
+    self.defaultParticleColors = copy_array(self.options.particleColors) or copy_array(DEFAULT_PARTICLE_COLORS)
+    self._currentParticleColors = copy_array(self.defaultParticleColors)
     return self
 end
 
@@ -318,6 +334,52 @@ function EngineTrail:draw()
     love.graphics.draw(self.system)
 
     love.graphics.pop()
+end
+
+function EngineTrail:applyColorOverride(particleColors, drawColor)
+    if not self.system then return end
+
+    if not self._colorOverrideActive then
+        self._storedParticleColors = copy_array(self._currentParticleColors or self.defaultParticleColors)
+        self._storedDrawColor = copy_array(self.drawColor)
+    end
+
+    if particleColors then
+        local copy = copy_array(particleColors)
+        if copy then
+            self._currentParticleColors = copy
+            self.system:setColors(unpack(copy))
+        end
+    end
+
+    if drawColor then
+        local copy = copy_array(drawColor)
+        if copy then
+            self.drawColor = copy
+        end
+    end
+
+    self._colorOverrideActive = true
+end
+
+function EngineTrail:clearColorOverride()
+    if not self.system then return end
+
+    local colors = self._storedParticleColors or self.defaultParticleColors
+    if colors then
+        local copy = copy_array(colors)
+        self._currentParticleColors = copy
+        self.system:setColors(unpack(copy))
+    end
+
+    local drawColor = self._storedDrawColor or self.defaultDrawColor
+    if drawColor then
+        self.drawColor = copy_array(drawColor)
+    end
+
+    self._storedParticleColors = nil
+    self._storedDrawColor = nil
+    self._colorOverrideActive = nil
 end
 
 return EngineTrail

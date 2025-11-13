@@ -22,6 +22,10 @@ return function(context)
                 uiInput.keyboardCaptured = false
             end
 
+            -- Reset coordinate system to screen space for UI rendering
+            love.graphics.push("all")
+            love.graphics.origin()
+
             tooltip.begin_frame()
             cargo_window.draw(context)
             death_window.draw(context)
@@ -36,6 +40,8 @@ return function(context)
             -- Individual windows are responsible for declaring when they capture input.
             local mouse_x, mouse_y = love.mouse.getPosition()
             tooltip.draw(mouse_x, mouse_y, theme.get_fonts())
+
+            love.graphics.pop()
         end,
     }
 end

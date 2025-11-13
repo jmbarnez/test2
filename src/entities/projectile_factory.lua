@@ -13,6 +13,36 @@ local DEFAULT_INDICATOR_INNER = { 0.62, 0.86, 1.0, 0.38 }
 local clone_array = table_util.clone_array
 local deep_copy = table_util.deep_copy
 
+local function merge_homing_config(baseConfig, overrideConfig)
+    if not baseConfig and not overrideConfig then
+        return nil
+    end
+
+    local merged = {}
+
+    local function copy_into(source)
+        if not source then
+            return
+        end
+        for key, value in pairs(source) do
+            if type(value) == "table" then
+                merged[key] = deep_copy(value)
+            else
+                merged[key] = value
+            end
+        end
+    end
+
+    copy_into(baseConfig)
+    copy_into(overrideConfig)
+
+    if next(merged) == nil then
+        return nil
+    end
+
+    return merged
+end
+
 local function mix_to_one(value, factor)
     value = value or 0
     factor = math.max(0, math.min(factor or 0.35, 1))
@@ -360,6 +390,22 @@ function ProjectileFactory.spawn(tinyWorld, physicsWorld, shooter, startX, start
 
     if weapon.ignoreCollisions then
         projectile.ignoreCollisions = true
+    end
+
+    local homingConfig = merge_homing_config(projectile.homing, weapon.projectileHoming or weapon.homing)
+    if homingConfig then
+        if homingConfig.turnRateDegrees and not homingConfig.turnRate then
+            homingConfig.turnRate = math.rad(homingConfig.turnRateDegrees)
+        end
+        if homingConfig.turnRateRadians and not homingConfig.turnRate then
+            homingConfig.turnRate = homingConfig.turnRateRadians
+        end
+        homingConfig.turnRate = homingConfig.turnRate or math.rad(220)
+        homingConfig.target = homingConfig.target or weapon._pendingTargetEntity
+        homingConfig.initialSpeed = homingConfig.initialSpeed or speed
+        homingConfig.owner = homingConfig.owner or shooter
+        homingConfig.allowDeceleration = homingConfig.allowDeceleration or homingConfig.deceleration ~= nil
+        projectile.homing = homingConfig
     end
 
     if physicsWorld then

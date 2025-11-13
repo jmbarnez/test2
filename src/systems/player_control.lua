@@ -102,7 +102,7 @@ return function(context)
                 engineTrail:setActive(applyingThrust)
             end
 
-            if max_speed and max_speed > 0 then
+            if max_speed and max_speed > 0 and not entity._dashActive then
                 local vx, vy = body:getLinearVelocity()
                 local clampedVX, clampedVY = vector.clamp(vx, vy, max_speed)
                 if clampedVX ~= vx or clampedVY ~= vy then

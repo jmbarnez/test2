@@ -624,6 +624,14 @@ return function(context)
                 beams[i] = nil
             end
 
+            local gameplayState
+            if context then
+                if type(context.resolveState) == "function" then
+                    gameplayState = context:resolveState()
+                end
+                gameplayState = gameplayState or context.state
+            end
+
             for i = 1, #world.entities do
                 local entity = world.entities[i]
                 if self.filter(entity) then
@@ -640,6 +648,7 @@ return function(context)
 
                     local fire = false
                     local targetX, targetY
+                    local activeTarget
                     local intent = Intent.get(intentHolder, entity.playerId)
                     local isLocalPlayer = false
                     if entity.player then
@@ -687,6 +696,18 @@ return function(context)
 
                     if isLocalPlayer and not fire and love.mouse and love.mouse.isDown then
                         fire = love.mouse.isDown(1)
+                    end
+
+                    if weapon.lockOnTarget and gameplayState then
+                        local candidate = gameplayState.activeTarget
+                        if candidate and not candidate.pendingDestroy then
+                            local tx, ty = resolve_entity_position(candidate)
+                            if tx and ty then
+                                activeTarget = candidate
+                                targetX = tx
+                                targetY = ty
+                            end
+                        end
                     end
 
                     weapon.targetX = targetX
@@ -757,10 +778,17 @@ return function(context)
                                     end
                                 end
 
+                                if weapon.lockOnTarget and activeTarget then
+                                    weapon._pendingTargetEntity = activeTarget
+                                end
+
                                 if weapon.projectilePattern == "shotgun" and type(weapon.shotgunPatternConfig) == "table" then
                                     fire_shotgun_pattern(world, physicsWorld, entity, startX, startY, dirX, dirY, weapon, weapon.shotgunPatternConfig)
                                 else
                                     ProjectileFactory.spawn(world, physicsWorld, entity, startX, startY, dirX, dirY, weapon)
+                                end
+                                if weapon._pendingTargetEntity then
+                                    weapon._pendingTargetEntity = nil
                                 end
                                 play_weapon_sound(weapon, "fire")
 

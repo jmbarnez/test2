@@ -816,13 +816,15 @@ function gameplay:keypressed(key)
         if self.uiInput and self.uiInput.keyboardCaptured then
             return
         end
-        
+
         -- Check if player is near a station
         if self.stationDockTarget then
+            print("[INPUT] E pressed - docking target available")
             UIStateManager.showStationUI(self)
             return
         end
-        
+
+        print("[INPUT] E pressed - no docking target, cycling weapons")
         -- Otherwise cycle weapons
         local player = PlayerManager.getCurrentShip(self)
         if player then

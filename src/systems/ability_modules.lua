@@ -28,6 +28,36 @@ local function drain_energy(entity, cost)
     return true
 end
 
+local DASH_TRAIL_COLORS = {
+    1.0, 0.95, 0.35, 1.0,
+    1.0, 0.82, 0.22, 0.85,
+    1.0, 0.68, 0.12, 0.65,
+    1.0, 0.55, 0.06, 0.42,
+    1.0, 0.45, 0.02, 0.22,
+    1.0, 0.38, 0.01, 0.08,
+}
+
+local DASH_TRAIL_DRAW_COLOR = { 1.0, 0.92, 0.35, 1.0 }
+
+local function resolve_context_state(context)
+    if not context then
+        return nil
+    end
+
+    if type(context.resolveState) == "function" then
+        local ok, state = pcall(context.resolveState, context)
+        if ok and type(state) == "table" then
+            return state
+        end
+    end
+
+    if type(context.state) == "table" then
+        return context.state
+    end
+
+    return nil
+end
+
 ability_handlers.dash = function(context, entity, body, ability, state)
     if not (body and not body:isDestroyed()) then
         return false
@@ -59,12 +89,21 @@ ability_handlers.dash = function(context, entity, body, ability, state)
     body:setBullet(true)
     state._dash_restore = true
 
+    if entity then
+        entity._dashActive = true
+    end
+
     -- Nice feedback: SFX + engine burst if available
     AudioManager.play_sfx("sfx:laser_turret_fire", { pitch = 1.15, volume = 0.9 })
-    local ctxState = (context and (context.state or (type(context.resolveState) == "function" and context:resolveState()))) or nil
+    local ctxState = resolve_context_state(context)
     local engineTrail = ctxState and ctxState.engineTrail
-    if engineTrail and engineTrail.emitBurst then
-        engineTrail:emitBurst(160, 1.3)
+    if engineTrail then
+        if engineTrail.emitBurst then
+            engineTrail:emitBurst(160, 1.3)
+        end
+        if engineTrail.applyColorOverride then
+            engineTrail:applyColorOverride(DASH_TRAIL_COLORS, DASH_TRAIL_DRAW_COLOR)
+        end
     end
 
     state.activeTimer = ability.duration or 0
@@ -119,13 +158,25 @@ return function(context)
                     end
                     if state.activeTimer and state.activeTimer > 0 then
                         state.activeTimer = math.max(0, state.activeTimer - dt)
-                        if state.activeTimer <= 0 and state._dash_restore and body and not body:isDestroyed() then
-                            if state._dash_prevDamping ~= nil then
-                                body:setLinearDamping(state._dash_prevDamping)
+                        if state.activeTimer <= 0 and state._dash_restore then
+                            if body and not body:isDestroyed() then
+                                if state._dash_prevDamping ~= nil then
+                                    body:setLinearDamping(state._dash_prevDamping)
+                                end
+                                if state._dash_prevBullet ~= nil then
+                                    body:setBullet(state._dash_prevBullet)
+                                end
                             end
-                            if state._dash_prevBullet ~= nil then
-                                body:setBullet(state._dash_prevBullet)
+                            if entity then
+                                entity._dashActive = nil
                             end
+
+                            local ctxState = resolve_context_state(context)
+                            local engineTrail = ctxState and ctxState.engineTrail
+                            if engineTrail and engineTrail.clearColorOverride then
+                                engineTrail:clearColorOverride()
+                            end
+
                             state._dash_prevDamping = nil
                             state._dash_prevBullet = nil
                             state._dash_restore = nil

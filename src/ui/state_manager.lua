@@ -605,14 +605,17 @@ end
 function UIStateManager.showStationUI(state)
     local resolved, proxy = resolve_state_pair(state)
     if not (resolved and resolved.stationUI) then
+        print("[UI] showStationUI: no stationUI on state", resolved)
         return
     end
-    
+
     state = resolved
     local stationUI = state.stationUI
     stationUI.visible = true
     stationUI._was_mouse_down = love.mouse and love.mouse.isDown and love.mouse.isDown(1) or false
-    
+
+    print("[UI] showStationUI: stationUI.visible set to true")
+
     if state.uiInput then
         state.uiInput.mouseCaptured = true
         state.uiInput.keyboardCaptured = true
@@ -622,14 +625,17 @@ end
 function UIStateManager.hideStationUI(state)
     local resolved, proxy = resolve_state_pair(state)
     if not (resolved and resolved.stationUI) then
+        print("[UI] hideStationUI: no stationUI on state", resolved)
         return
     end
-    
+
     state = resolved
     local stationUI = state.stationUI
     stationUI.visible = false
     stationUI.dragging = false
-    
+
+    print("[UI] hideStationUI: stationUI.visible set to false")
+
     if state.uiInput then
         local keepCaptured = any_modal_visible(state)
         state.uiInput.mouseCaptured = not not keepCaptured

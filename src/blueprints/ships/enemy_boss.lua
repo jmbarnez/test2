@@ -77,6 +77,7 @@ return {
                     name = "hull_outer",
                     type = "polygon",
                     points = hull_outer,
+                    highlightBase = true,
                     fill = "hull",
                     stroke = "trim",
                     strokeWidth = 4,
