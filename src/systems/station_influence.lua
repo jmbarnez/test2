@@ -1,5 +1,6 @@
 local tiny = require("libs.tiny")
 local PlayerManager = require("src.player.manager")
+local ShipRuntime = require("src.ships.runtime")
 
 local function resolve_station_entities(state)
     if not (state and state.stationEntities) then
@@ -25,20 +26,15 @@ local function normalize_radius(station)
         return influence.radius
     end
 
-    if type(station.influenceRadius) == "number" then
-        return station.influenceRadius
-    end
-
-    if station.mountRadius then
-        return station.mountRadius * 2.5
-    end
-
     local drawable = station.drawable
-    if drawable and type(drawable.radius) == "number" then
-        return drawable.radius * 2.2
+    if drawable then
+        local baseRadius = ShipRuntime.compute_drawable_radius(drawable)
+        if baseRadius and baseRadius > 0 then
+            return baseRadius * 2
+        end
     end
 
-    return 450
+    return 1000
 end
 
 local function update_station_influence_flags(state, player)

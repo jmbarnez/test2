@@ -183,11 +183,14 @@ end
 
 function Entities.spawnStation(state, spec)
     if not (state and state.world and state.physicsWorld) then
+        print("[ENTITIES] spawnStation failed - missing state/world/physicsWorld")
         return nil
     end
 
     local stationId = resolve_station_id(spec) or "hub_station"
     local instantiateContext = resolve_station_context(state, spec)
+    
+    print("[ENTITIES] spawnStation - id:", stationId, "position:", instantiateContext.position)
 
     local ok, station = pcall(loader.instantiate, "stations", stationId, instantiateContext)
     if not ok then
@@ -199,35 +202,49 @@ function Entities.spawnStation(state, spec)
 
     local world = state.world
     local stationEntity = world:add(station)
+    
+    print("[ENTITIES] Added station to world, entity:", stationEntity)
 
     state.stationEntities = state.stationEntities or {}
+    local beforeCount = #state.stationEntities
     state.stationEntities[#state.stationEntities + 1] = stationEntity
+    local afterCount = #state.stationEntities
+    
+    print("[ENTITIES] stationEntities count before:", beforeCount, "after:", afterCount)
 
     return stationEntity
 end
 
 function Entities.spawnStations(state, configs)
     if not (state and state.world) or not configs then
+        print("[ENTITIES] spawnStations failed - state:", state, "world:", state and state.world, "configs:", configs)
         return nil
     end
 
     state.stationEntities = {}
+    print("[ENTITIES] Initializing stationEntities array, config type:", type(configs))
 
     if type(configs) ~= "table" then
+        print("[ENTITIES] Single station config")
         return Entities.spawnStation(state, configs)
     end
 
     local lastSpawned
     if configs[1] ~= nil then
+        print("[ENTITIES] Array-style config with", #configs, "stations")
         for index = 1, #configs do
+            print("[ENTITIES] Spawning station", index, "config:", configs[index])
             lastSpawned = Entities.spawnStation(state, configs[index]) or lastSpawned
         end
     else
-        for _, spec in pairs(configs) do
+        print("[ENTITIES] Map-style config")
+        for key, spec in pairs(configs) do
+            print("[ENTITIES] Spawning station", key, "config:", spec)
             lastSpawned = Entities.spawnStation(state, spec) or lastSpawned
         end
     end
 
+    print("[ENTITIES] Finished spawning. Total stations:", #state.stationEntities)
     return lastSpawned
 end
 

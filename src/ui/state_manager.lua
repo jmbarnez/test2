@@ -66,6 +66,18 @@ local function createSkillsUIState()
     }
 end
 
+local function createStationUIState()
+    return {
+        visible = false,
+        dragging = false,
+        x = nil,
+        y = nil,
+        width = nil,
+        height = nil,
+        _was_mouse_down = false,
+    }
+end
+
 local function any_modal_visible(state)
     state = resolve_state_pair(state)
     if not state then
@@ -78,6 +90,7 @@ local function any_modal_visible(state)
         or (state.optionsUI and state.optionsUI.visible)
         or (state.mapUI and state.mapUI.visible)
         or (state.skillsUI and state.skillsUI.visible)
+        or (state.stationUI and state.stationUI.visible)
 end
 
 local function capture_input(state)
@@ -284,6 +297,7 @@ function UIStateManager.initialize(state)
     state.mapUI = state.mapUI or createMapUIState()
     state.skillsUI = state.skillsUI or createSkillsUIState()
     state.debugUI = state.debugUI or createDebugUIState()
+    state.stationUI = state.stationUI or createStationUIState()
     
     -- Initialize input state
     state.uiInput = state.uiInput or {
@@ -314,6 +328,7 @@ function UIStateManager.cleanup(state)
     state.mapUI = nil
     state.skillsUI = nil
     state.debugUI = nil
+    state.stationUI = nil
     state.uiInput = nil
     state.respawnRequested = nil
     set_state_field(state, proxy, "isPaused", nil)
@@ -582,6 +597,56 @@ function UIStateManager.isCargoUIVisible(state)
     return state and state.cargoUI and state.cargoUI.visible
 end
 
+function UIStateManager.isStationUIVisible(state)
+    state = resolve_state_pair(state)
+    return state and state.stationUI and state.stationUI.visible
+end
+
+function UIStateManager.showStationUI(state)
+    local resolved, proxy = resolve_state_pair(state)
+    if not (resolved and resolved.stationUI) then
+        return
+    end
+    
+    state = resolved
+    local stationUI = state.stationUI
+    stationUI.visible = true
+    stationUI._was_mouse_down = love.mouse and love.mouse.isDown and love.mouse.isDown(1) or false
+    
+    if state.uiInput then
+        state.uiInput.mouseCaptured = true
+        state.uiInput.keyboardCaptured = true
+    end
+end
+
+function UIStateManager.hideStationUI(state)
+    local resolved, proxy = resolve_state_pair(state)
+    if not (resolved and resolved.stationUI) then
+        return
+    end
+    
+    state = resolved
+    local stationUI = state.stationUI
+    stationUI.visible = false
+    stationUI.dragging = false
+    
+    if state.uiInput then
+        local keepCaptured = any_modal_visible(state)
+        state.uiInput.mouseCaptured = not not keepCaptured
+        state.uiInput.keyboardCaptured = not not keepCaptured
+    end
+end
+
+function UIStateManager.toggleStationUI(state)
+    local resolved = resolve_state_pair(state)
+    if not (resolved and resolved.stationUI) then
+        return
+    end
+    
+    state = resolved
+    state.stationUI.visible = not state.stationUI.visible
+end
+
 function UIStateManager.requestRespawn(state)
     local resolved, proxy = resolve_state_pair(state)
     if not resolved then
@@ -617,6 +682,7 @@ function UIStateManager.onResize(state, width, height)
     reset_window_geometry(state.skillsUI)
     reset_window_geometry(state.deathUI)
     reset_window_geometry(state.debugUI)
+    reset_window_geometry(state.stationUI)
 
     if type(state.mapUI) == "table" then
         reset_window_geometry(state.mapUI)

@@ -20,7 +20,6 @@ local createAbilityModuleSystem = require("src.systems.ability_modules")
 local createHudSystem = require("src.systems.hud")
 local createUiSystem = require("src.systems.ui")
 local createTargetingSystem = require("src.systems.targeting")
-local createStationInfluenceSystem = require("src.systems.station_influence")
 local createDestructionSystem = require("src.systems.destruction")
 local createLootDropSystem = require("src.systems.loot_drop")
 local createPickupSystem = require("src.systems.pickup")
@@ -156,7 +155,6 @@ function Systems.initialize(state, damageCallback)
         camera = state.camera,
         uiInput = state.uiInput,
     })))
-    state.stationInfluenceSystem = state.world:addSystem(createStationInfluenceSystem(GameContext.extend(baseContext)))
     state.hudSystem = state.world:addSystem(createHudSystem(baseContext))
     state.uiSystem = state.world:addSystem(createUiSystem(baseContext))
 end
@@ -176,7 +174,6 @@ function Systems.teardown(state)
     state.pickupSystem = nil
     state.renderSystem = nil
     state.weaponSystem = nil
-    state.stationInfluenceSystem = nil
     if state.projectileSystem and state.projectileSystem.detachPhysicsCallbacks then
         state.projectileSystem:detachPhysicsCallbacks()
     end

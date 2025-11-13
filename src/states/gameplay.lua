@@ -14,6 +14,8 @@ local cargo_window = require("src.ui.windows.cargo")
 local options_window = require("src.ui.windows.options")
 local map_window = require("src.ui.windows.map")
 local debug_window = require("src.ui.windows.debug")
+local station_window = require("src.ui.windows.station")
+local ShipRuntime = require("src.ships.runtime")
 require("src.entities.ship_factory")
 require("src.entities.asteroid_factory")
 require("src.entities.weapon_factory")
@@ -29,6 +31,98 @@ local SaveLoad = require("src.util.save_load")
 local love = love
 
 local SAMPLE_WINDOW = 120
+
+local DOCK_RADIUS_MULTIPLIER = 2.0
+local DOCK_RADIUS_FALLBACK = 1000
+
+local function resolve_station_dock_radius(station)
+    if not station then
+        return DOCK_RADIUS_FALLBACK
+    end
+
+    local drawable = station.drawable
+    if drawable then
+        local base = ShipRuntime.compute_drawable_radius(drawable)
+        if base and base > 0 then
+            return math.max(base * DOCK_RADIUS_MULTIPLIER, DOCK_RADIUS_FALLBACK)
+        end
+    end
+
+    local mountRadius = station.mountRadius
+    if type(mountRadius) == "number" and mountRadius > 0 then
+        return math.max(mountRadius * DOCK_RADIUS_MULTIPLIER, DOCK_RADIUS_FALLBACK)
+    end
+
+    return DOCK_RADIUS_FALLBACK
+end
+
+local function update_station_dock_state(state)
+    if not state then
+        return
+    end
+
+    state.stationDockTarget = nil
+    state.stationDockRadius = nil
+    state.stationDockDistance = nil
+
+    local stations = state.stationEntities
+    if not (stations and #stations > 0) then
+        print("[DOCK] No stations found. stationEntities:", stations, "count:", stations and #stations or 0)
+        return
+    end
+
+    local player = PlayerManager.getCurrentShip(state)
+    local position = player and player.position
+    if not (position and position.x and position.y) then
+        print("[DOCK] No player position")
+        return
+    end
+    
+    print("[DOCK] Checking", #stations, "stations. Player at:", position.x, position.y)
+
+    local px, py = position.x, position.y
+    local bestStation
+    local bestDistanceSq = math.huge
+    local bestRadius = 0
+
+    for i = 1, #stations do
+        local station = stations[i]
+        if station then
+            station.stationInfluenceActive = false
+        end
+        local stationPos = station and station.position
+        if stationPos and stationPos.x and stationPos.y then
+            local radius = resolve_station_dock_radius(station)
+            print("[DOCK] Station", i, "at", stationPos.x, stationPos.y, "radius:", radius)
+            if radius and radius > 0 then
+                local dx = px - stationPos.x
+                local dy = py - stationPos.y
+                local distSq = dx * dx + dy * dy
+                local dist = math.sqrt(distSq)
+                local radiusSq = radius * radius
+                
+                print("[DOCK]   Distance:", dist, "vs radius:", radius, "in range?", distSq <= radiusSq)
+
+                if distSq <= radiusSq and distSq < bestDistanceSq then
+                    bestDistanceSq = distSq
+                    bestStation = station
+                    bestRadius = radius
+                    print("[DOCK]   -> Selected as best station")
+                end
+            end
+        end
+    end
+
+    if bestStation then
+        state.stationDockTarget = bestStation
+        state.stationDockRadius = bestRadius
+        state.stationDockDistance = math.sqrt(bestDistanceSq)
+        bestStation.stationInfluenceActive = true
+        print("[DOCK] DOCKING AVAILABLE - distance:", state.stationDockDistance, "radius:", bestRadius)
+    else
+        print("[DOCK] No station in range")
+    end
+end
 
 local function get_time()
     if love and love.timer and love.timer.getTime then
@@ -347,6 +441,12 @@ function gameplay:wheelmoved(x, y)
             return
         end
     end
+    
+    if UIStateManager.isStationUIVisible(self) then
+        if station_window.wheelmoved(self, x, y) then
+            return
+        end
+    end
 
     cargo_window.wheelmoved(self, x, y)
 
@@ -493,6 +593,8 @@ function gameplay:update(dt)
 
     -- Update ECS systems after physics (systems read freshly updated physics state)
     self.world:update(dt)
+
+    update_station_dock_state(self)
 
     if self.engineTrail then
         self.engineTrail:update(dt)
@@ -660,6 +762,10 @@ function gameplay:keypressed(key)
     if cargo_window.keypressed(self, key) then
         return
     end
+    
+    if station_window.keypressed(self, key) then
+        return
+    end
 
     if UIStateManager.isMapUIVisible(self) then
         if map_window.keypressed(self, key) then
@@ -706,20 +812,35 @@ function gameplay:keypressed(key)
         return
     end
 
-    if key == "q" or key == "e" then
+    if key == "e" then
+        if self.uiInput and self.uiInput.keyboardCaptured then
+            return
+        end
+        
+        -- Check if player is near a station
+        if self.stationDockTarget then
+            UIStateManager.showStationUI(self)
+            return
+        end
+        
+        -- Otherwise cycle weapons
+        local player = PlayerManager.getCurrentShip(self)
+        if player then
+            PlayerWeapons.cycle(player, 1)
+        end
+        return
+    end
+    
+    if key == "q" then
         if self.uiInput and self.uiInput.keyboardCaptured then
             return
         end
 
         local player = PlayerManager.getCurrentShip(self)
-        if not player then
-            return
+        if player then
+            PlayerWeapons.cycle(player, -1)
         end
-
-        local direction = key == "q" and -1 or 1
-        if PlayerWeapons.cycle(player, direction) then
-            return
-        end
+        return
     end
 
     if key == "tab" then

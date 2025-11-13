@@ -68,6 +68,34 @@ local function is_friendly_fire(shooter, target)
     return false
 end
 
+local function resolve_chain_category(entity)
+    if not entity then
+        return nil
+    end
+    if entity.enemy then
+        return "enemy"
+    end
+    if entity.player then
+        return "player"
+    end
+    if entity.asteroid or entity.type == "asteroid" then
+        return "asteroid"
+    end
+    if entity.station or entity.type == "station" then
+        return "station"
+    end
+    if entity.wreckage then
+        return "wreckage"
+    end
+    if entity.armorType then
+        return "armor:" .. tostring(entity.armorType)
+    end
+    if entity.type then
+        return tostring(entity.type)
+    end
+    return nil
+end
+
 local function distance_sq(ax, ay, bx, by)
     local dx = (ax or 0) - (bx or 0)
     local dy = (ay or 0) - (by or 0)
@@ -100,7 +128,7 @@ local function apply_hitscan_damage(damageEntity, target, baseDamage, source, we
     return damage
 end
 
-local function find_chain_target(world, shooter, originX, originY, rangeSq, alreadyHit)
+local function find_chain_target(world, shooter, originX, originY, rangeSq, alreadyHit, chainCategory)
     if not (world and world.entities) then
         return nil
     end
@@ -113,13 +141,21 @@ local function find_chain_target(world, shooter, originX, originY, rangeSq, alre
         if candidate and candidate ~= shooter and not (alreadyHit and alreadyHit[candidate]) then
             if candidate.health and (candidate.health.current or 0) > 0 and not candidate.pendingDestroy then
                 if not is_friendly_fire(shooter, candidate) then
-                    local cx, cy = resolve_entity_position(candidate)
-                    if cx and cy then
-                        local distSq = distance_sq(originX, originY, cx, cy)
-                        if distSq <= rangeSq then
-                            if not bestDistanceSq or distSq < bestDistanceSq then
-                                bestDistanceSq = distSq
-                                bestTarget = candidate
+                    local matchesCategory = true
+                    if chainCategory then
+                        local candidateCategory = resolve_chain_category(candidate)
+                        matchesCategory = candidateCategory == chainCategory
+                    end
+
+                    if matchesCategory then
+                        local cx, cy = resolve_entity_position(candidate)
+                        if cx and cy then
+                            local distSq = distance_sq(originX, originY, cx, cy)
+                            if distSq <= rangeSq then
+                                if not bestDistanceSq or distSq < bestDistanceSq then
+                                    bestDistanceSq = distSq
+                                    bestTarget = candidate
+                                end
                             end
                         end
                     end
@@ -154,9 +190,10 @@ local function perform_chain_lightning(world, shooter, weapon, damageEntity, bas
     local chainColor = chainConfig.color or weapon.color
     local chainGlow = chainConfig.glowColor or weapon.glowColor
     local chainWidth = chainConfig.width or weapon.width or 3
+    local chainCategory = resolve_chain_category(originTarget)
 
-    local alreadyHit = alreadyHit or {}
-    alreadyHit[originTarget] = true
+    local hitRegistry = {}
+    hitRegistry[originTarget] = true
 
     local currentDamage = baseDamage
     local currentX = originX
@@ -172,14 +209,14 @@ local function perform_chain_lightning(world, shooter, weapon, damageEntity, bas
             break
         end
 
-        local nextTarget = find_chain_target(world, shooter, currentX, currentY, rangeSq, alreadyHit)
+        local nextTarget = find_chain_target(world, shooter, currentX, currentY, rangeSq, hitRegistry, chainCategory)
         if not nextTarget then
             break
         end
 
         local nx, ny = resolve_entity_position(nextTarget)
         if not (nx and ny) then
-            alreadyHit[nextTarget] = true
+            hitRegistry[nextTarget] = true
             break
         end
 
@@ -194,11 +231,12 @@ local function perform_chain_lightning(world, shooter, weapon, damageEntity, bas
                     width = chainWidth,
                     color = chainColor,
                     glow = chainGlow,
+                    style = weapon.beamStyle or "straight",
                 }
             end
         end
 
-        alreadyHit[nextTarget] = true
+        hitRegistry[nextTarget] = true
         currentX, currentY = nx, ny
     end
 end
@@ -553,6 +591,7 @@ local function fire_hitscan(world, entity, startX, startY, dirX, dirY, weapon, p
         width = beamWidth,
         color = beamColor,
         glow = beamGlow,
+        style = weapon.beamStyle or "straight",
     }
 end
 
@@ -835,28 +874,110 @@ return function(context)
                 love.graphics.rotate(angle)
 
                 local baseWidth = beam.width or 3
-                local glowWidth = math.max(baseWidth * 1.5, baseWidth + 1.2)
-                local coreWidth = math.max(baseWidth * 0.55, 0.45)
-                local highlightWidth = math.max(coreWidth * 0.45, 0.22)
-
                 local glow = beam.glow or { 1.0, 0.8, 0.6 }
                 local color = beam.color or { 0.6, 0.85, 1.0 }
+                local beamStyle = beam.style or "straight"
 
-                local halfGlow = glowWidth * 0.5
-                local halfCore = coreWidth * 0.5
-                local halfHighlight = highlightWidth * 0.5
+                if beamStyle == "lightning" then
+                    -- Strongly unstable lightning bolt style
+                    local segments = math.max(18, math.floor(length / 10))
+                    local points = {}
 
-                -- Soft glow halo
-                love.graphics.setColor(glow[1], glow[2], glow[3], 0.28)
-                love.graphics.rectangle("fill", 0, -halfGlow, length, glowWidth)
+                    -- Time-based wobble so the bolt "shimmers" frame-to-frame
+                    local t = love.timer and love.timer.getTime and love.timer.getTime() or 0
 
-                -- Core body
-                love.graphics.setColor(color[1], color[2], color[3], 0.95)
-                love.graphics.rectangle("fill", 0, -halfCore, length, coreWidth)
+                    -- Start point
+                    points[1] = { x = 0, y = 0 }
 
-                -- White-hot center
-                love.graphics.setColor(1.0, 1.0, 1.0, 0.6)
-                love.graphics.rectangle("fill", 0, -halfHighlight, length, highlightWidth)
+                    -- Generate chaotic jagged points along the beam
+                    for j = 1, segments - 1 do
+                        local progress = j / segments
+                        local centralFactor = 1 - math.min(1, math.abs(progress - 0.5) * 1.4)
+                        local baseDev = baseWidth * (4.0 + math.random() * 3.0)
+                        local timeWobble = math.sin(t * 18 + j * 1.9) * baseWidth * 1.4
+                        local maxDeviation = (baseDev + math.abs(timeWobble)) * centralFactor
+
+                        local xJitter = (math.random() - 0.5) * baseWidth * 1.3
+                        local x = progress * length + xJitter
+                        local y = (math.random() - 0.5) * maxDeviation
+
+                        points[j + 1] = { x = x, y = y }
+                    end
+
+                    -- End point
+                    points[segments + 1] = { x = length, y = 0 }
+
+                    -- Draw glow segments (wide, soft halo)
+                    local glowWidth = math.max(baseWidth * 2.8, baseWidth + 3.2)
+                    love.graphics.setLineWidth(glowWidth)
+                    love.graphics.setColor(glow[1], glow[2], glow[3], 0.24)
+                    for j = 1, #points - 1 do
+                        love.graphics.line(points[j].x, points[j].y, points[j + 1].x, points[j + 1].y)
+                    end
+
+                    -- Draw core lightning (thicker, slightly noisy)
+                    local coreWidth = math.max(baseWidth * 1.0, 1.4)
+                    love.graphics.setLineWidth(coreWidth)
+                    love.graphics.setColor(color[1], color[2], color[3], 0.95)
+                    for j = 1, #points - 1 do
+                        love.graphics.line(points[j].x, points[j].y, points[j + 1].x, points[j + 1].y)
+                    end
+
+                    -- Draw bright highlight center
+                    local highlightWidth = math.max(coreWidth * 0.5, 0.7)
+                    love.graphics.setLineWidth(highlightWidth)
+                    love.graphics.setColor(1.0, 1.0, 1.0, 0.8)
+                    for j = 1, #points - 1 do
+                        love.graphics.line(points[j].x, points[j].y, points[j + 1].x, points[j + 1].y)
+                    end
+
+                    -- Occasionally spawn 1–2 branches so it feels chaotic
+                    if length > 60 then
+                        local branchCount = 0
+                        local maxBranches = (length > 160) and 2 or 1
+                        for _ = 1, maxBranches do
+                            if math.random() < 0.9 then
+                                branchCount = branchCount + 1
+                                local branchPoint = math.random(2, #points - 1)
+                                local branch = points[branchPoint]
+
+                                local branchLength = baseWidth * (4.0 + math.random() * 7)
+                                local branchAngle = (math.random() - 0.5) * math.pi * 1.1
+                                local branchEndX = branch.x + math.cos(branchAngle) * branchLength
+                                local branchEndY = branch.y + math.sin(branchAngle) * branchLength
+
+                                love.graphics.setLineWidth(coreWidth * 0.7)
+                                love.graphics.setColor(color[1], color[2], color[3], 0.7)
+                                love.graphics.line(branch.x, branch.y, branchEndX, branchEndY)
+
+                                love.graphics.setLineWidth(highlightWidth * 0.55)
+                                love.graphics.setColor(1.0, 1.0, 1.0, 0.5)
+                                love.graphics.line(branch.x, branch.y, branchEndX, branchEndY)
+                            end
+                        end
+                    end
+                else
+                    -- Default straight beam style
+                    local glowWidth = math.max(baseWidth * 1.5, baseWidth + 1.2)
+                    local coreWidth = math.max(baseWidth * 0.55, 0.45)
+                    local highlightWidth = math.max(coreWidth * 0.45, 0.22)
+
+                    local halfGlow = glowWidth * 0.5
+                    local halfCore = coreWidth * 0.5
+                    local halfHighlight = highlightWidth * 0.5
+
+                    -- Soft glow halo
+                    love.graphics.setColor(glow[1], glow[2], glow[3], 0.28)
+                    love.graphics.rectangle("fill", 0, -halfGlow, length, glowWidth)
+
+                    -- Core body
+                    love.graphics.setColor(color[1], color[2], color[3], 0.95)
+                    love.graphics.rectangle("fill", 0, -halfCore, length, coreWidth)
+
+                    -- White-hot center
+                    love.graphics.setColor(1.0, 1.0, 1.0, 0.6)
+                    love.graphics.rectangle("fill", 0, -halfHighlight, length, highlightWidth)
+                end
 
                 love.graphics.pop()
             end

@@ -9,6 +9,7 @@ local defaults = {
     offset = 30,
     color = { 0.55, 0.9, 1.0 },
     glow_color = { 0.9, 1.0, 1.0 },
+    beam_style = "lightning",
     forward = 14,
     inset = 0,
     lateral = 0,
@@ -57,6 +58,7 @@ return {
             offset = copy_default("offset") or 30,
             color = copy_default("color") or { 0.55, 0.9, 1.0 },
             glowColor = copy_default("glow_color") or { 0.9, 1.0, 1.0 },
+            beamStyle = copy_default("beam_style") or "lightning",
             chainLightning = {
                 maxTargets = 3,
                 range = 320,

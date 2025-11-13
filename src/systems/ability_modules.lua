@@ -1,4 +1,5 @@
 local tiny = require("libs.tiny")
+local AudioManager = require("src.audio.manager")
 
 local ability_handlers = {}
 
@@ -27,7 +28,7 @@ local function drain_energy(entity, cost)
     return true
 end
 
-ability_handlers.dash = function(entity, body, ability, state)
+ability_handlers.dash = function(context, entity, body, ability, state)
     if not (body and not body:isDestroyed()) then
         return false
     end
@@ -46,6 +47,24 @@ ability_handlers.dash = function(entity, body, ability, state)
     local overrideSpeed = ability.speed or ability.velocity
     if overrideSpeed and overrideSpeed > 0 then
         body:setLinearVelocity(dirX * overrideSpeed, dirY * overrideSpeed)
+    end
+
+    -- Temporary physics tweaks during dash
+    state._dash_prevDamping = state._dash_prevDamping or body:getLinearDamping()
+    local dashDamping = ability.dashDamping
+    if dashDamping == nil then dashDamping = 0.2 end
+    body:setLinearDamping(dashDamping)
+
+    state._dash_prevBullet = (state._dash_prevBullet == nil) and body:isBullet() or state._dash_prevBullet
+    body:setBullet(true)
+    state._dash_restore = true
+
+    -- Nice feedback: SFX + engine burst if available
+    AudioManager.play_sfx("sfx:laser_turret_fire", { pitch = 1.15, volume = 0.9 })
+    local ctxState = (context and (context.state or (type(context.resolveState) == "function" and context:resolveState()))) or nil
+    local engineTrail = ctxState and ctxState.engineTrail
+    if engineTrail and engineTrail.emitBurst then
+        engineTrail:emitBurst(160, 1.3)
     end
 
     state.activeTimer = ability.duration or 0
@@ -100,6 +119,17 @@ return function(context)
                     end
                     if state.activeTimer and state.activeTimer > 0 then
                         state.activeTimer = math.max(0, state.activeTimer - dt)
+                        if state.activeTimer <= 0 and state._dash_restore and body and not body:isDestroyed() then
+                            if state._dash_prevDamping ~= nil then
+                                body:setLinearDamping(state._dash_prevDamping)
+                            end
+                            if state._dash_prevBullet ~= nil then
+                                body:setBullet(state._dash_prevBullet)
+                            end
+                            state._dash_prevDamping = nil
+                            state._dash_prevBullet = nil
+                            state._dash_restore = nil
+                        end
                     end
 
                     local isDown = false
@@ -121,7 +151,7 @@ return function(context)
                             local handler = ability_handlers[ability.type or ability.id]
                             local activated = true
                             if handler then
-                                activated = handler(entity, body, ability, state)
+                                activated = handler(context, entity, body, ability, state)
                             end
 
                             if activated then

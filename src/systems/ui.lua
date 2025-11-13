@@ -9,6 +9,7 @@ local options_window = require("src.ui.windows.options")
 local map_window = require("src.ui.windows.map")
 local skills_window = require("src.ui.windows.skills")
 local debug_window = require("src.ui.windows.debug")
+local station_window = require("src.ui.windows.station")
 ---@diagnostic disable-next-line: undefined-global
 local love = love
 
@@ -29,6 +30,7 @@ return function(context)
             map_window.draw(context)
             skills_window.draw(context)
             debug_window.draw(context)
+            station_window.draw(context)
             notifications.draw(context)
 
             -- Individual windows are responsible for declaring when they capture input.
