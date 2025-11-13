@@ -142,6 +142,15 @@ function DisplaySettings.applyWindowFlags(settings, context)
 
         runtime_settings.set_vsync_enabled(flags.vsync)
 
+        if not flags.fullscreen and love.window.getDesktopDimensions and love.window.setPosition then
+            local desktopWidth, desktopHeight = love.window.getDesktopDimensions()
+            if desktopWidth and desktopHeight then
+                local centerX = math.floor((desktopWidth - width) / 2)
+                local centerY = math.floor((desktopHeight - height) / 2)
+                love.window.setPosition(centerX, centerY)
+            end
+        end
+
         if context then
             if type(context.resize) == "function" then
                 context:resize(width, height)

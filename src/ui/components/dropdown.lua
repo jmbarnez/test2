@@ -129,11 +129,7 @@ function dropdown.render(options)
     local arrow_x = x + width - 18
     local arrow_y = y + base_height * 0.5
     love.graphics.setColor(arrow_color)
-    if state.open then
-        love.graphics.polygon("fill", arrow_x - 6, arrow_y - 2, arrow_x + 6, arrow_y - 2, arrow_x, arrow_y + 4)
-    else
-        love.graphics.polygon("fill", arrow_x - 6, arrow_y + 2, arrow_x + 6, arrow_y + 2, arrow_x, arrow_y - 4)
-    end
+    love.graphics.polygon("fill", arrow_x - 6, arrow_y - 2, arrow_x + 6, arrow_y - 2, arrow_x, arrow_y + 4)
 
     if state.open and #items > 0 then
         local list_font = fonts.small or base_font

@@ -52,7 +52,7 @@ return {
             fireMode = "projectile",
             projectileSpeed = 540,
             fireRate = 1.25,
-            damage = 28,
+            damage = 20,
             damageType = "laser",
             energyPerShot = 28,
             projectileLifetime = 2.4,
@@ -74,7 +74,7 @@ return {
                 projectileSpeed = 520,
                 projectileLifetime = 0.9,
                 projectileSize = 1.6,
-                projectileDamage = 22,
+                projectileDamage = 16,
                 randomizeColorOnSpawn = true,
                 colorPalette = clone_palette(FIREWORK_COLORS),
                 glowBoost = 0.58,
@@ -86,7 +86,7 @@ return {
                 projectileBlueprint = {
                     projectile = {
                         lifetime = 0.9,
-                        damage = 22,
+                        damage = 16,
                         damageType = "laser",
                     },
                     drawable = {
@@ -118,7 +118,7 @@ return {
             projectileBlueprint = {
                 projectile = {
                     lifetime = 2.4,
-                    damage = 28,
+                    damage = 20,
                     damageType = "laser",
                 },
                 drawable = {

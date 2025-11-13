@@ -114,12 +114,7 @@ local nebulaShader = love.graphics.newShader([[
         
         // Enhanced exposure with subtle variation
         finalColor *= exposure * (1.0 + sin(hue1 * 2.0) * 0.1);
-        
-        // Add subtle sparkle effect
-        float sparkle = sin(freq1.x * 20.0) * cos(freq1.y * 20.0);
-        sparkle = smoothstep(0.95, 1.0, sparkle) * 0.3;
-        finalColor += vec3(sparkle);
-        
+
         float outputAlpha = density * finalAlpha;
         return vec4(finalColor * finalAlpha, outputAlpha);
     }
@@ -350,7 +345,7 @@ function Starfield.initialize(state)
     local nebula_config = constants.stars.nebula or {}
     state.starfieldTime = 0
     configure_nebula_state(state, nebula_config)
-    state.asteroidBelts = generate_asteroid_belts(bounds)
+    state.asteroidBelts = generate_asteroid_belts(state)
     state._starfieldBounds = {
         x = bounds.x,
         y = bounds.y,
@@ -391,7 +386,7 @@ function Starfield.refresh(state, options)
     state.nebulaSeed = love.math.random() * 1000
     local nebula_config = constants.stars.nebula or {}
     configure_nebula_state(state, nebula_config)
-    state.asteroidBelts = generate_asteroid_belts(bounds)
+    state.asteroidBelts = generate_asteroid_belts(state)
     state._starfieldBounds = {
         x = bounds.x,
         y = bounds.y,

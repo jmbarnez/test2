@@ -36,7 +36,7 @@ return {
         weapon = {
             fireMode = "projectile",
             projectileSpeed = 840,
-            damage = 44,
+            damage = 32,
             fireRate = 0.4,
             damageType = "laser",
             energyPerShot = 18,
@@ -53,7 +53,7 @@ return {
             projectileBlueprint = {
                 projectile = {
                     lifetime = 5.0,
-                    damage = 44,
+                    damage = 32,
                 },
                 physics = {
                     density = 1e-05,

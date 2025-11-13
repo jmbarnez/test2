@@ -1,6 +1,7 @@
 local loader = require("src.blueprints.loader")
 local constants = require("src.constants.game")
 local ShipRuntime = require("src.ships.runtime")
+local Culling = require("src.util.culling")
 local ShipCargo = require("src.ships.cargo")
 local ShipWreckage = require("src.effects.ship_wreckage")
 local table_util = require("src.util.table")
@@ -234,6 +235,11 @@ function ship_factory.instantiate(blueprint, context)
     entity.collider = nil
 
     entity.mountRadius = ShipRuntime.compute_drawable_radius(entity.drawable)
+    if not entity.cullRadius then
+        entity.cullRadius = Culling.computeCullRadius(entity, function(e)
+            return e.mountRadius
+        end)
+    end
 
     instantiate_weapons(entity, blueprint, context)
 

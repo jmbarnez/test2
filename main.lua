@@ -21,8 +21,10 @@ local function refresh_frame_limit_state()
     end
 
     USE_FRAME_LIMIT = runtime_settings.should_limit_frame_rate()
+    runtime_settings.clear_frame_limit_dirty()
 end
 
+runtime_settings.set_frame_limit_changed_callback(refresh_frame_limit_state)
 refresh_frame_limit_state()
 
 function love.run()
@@ -67,7 +69,9 @@ function love.run()
         end
 
         -- Manual frame limiting only when vsync is disabled
-        refresh_frame_limit_state()
+        if runtime_settings.is_frame_limit_dirty() then
+            refresh_frame_limit_state()
+        end
         if USE_FRAME_LIMIT and love.timer and TARGET_FPS > 0 then
             local elapsed = love.timer.getTime() - frameStart
             local remaining = TARGET_FRAME_TIME - elapsed
@@ -88,6 +92,14 @@ function love.load()
             fullscreen = window.fullscreen,
             msaa = window.msaa,
         })
+        if not window.fullscreen and love.window.getDesktopDimensions and love.window.setPosition then
+            local desktopWidth, desktopHeight = love.window.getDesktopDimensions()
+            if desktopWidth and desktopHeight then
+                local centerX = math.floor((desktopWidth - window.width) / 2)
+                local centerY = math.floor((desktopHeight - window.height) / 2)
+                love.window.setPosition(centerX, centerY)
+            end
+        end
         runtime_settings.set_vsync_enabled((window.vsync or 0) ~= 0)
         if window.max_fps then
             runtime_settings.set_max_fps(window.max_fps)

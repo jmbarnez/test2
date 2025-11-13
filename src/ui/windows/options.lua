@@ -357,10 +357,10 @@ function options_window.draw(context)
 
     if isMouseDown then
         -- Audio sliders
-        AudioSettings.handleInteraction(state, settings, mouseX, mouseY, isMouseDown, justPressed)
+        local audioHandled = AudioSettings.handleInteraction(state, settings, mouseX, mouseY, isMouseDown, justPressed)
 
         if justPressed then
-            local handled = false
+            local handled = not not audioHandled
 
             -- Display settings
             handled = DisplaySettings.handleInteraction(state, settings, context, mouseX, mouseY, justPressed) or handled
@@ -376,8 +376,11 @@ function options_window.draw(context)
                 AudioSettings.apply(settings)
                 DisplaySettings.applyWindowFlags(settings, context)
                 DisplaySettings.applyFrameLimit(settings)
-                reset_scroll_interaction(state)
                 handled = true
+            end
+
+            if handled then
+                reset_scroll_interaction(state)
             end
         end
     end

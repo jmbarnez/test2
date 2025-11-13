@@ -7,7 +7,7 @@
 ---@diagnostic disable: undefined-global
 local tiny = require("libs.tiny")
 local vector = require("src.util.vector")
-local constants = require("src.constants.game")
+local Culling = require("src.util.culling")
 local ship_renderer = require("src.renderers.ship")
 local station_renderer = require("src.renderers.station")
 local asteroid_renderer = require("src.renderers.asteroid")
@@ -19,8 +19,6 @@ local highlight_primary = { 0.35, 0.92, 1.0, 0.65 }
 local highlight_secondary = { 0.2, 0.7, 0.95, 0.25 }
 local lock_primary = { 1.0, 0.3, 0.25, 0.85 }
 local lock_secondary = { 1.0, 0.1, 0.05, 0.5 }
-
-local render_constants = constants.render or {}
 
 local function get_target_cache(context)
     if not context then
@@ -130,67 +128,14 @@ local function get_camera(context)
     return nil
 end
 
-local function compute_cull_radius(entity)
-    if not entity then
-        return 0
-    end
-
-    if type(entity.cullRadius) == "number" and entity.cullRadius >= 0 then
-        return entity.cullRadius
-    end
-
-    local drawable = entity.drawable
-    if drawable and type(drawable.cullRadius) == "number" and drawable.cullRadius >= 0 then
-        return drawable.cullRadius
-    end
-
-    return compute_highlight_radius(entity)
-end
-
-local function is_entity_visible(entity, context)
-    local cam = get_camera(context)
-    if not cam then
-        return true
-    end
-
-    local position = entity.position
-    if not (position and position.x and position.y) then
-        return true
-    end
-
-    local margin = render_constants.entity_cull_margin or 0
-    local radius = compute_cull_radius(entity)
-    local cam_width = cam.width or 0
-    local cam_height = cam.height or 0
-
-    local left = (cam.x or 0) - margin - radius
-    local right = (cam.x or 0) + cam_width + margin + radius
-    local top = (cam.y or 0) - margin - radius
-    local bottom = (cam.y or 0) + cam_height + margin + radius
-
-    local x = position.x
-    local y = position.y
-
-    return x >= left and x <= right and y >= top and y <= bottom
-end
-
 local function should_skip_render(entity, context)
     if not entity then
         return false
     end
 
-    if entity.disableRenderCulling or entity.alwaysVisible then
-        return false
-    end
-
-    local drawable = entity.drawable
-    if drawable then
-        if drawable.disableRenderCulling or drawable.alwaysVisible then
-            return false
-        end
-    end
-
-    return not is_entity_visible(entity, context)
+    return Culling.shouldCull(entity, get_camera(context) or context, {
+        fallback = compute_highlight_radius,
+    })
 end
 
 local function draw_highlight(entity, cache)

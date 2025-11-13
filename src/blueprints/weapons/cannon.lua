@@ -2,7 +2,7 @@ local table_util = require("src.util.table")
 
 local weapon_defaults = {
     projectileSpeed = 450,
-    damage = 90,
+    damage = 66,
     fireRate = 2.0,
     projectileLifetime = 2.0,
     projectileSize = 6,
@@ -11,7 +11,7 @@ local weapon_defaults = {
     glowColor = { 1.0, 0.9, 0.5 },
     projectile = {
         lifetime = 2.0,
-        damage = 90,
+        damage = 66,
         damageType = "kinetic",
     },
     projectileDrawable = {

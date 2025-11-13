@@ -34,7 +34,7 @@ return {
             fireMode = "projectile",
             projectileSpeed = 420,
             fireRate = 1.15,
-            damage = 10,
+            damage = 8,
             damageType = "kinetic",
             projectileLifetime = 1.2,
             projectileSize = 2.4,
@@ -55,7 +55,7 @@ return {
             projectileBlueprint = {
                 projectile = {
                     lifetime = 1.2,
-                    damage = 10,
+                    damage = 8,
                     damageType = "kinetic",
                 },
                 drawable = {
