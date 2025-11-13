@@ -3,12 +3,22 @@ local QuestGenerator = require("src.stations.quest_generator")
 
 local quest_overlay = {}
 
-local COLORS = theme.colors.hud or {
+local DEFAULT_COLORS = {
     background = { 0.06, 0.08, 0.12, 0.82 },
     border = { 0.22, 0.32, 0.46, 0.9 },
     text = { 0.85, 0.9, 1.0, 1 },
     accent = { 0.32, 0.6, 0.92, 1 },
 }
+
+local HUD_COLORS = theme.colors.hud or {}
+
+local function resolve_color(key)
+    local color = HUD_COLORS[key]
+    if type(color) == "table" and color[1] then
+        return color
+    end
+    return DEFAULT_COLORS[key]
+end
 
 local function resolve_state(context)
     if not context then
@@ -48,8 +58,8 @@ local function resolve_active_quest(state)
 end
 
 local function draw_background(x, y, width, height)
-    local bg = COLORS.background
-    local border = COLORS.border
+    local bg = resolve_color("background")
+    local border = resolve_color("border")
 
     love.graphics.setColor(bg[1], bg[2], bg[3], bg[4] or 1)
     love.graphics.rectangle("fill", x, y, width, height, 6, 6)
@@ -99,17 +109,17 @@ function quest_overlay.draw(context, minimap_rect)
     local cursor_x = overlay_x + padding
     local cursor_y = overlay_y + padding
 
-    draw_text(title_font, quest.title or "Active Contract", cursor_x, cursor_y, COLORS.text)
+    draw_text(title_font, quest.title or "Active Contract", cursor_x, cursor_y, resolve_color("text"))
 
     cursor_y = cursor_y + title_height + spacing
 
     local progress_text = progress_label ~= "" and string.format("Progress: %s", progress_label) or "Progress: --"
-    draw_text(body_font, progress_text, cursor_x, cursor_y, COLORS.text)
+    draw_text(body_font, progress_text, cursor_x, cursor_y, resolve_color("text"))
 
     cursor_y = cursor_y + line_height
 
     local reward_text = reward_label ~= "" and string.format("Reward: %s", reward_label) or "Reward: --"
-    draw_text(body_font, reward_text, cursor_x, cursor_y, COLORS.accent)
+    draw_text(body_font, reward_text, cursor_x, cursor_y, resolve_color("accent"))
 end
 
 return quest_overlay
