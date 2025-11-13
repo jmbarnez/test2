@@ -923,19 +923,32 @@ function gameplay:keypressed(key)
         return
     end
 
-    -- Interact with stations / cycle weapons forward
-    if key == "e" or key == "v" then
+    -- Interact with stations (E) / cycle weapons forward (E or V)
+    if key == "e" then
         if self.uiInput and self.uiInput.keyboardCaptured then
             return
         end
 
-        -- Station interaction takes priority
+        -- Station interaction takes priority when pressing E
         if self.stationDockTarget then
             UIStateManager.showStationUI(self)
             return
         end
 
         -- Otherwise cycle weapons forward
+        local player = PlayerManager.getCurrentShip(self)
+        if player then
+            PlayerWeapons.cycle(player, 1)
+        end
+        return
+    end
+
+    -- Cycle weapons forward (V only)
+    if key == "v" then
+        if self.uiInput and self.uiInput.keyboardCaptured then
+            return
+        end
+
         local player = PlayerManager.getCurrentShip(self)
         if player then
             PlayerWeapons.cycle(player, 1)

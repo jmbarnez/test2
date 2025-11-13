@@ -36,6 +36,11 @@ local function screen_to_world(x, y, camera)
     return worldX, worldY
 end
 
+---@class LocalInputSystemContext
+---@field state table|nil        # Gameplay state providing world, players, intents
+---@field camera table|nil       # Camera for mapping screen to world coordinates
+---@field uiInput table|nil      # Optional UI input capture flags (mouse/keyboard)
+
 return function(context)
     context = context or {}
     return tiny.system {
@@ -84,9 +89,18 @@ return function(context)
                 local worldX, worldY = screen_to_world(mx, my, context.camera)
 
                 Intent.setAim(intent, worldX, worldY)
+
                 local primary_down = love.mouse.isDown and love.mouse.isDown(1)
+                local secondary_down = love.mouse.isDown and love.mouse.isDown(2)
+
+                local uiInput = context.uiInput
+                if uiInput and uiInput.mouseCaptured then
+                    primary_down = false
+                    secondary_down = false
+                end
+
                 Intent.setFirePrimary(intent, primary_down and not is_control_modifier_active())
-                Intent.setFireSecondary(intent, love.mouse.isDown and love.mouse.isDown(2))
+                Intent.setFireSecondary(intent, secondary_down)
             end
 
             if love.keyboard then

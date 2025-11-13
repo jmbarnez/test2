@@ -19,7 +19,14 @@ local DEFAULT_PLAYER_ENERGY_DRAIN = 14 -- Fallback energy drain when a weapon do
 ---@alias WeaponComponent table
 ---@alias WeaponBeamContainer table[]
 ---@alias WeaponImpactContainer table[]
----@alias WeaponSystemContext { physicsWorld:love.World|nil, damageEntity:fun(target:table, amount:number, source:table, context:table)|nil, camera:table|nil, intentHolder:table|nil, state:table|nil }
+---@class WeaponSystemContext
+---@field physicsWorld love.World|nil   # Required for projectile mode and raycasts
+---@field damageEntity fun(target:table, amount:number, source:table, context:table)|nil
+---@field camera table|nil
+---@field intentHolder table|nil
+---@field state table|nil
+---@field resolveState fun(self:table):table|nil
+---@field registerPhysicsCallback fun(self:table, phase:string, handler:function):fun()|nil
 
 local SPARK_COUNT = 12 -- Number of impact sparks spawned when a beam strikes
 local SPARK_JITTER_MAX = math.pi * 0.6 -- Maximum angular deviation for spark directions
@@ -595,7 +602,7 @@ local function fire_hitscan(world, entity, startX, startY, dirX, dirY, weapon, p
     }
 end
 
----@param context WeaponSystemContext
+---@param context WeaponSystemContext|nil
 ---@return table
 return function(context)
     context = context or {}
@@ -695,9 +702,13 @@ return function(context)
                     end
 
                     if isLocalPlayer and not fire and love.mouse and love.mouse.isDown then
-                        local isControlHeld = love.keyboard and love.keyboard.isDown and (love.keyboard.isDown("lctrl") or love.keyboard.isDown("rctrl"))
-                        if not isControlHeld then
-                            fire = love.mouse.isDown(1)
+                        local uiInput = gameplayState and gameplayState.uiInput
+                        if not (uiInput and uiInput.mouseCaptured) then
+                            local isControlHeld = love.keyboard and love.keyboard.isDown
+                                and (love.keyboard.isDown("lctrl") or love.keyboard.isDown("rctrl"))
+                            if not isControlHeld then
+                                fire = love.mouse.isDown(1)
+                            end
                         end
                     end
 

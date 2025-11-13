@@ -111,29 +111,12 @@ local function compute_highlight_radius(entity)
     return radius
 end
 
-local function get_camera(context)
-    if not context then
-        return nil
-    end
-
-    if context.camera then
-        return context.camera
-    end
-
-    local state = context.state
-    if state and state.camera then
-        return state.camera
-    end
-
-    return nil
-end
-
 local function should_skip_render(entity, context)
     if not entity then
         return false
     end
 
-    return Culling.shouldCull(entity, get_camera(context) or context, {
+    return Culling.shouldCull(entity, context, {
         fallback = compute_highlight_radius,
     })
 end
@@ -278,13 +261,13 @@ return function(context)
                 station_renderer.draw(entity, context)
             elseif drawable.type == "ship" then
                 ship_renderer.draw(entity, context)
-            elseif entity.drawable.type == "asteroid" then
+            elseif drawable.type == "asteroid" then
                 asteroid_renderer.draw(entity)
-            elseif entity.drawable.type == "projectile" then
+            elseif drawable.type == "projectile" then
                 projectile_renderer.draw(entity)
-            elseif entity.drawable.type == "pickup" then
+            elseif drawable.type == "pickup" then
                 pickup_renderer.draw(entity)
-            elseif entity.drawable.type == "wreckage" then
+            elseif drawable.type == "wreckage" then
                 wreckage_renderer.draw(entity)
             end
 

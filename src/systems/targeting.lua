@@ -113,7 +113,7 @@ local function find_closest_target(entities, world_x, world_y, player_entity)
     return best_entity, best_dist_sq, best_radius
 end
 
-local function update_targeting_cache(cache, world_x, world_y, best_entity, best_dist_sq, best_radius, active_target)
+local function update_targeting_cache(cache, world_x, world_y, best_entity, best_dist_sq, best_radius, active_target, state)
     cache.cursorWorldX = world_x
     cache.cursorWorldY = world_y
     cache.distanceToCursorSq = best_entity and best_dist_sq or nil
@@ -139,6 +139,11 @@ local function update_targeting_cache(cache, world_x, world_y, best_entity, best
         and math.max(0, math.min(1, 1 - state.targetLockTimer / cache.lockDuration))
         or cache.lockProgress
 end
+
+---@class TargetingSystemContext
+---@field state table|nil      # Gameplay state providing world, camera, targeting fields
+---@field camera table|nil     # Optional camera override for cursor projection
+---@field uiInput table|nil    # Optional UI input capture flags
 
 return function(context)
     context = context or {}
@@ -188,7 +193,7 @@ return function(context)
             )
 
             -- Update cache with results
-            update_targeting_cache(cache, world_x, world_y, best_entity, best_dist_sq, best_radius, active_target)
+            update_targeting_cache(cache, world_x, world_y, best_entity, best_dist_sq, best_radius, active_target, state)
         end,
     }
 end

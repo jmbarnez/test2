@@ -93,7 +93,7 @@ constants.asteroids = {
         rolls = 2,
         entries = {
             {
-                id = "resource:ore_chunk",
+                id = "resource:stone",
                 chance = 0.85,
                 quantity = { min = 1, max = 3 },
                 scatter = 26,
@@ -123,7 +123,7 @@ constants.asteroids = {
         speed = { min = 70, max = 180 },
         angular_velocity = { min = -2.8, max = 2.8 },
         loot_drop = {
-            id = "resource:ore_chunk",
+            id = "resource:stone",
             count = { min = 1, max = 2 },
             quantity = { min = 1, max = 3 },
             scatter = { min = 10, max = 32 },
@@ -131,6 +131,13 @@ constants.asteroids = {
             lifetime = 18,
             collectRadius = 26,
             size = 18,
+        },
+        metal_rich = {
+            chance = 0.35,
+            id = "resource:ferrosite_ore",
+            count = { min = 1, max = 2 },
+            quantity = { min = 2, max = 4 },
+            color = { 0.58, 0.7, 0.86 },
         },
     },
 }

@@ -7,6 +7,7 @@ local definition = {
     stackable = true,
     defaultQuantity = 1,
     volume = 0.01,
+    value = 40,
     icon = {
         layers = {
             {

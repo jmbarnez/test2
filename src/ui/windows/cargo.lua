@@ -399,6 +399,11 @@ function cargo_window.draw(context)
         return
     end
 
+    if uiInput then
+        uiInput.mouseCaptured = true
+        uiInput.keyboardCaptured = true
+    end
+
     local mouse_x, mouse_y = love.mouse.getPosition()
     local is_mouse_down = love.mouse.isDown(1)
     local just_pressed = is_mouse_down and not state._was_mouse_down

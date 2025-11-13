@@ -38,6 +38,7 @@ end
 local DEFAULT_STATION_BUFFER = 260
 local FALLBACK_PLAYER_OFFSET = 600
 
+
 local function find_station_anchor(state)
     if not state then
         return nil
@@ -382,6 +383,7 @@ local function assign_retaliation_target(entity, source)
 
     entity.currentTarget = attacker
 end
+
 
 function Entities.damage(entity, amount, source, context)
     if not entity or not entity.health then

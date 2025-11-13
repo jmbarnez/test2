@@ -10,6 +10,10 @@ local explosion_renderer = require("src.renderers.explosion")
 local love = love
 local lg = love.graphics
 
+---@class ParticleEffectsSystemContext
+---@field projectileSystem table|nil   # Projectile system providing impact particles/explosions
+---@field weaponFireSystem table|nil   # Weapon system providing beam impact sparks
+
 return function(context)
     -- Get reference to projectile system for its particles
     local projectileSystem = context and context.projectileSystem

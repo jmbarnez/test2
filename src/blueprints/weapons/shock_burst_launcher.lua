@@ -14,6 +14,10 @@ return {
     id = "shock_burst_launcher",
     name = "Shock Burst Launcher",
     assign = "weapon",
+    item = {
+        value = 320,
+        volume = 4,
+    },
     icon = {
         kind = "weapon",
         color = clone_array(BASE_COLOR),

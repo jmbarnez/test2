@@ -30,6 +30,10 @@ return {
     id = "laser_beam",
     name = "Laser Beam",
     assign = "weapon",
+    item = {
+        value = 260,
+        volume = 3,
+    },
     icon = {
         kind = "weapon",
         color = { 0.6, 0.8, 1.0 },

@@ -8,6 +8,18 @@ local AudioManager = require("src.audio.manager")
 local love = love
 local math = math
 
+---@class PickupSystemContext
+---@field state table|nil               # Gameplay state (used to find collectors)
+---@field damping number|nil            # Default pickup velocity damping
+---@field collectRadius number|nil      # Default collection radius
+---@field bobSpeed number|nil           # Default bob animation speed
+---@field magnetStrength number|nil     # Default magnet attraction strength
+---@field magnetFalloff number|nil      # Default magnet falloff exponent
+---@field overflowRepelStrength number|nil # Strength when cargo is full
+---@field collectorBuffer table|nil     # Reusable buffer of collector entities
+---@field collectorSeen table|nil       # Internal set of seen collectors
+---@field onCollected fun(pickup:table, ship:table, entity:table, state:table)|nil
+
 return function(context)
     context = context or {}
 

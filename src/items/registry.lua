@@ -6,7 +6,8 @@ local definitions = {}
 local weaponByBlueprint = {}
 local moduleByBlueprint = {}
 local builtin_definitions = {
-    require("src.items.definitions.resource_ore_chunk"),
+    require("src.items.definitions.resource_stone"),
+    require("src.items.definitions.resource_ferrosite_ore"),
     require("src.items.definitions.resource_rare_crystal"),
     require("src.items.definitions.resource_hull_scrap"),
 }
@@ -227,6 +228,8 @@ function Items.registerWeaponBlueprint(blueprint)
         return itemId
     end
 
+    local itemMeta = blueprint.item or {}
+
     Items.register({
         id = itemId,
         type = "weapon",
@@ -235,6 +238,9 @@ function Items.registerWeaponBlueprint(blueprint)
         blueprintId = blueprintId,
         blueprintCategory = blueprint.category or "weapons",
         icon = blueprint.icon and table_util.deep_copy(blueprint.icon) or nil,
+        volume = itemMeta.volume,
+        value = itemMeta.value,
+        description = itemMeta.description or blueprint.description,
         createInstance = function(instance, overrides)
             overrides = overrides or {}
             instance.quantity = 1

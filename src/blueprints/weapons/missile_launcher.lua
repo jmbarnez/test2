@@ -34,6 +34,10 @@ return {
     id = "missile_launcher",
     name = "Missile Launcher",
     assign = "weapon",
+    item = {
+        value = 520,
+        volume = 5,
+    },
     icon = {
         kind = "weapon",
         color = { 0.95, 0.62, 0.22 },

@@ -30,6 +30,45 @@ local PlayerManager = require("src.player.manager")
 
 local Systems = {}
 
+-- System wiring overview:
+--   baseContext = GameContext.compose(state, { damageEntity = ... })
+--     * Provides: state, resolveState, resolveLocalPlayer, registerPhysicsCallback (if available)
+--   sharedContext = context or GameContext.compose(state)
+--
+-- Systems and their primary context fields:
+--   createLocalInputSystem(GameContext.extend(baseContext, {
+--       camera = state.camera,
+--       uiInput = state.uiInput,
+--   }))
+--   createPlayerControlSystem(GameContext.extend(baseContext, {
+--       camera = state.camera,
+--       engineTrail = state.engineTrail,
+--       uiInput = state.uiInput,
+--       intentHolder = state,
+--   }))
+--   createPickupSystem(GameContext.extend(sharedContext))
+--   createWeaponSystem(GameContext.extend(sharedContext))          -- uses physicsWorld, damageEntity, camera/intentHolder via GameContext
+--   createShipSystem(GameContext.extend(sharedContext))
+--   createAbilityModuleSystem(GameContext.extend(sharedContext))  -- uses state/intentHolder via GameContext
+--   createProjectileSystem(GameContext.extend(sharedContext))     -- uses physicsWorld, damageEntity, registerPhysicsCallback
+--   createLootDropSystem(GameContext.extend(sharedContext, {
+--       spawnLootItem = Entities.spawnLootPickup,
+--       onLootDropped = ...
+--   }))
+--   createDestructionSystem(GameContext.extend(sharedContext))
+--   createEnemyAISystem(baseContext)
+--   createRenderSystem(baseContext)
+--   createParticleEffectsSystem(GameContext.extend(baseContext, {
+--       projectileSystem = state.projectileSystem,
+--       weaponFireSystem = state.weaponSystem,
+--   }))
+--   createTargetingSystem(GameContext.extend(baseContext, {
+--       camera = state.camera,
+--       uiInput = state.uiInput,
+--   }))
+--   createHudSystem(baseContext)
+--   createUiSystem(baseContext)
+
 local function resolve_player_id_from_entity(entity)
     if not entity then
         return nil

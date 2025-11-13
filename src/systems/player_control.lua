@@ -9,6 +9,13 @@ local tiny = require("libs.tiny")
 local vector = require("src.util.vector")
 local GameContext = require("src.states.gameplay.context")
 
+---@class PlayerControlSystemContext
+---@field state table               # Gameplay state or context-resolvable state
+---@field camera table|nil          # Camera used for mouse-to-world aim
+---@field engineTrail table|nil     # Optional engine trail effect
+---@field uiInput table|nil         # Optional UI input capture state
+---@field intentHolder table|nil    # Optional holder for playerIntents/localPlayerId
+
 return function(context)
     context = GameContext.compose(GameContext.resolveState(context) or context, context)
     local engineTrail = context.engineTrail

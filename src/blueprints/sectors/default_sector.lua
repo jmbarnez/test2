@@ -3,10 +3,10 @@ return {
     id = "default_sector",
     name = "Default Sector",
     asteroids = {
-        count = { min = 30, max = 50 },
+        count = { min = 30, max = 500 },
     },
     enemies = {
-        count = { min = 15, max = 75 },
+        count = { min = 15, max = 35 },
         ship_ids = {
             { id = "enemy_drone", weight = 3 },
             { id = "enemy_scout", weight = 2 },

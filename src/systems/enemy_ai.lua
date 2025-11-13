@@ -233,6 +233,11 @@ end
 
 local PlayerManager = require("src.player.manager")
 
+---@class EnemyAISystemContext
+---@field state table|nil              # Gameplay state (optional, passed through to PlayerManager)
+---@field resolveState fun(self:table):table|nil @ Optional helper to resolve gameplay state
+---@field resolveLocalPlayer fun(self:table):table|nil @ Optional helper to resolve local player
+
 ---@param context EnemyBehaviorContext
 ---@return table|nil
 local function get_local_player(context)
@@ -509,13 +514,15 @@ local function create_behavior_tree(context)
         local dropRange = disengageRange or detectionRange or engagementRange
         if dropRange and dropRange > 0 and distance > dropRange then
             if not (entity.retaliationTimer and entity.retaliationTimer > 0 and entity.retaliationTarget and is_target_valid(entity.retaliationTarget)) then
-                entity.retaliationTarget = nil
-                entity.currentTarget = nil
-                disable_weapon(entity)
-                apply_damping(body, dt, 4)
-                update_engine_trail(entity, false)
-                return BTStatus.failure
+                entity.retaliationTarget = entity.retaliationTarget or entity.currentTarget
+                entity.retaliationTimer = entity.retaliationTimer or ai.retaliationDuration or stats.retaliation_duration or 3
             end
+
+            entity.currentTarget = nil
+            disable_weapon(entity)
+            apply_damping(body, dt, 4)
+            update_engine_trail(entity, false)
+            return BTStatus.failure
         end
 
         preferredDistance = max(80, preferredDistance or 0)
@@ -530,6 +537,12 @@ local function create_behavior_tree(context)
         normalizedError = max(-1, min(1, normalizedError))
 
         local desiredSpeed = maxSpeed * normalizedError
+
+        if distance < preferredDistance * 0.7 and normalizedError < 0 then
+            desiredSpeed = desiredSpeed * 0.3
+            apply_damping(body, dt, 6)
+        end
+
         local desiredVX, desiredVY = dirX * desiredSpeed, dirY * desiredSpeed
 
         local strafeThrust = stats.strafe_thrust or 0
@@ -558,6 +571,17 @@ local function create_behavior_tree(context)
 
         if diffLen > 0 then
             local maxDelta = maxAccel * dt
+
+            local velLen = vector.length(currentVX, currentVY)
+            if velLen > 0 and dirX and dirY then
+                local vdx, vdy = currentVX / velLen, currentVY / velLen
+                local forwardDot = vdx * dirX + vdy * dirY
+                if forwardDot < -0.25 then
+                    apply_damping(body, dt, 6)
+                    maxDelta = maxDelta * 0.4
+                end
+            end
+
             if diffLen > maxDelta then
                 local scale = maxDelta / diffLen
                 diffX, diffY = diffX * scale, diffY * scale
@@ -634,7 +658,7 @@ local function ensure_behavior_tree(ai, context)
     return ai.behaviorTree
 end
 
----@param context EnemyBehaviorContext
+---@param context EnemyAISystemContext|EnemyBehaviorContext|nil
 ---@return table
 return function(context)
     context = context or {}

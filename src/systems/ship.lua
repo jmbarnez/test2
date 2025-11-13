@@ -1,6 +1,9 @@
 local tiny = require("libs.tiny")
 local ShipRuntime = require("src.ships.runtime")
 
+---@class ShipSystemContext
+---@field state table|nil    # Optional gameplay state, currently unused
+
 return function(context)
     context = context or {}
 

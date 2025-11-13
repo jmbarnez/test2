@@ -56,6 +56,10 @@ return {
     id = "cannon",
     name = "Cannon",
     assign = "weapon",
+    item = {
+        value = 220,
+        volume = 4,
+    },
     icon = {
         kind = "weapon",
         color = { 1.0, 0.92, 0.12 },

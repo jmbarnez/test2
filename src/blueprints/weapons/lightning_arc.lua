@@ -31,6 +31,10 @@ return {
     id = "lightning_arc",
     name = "Lightning Arc",
     assign = "weapon",
+    item = {
+        value = 480,
+        volume = 4,
+    },
     icon = {
         kind = "weapon",
         color = { 0.62, 0.9, 1.0 },

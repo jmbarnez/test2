@@ -124,6 +124,10 @@ local function resolve_intent(context, entity)
     return entity.playerId and intents[entity.playerId] or nil
 end
 
+---@class AbilityModulesSystemContext
+---@field state table|nil            # Gameplay state providing engineTrail and playerIntents
+---@field intentHolder table|nil     # Optional explicit holder with playerIntents
+
 return function(context)
     context = context or {}
 

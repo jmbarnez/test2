@@ -174,6 +174,7 @@ end
 local function spawn_chunk_loot(state, entity)
     local chunk_config = asteroid_constants.chunks
     local loot_drop = chunk_config and chunk_config.loot_drop
+    local metal_config = chunk_config and chunk_config.metal_rich
 
     if not (loot_drop and state and state.world and entity and entity.position) then
         return
@@ -185,6 +186,17 @@ local function spawn_chunk_loot(state, entity)
     end
 
     local drop_count = random_range(loot_drop.count, 0)
+    local quantity_spec = loot_drop.quantity
+
+    if metal_config and entity and entity.miningVariant == "metal_rich" then
+        drop_id = metal_config.id or drop_id
+        if metal_config.count then
+            drop_count = random_range(metal_config.count, 0)
+        end
+        if metal_config.quantity then
+            quantity_spec = metal_config.quantity
+        end
+    end
     if not drop_count or drop_count <= 0 then
         return
     end
@@ -194,7 +206,7 @@ local function spawn_chunk_loot(state, entity)
     local scatter_spec = loot_drop.scatter
 
     for _ = 1, drop_count do
-        local quantity = random_range(loot_drop.quantity, 1) or 1
+        local quantity = random_range(quantity_spec, 1) or 1
         if quantity > 0 then
             local spawn_x = base_position.x or 0
             local spawn_y = base_position.y or 0
@@ -352,6 +364,18 @@ local function spawn_chunks(entity, destruction_context)
                 end
             else
                 chunk_entity.loot = nil
+            end
+
+            local metal_config = chunk_config.metal_rich
+            if metal_config and metal_config.chance and metal_config.chance > 0 then
+                local roll = love.math.random()
+                if roll < metal_config.chance then
+                    chunk_entity.miningVariant = "metal_rich"
+                    local metal_color = metal_config.color
+                    if metal_color and chunk_entity.drawable then
+                        chunk_entity.drawable.color = metal_color
+                    end
+                end
             end
 
             local travel_angle = spawn_angle + (love.math.random() - 0.5) * 0.6

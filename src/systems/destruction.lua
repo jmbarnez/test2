@@ -2,6 +2,9 @@
 
 local tiny = require("libs.tiny")
 
+---@class DestructionSystemContext
+---@field state table|nil   # Optional gameplay state, forwarded to onDestroyed handlers
+
 local function safe_call(callback, entity, context)
     if type(callback) ~= "function" then
         return
@@ -13,6 +16,8 @@ local function safe_call(callback, entity, context)
     end
 end
 
+---@param context DestructionSystemContext|nil
+---@return table
 return function(context)
     context = context or {}
 

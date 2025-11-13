@@ -13,6 +13,10 @@ local station_window = require("src.ui.windows.station")
 ---@diagnostic disable-next-line: undefined-global
 local love = love
 
+---@class UISystemContext
+---@field state table|nil         # Gameplay/UI state passed through to windows
+---@field uiInput table|nil       # Shared UI input capture flags
+
 return function(context)
     return tiny.system {
         draw = function()

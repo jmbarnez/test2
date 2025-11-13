@@ -140,6 +140,12 @@ local function roll_loot(loot_config)
     return drops
 end
 
+---@class LootDropSystemContext
+---@field spawnLootItem fun(drop:table, source:table, context:table)|nil
+---@field spawnLoot fun(drop:table, source:table, context:table)|nil
+---@field pendingLootDrops table|nil
+---@field onLootDropped fun(drop:table, source:table, context:table)|nil
+
 return function(context)
     context = context or {}
 

@@ -441,6 +441,17 @@ function UIStateManager.toggleCargoUI(state)
 
     state = resolved
     state.cargoUI.visible = not state.cargoUI.visible
+
+    if state.uiInput then
+        if state.cargoUI.visible then
+            state.uiInput.mouseCaptured = true
+            state.uiInput.keyboardCaptured = true
+        else
+            local keepCaptured = any_modal_visible(state)
+            state.uiInput.mouseCaptured = not not keepCaptured
+            state.uiInput.keyboardCaptured = not not keepCaptured
+        end
+    end
 end
 
 local skillsVisibilityController = create_visibility_handlers("skillsUI", {

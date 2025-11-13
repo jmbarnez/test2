@@ -10,6 +10,9 @@ local ship_renderer = require("src.renderers.ship")
 local asteroid_renderer = require("src.renderers.asteroid")
 local projectile_renderer = require("src.renderers.projectile")
 
+---@class RenderSystemContext
+---@field camera table|nil      # Optional camera, forwarded to ship renderer via context
+
 return function(context)
     return tiny.system {
         filter = tiny.requireAll("position", "drawable"),

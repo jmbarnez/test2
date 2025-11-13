@@ -17,6 +17,10 @@ return {
     id = "laser_turret",
     name = "Pulse Laser Turret",
     assign = "weapon",
+    item = {
+        value = 420,
+        volume = 4,
+    },
     icon = {
         kind = "weapon",
         color = { 0.2, 0.9, 1.0 },

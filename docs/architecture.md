@@ -28,7 +28,41 @@ Novus uses [Tiny-ecs](https://github.com/bakpakin/tiny-ecs) to drive gameplay sy
   - *Destruction & Effects*: `destruction`, `damage_numbers`
   - *Presentation*: `render`, `hud`, `ui`, `targeting`
 
-Each system resides in `src/systems/` (or `src/spawners/`, `src/renderers/`) and is created via factory functions that accept the gameplay state context.
+Each system resides in `src/systems/` (or `src/spawners/`, `src/renderers/`) and is created via factory functions that accept a gameplay **context** rather than the raw state table.
+
+### Gameplay Context (`GameContext`)
+
+Gameplay systems and spawners take a context table that wraps the `gameplay` state:
+
+- **Creation** – `GameContext.compose(state, overrides?)` builds a context with:
+  - `state` – the underlying gameplay state table.
+  - `resolveState()` – helper that returns `state` (safe for callers that only see context).
+  - `resolveLocalPlayer()` – helper that uses `PlayerManager` to find the local player.
+  - Optional `registerPhysicsCallback` – present when the state exposes `registerPhysicsCallback`.
+  - `__index` fallback to `state`, so existing code that read `state.world`, `state.camera`, etc. continues to work.
+- **Extension** – `GameContext.extend(context, overrides?)` clones an existing context and merges in per-system overrides (e.g. `camera`, `uiInput`, `intentHolder`).
+
+`Systems.initialize` wires systems with shared base contexts:
+
+- `baseContext = GameContext.compose(state, { damageEntity = ... })`
+- `sharedContext = context or GameContext.compose(state)`
+
+Systems are then constructed using `baseContext` / `GameContext.extend(baseContext, {...})` so they all see a consistent view of the gameplay state plus their own overrides.
+
+### System Context Types (`*SystemContext`)
+
+Each system defines a local `*SystemContext` type documenting what it reads from the context table, for example:
+
+- `WeaponSystemContext` – `physicsWorld`, `damageEntity`, `camera`, `intentHolder`, `state`, optional `registerPhysicsCallback`.
+- `ProjectileSystemContext` – `physicsWorld` (required), optional `damageEntity` and `registerPhysicsCallback`.
+- `PlayerControlSystemContext` – `state`, `camera`, optional `engineTrail`, `uiInput`, `intentHolder`.
+- `TargetingSystemContext` – `state`, optional `camera` and `uiInput`.
+
+**Guidelines when adding new systems:**
+
+1. Define a local `---@class SomeSystemContext` near the top of the system file.
+2. Only document fields the system actually reads from `context`.
+3. Prefer taking a context (`GameContext.compose/extend`) over the raw state so helpers like `resolveState` and `resolveLocalPlayer` stay available.
 
 ### Entities & Blueprints
 

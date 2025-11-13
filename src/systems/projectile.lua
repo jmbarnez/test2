@@ -76,25 +76,27 @@ local function apply_homing(entity, dt, damageEntity, system)
         end
     end
 
-    if not target then
-        return
-    end
+    local tx, ty
+    local desiredAngle
+    local dirLenSq
 
-    local tx, ty = resolve_entity_position(target)
-    if not (tx and ty) then
-        return
-    end
+    if target then
+        tx, ty = resolve_entity_position(target)
+        if not (tx and ty) then
+            return
+        end
 
-    local x, y = body:getPosition()
-    local toTargetX = tx - x
-    local toTargetY = ty - y
-    local dirLenSq = toTargetX * toTargetX + toTargetY * toTargetY
-    if dirLenSq <= EPS then
-        return
-    end
+        local x, y = body:getPosition()
+        local toTargetX = tx - x
+        local toTargetY = ty - y
+        dirLenSq = toTargetX * toTargetX + toTargetY * toTargetY
+        if dirLenSq <= EPS then
+            return
+        end
 
-    local desiredDirX, desiredDirY = normalize(toTargetX, toTargetY)
-    local desiredAngle = atan2(desiredDirY, desiredDirX)
+        local desiredDirX, desiredDirY = normalize(toTargetX, toTargetY)
+        desiredAngle = atan2(desiredDirY, desiredDirX)
+    end
 
     local vx, vy = body:getLinearVelocity()
     local speed = math.sqrt(vx * vx + vy * vy)
@@ -104,6 +106,10 @@ local function apply_homing(entity, dt, damageEntity, system)
     else
         currentAngle = (body:getAngle() or 0) - math.pi * 0.5
         speed = homing.initialSpeed or homing.speed or 0
+    end
+
+    if not desiredAngle then
+        desiredAngle = currentAngle
     end
 
     local turnRate = homing.turnRate or math.rad(220)
@@ -156,8 +162,11 @@ local function apply_homing(entity, dt, damageEntity, system)
         entity.rotation = newAngle + math.pi * 0.5
     end
 
-    if homing.hitRadius then
-        local distanceSq = dirLenSq
+    if homing.hitRadius and target and tx and ty then
+        local x, y = body:getPosition()
+        local dx = tx - x
+        local dy = ty - y
+        local distanceSq = dx * dx + dy * dy
         if distanceSq <= homing.hitRadius * homing.hitRadius then
             if damageEntity and entity.projectile then
                 local projectileComponent = entity.projectile
@@ -512,6 +521,11 @@ local function trigger_delayed_spawn(system, projectile, reason, physicsWorld)
     projectile.pendingDestroy = true
     return true
 end
+
+---@class ProjectileSystemContext
+---@field physicsWorld love.World        # Physics world used for projectile bodies
+---@field damageEntity fun(target:table, amount:number, source:table, context:table)|nil
+---@field registerPhysicsCallback fun(self:table, phase:string, handler:function):fun()|nil
 
 return function(context)
     context = context or {}

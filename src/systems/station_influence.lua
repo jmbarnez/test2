@@ -109,6 +109,9 @@ local function update_station_influence_flags(state, player)
     end
 end
 
+---@class StationInfluenceSystemContext
+---@field state table|nil      # Gameplay state providing station entities and player
+
 return function(context)
     context = context or {}
 

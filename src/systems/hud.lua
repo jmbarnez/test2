@@ -5,6 +5,10 @@ local UIStateManager = require("src.ui.state_manager")
 ---@diagnostic disable-next-line: undefined-global
 local love = love
 
+---@class HudSystemContext
+---@field state table|nil          # Gameplay state, used to derive player and HUD data
+---@field resolveLocalPlayer fun(self:table):table|nil @ Optional helper for resolving local player
+
 return function(context)
     return tiny.system {
         draw = function()

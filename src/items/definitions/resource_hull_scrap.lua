@@ -5,6 +5,7 @@ local definition = {
     stackable = true,
     defaultQuantity = 1,
     volume = 0.02,
+    value = 6,
     description = "Salvaged plating fragments harvested from destroyed hulls.",
     icon = {
         layers = {
