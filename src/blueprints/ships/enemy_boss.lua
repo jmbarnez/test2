@@ -133,15 +133,9 @@ return {
             angular_damping = 0.16,
         },
         hull = {
-            max = 950,
-            current = 950,
+            max = 450,
+            current = 450,
             regen = 4,
-        },
-        shield = {
-            max = 1200,
-            current = 1200,
-            regen = 28,
-            rechargeDelay = 4.5,
         },
         energy = {
             max = 600,
@@ -168,6 +162,7 @@ return {
             entries = {
                 {
                     credit_reward = constants.enemies.credit_rewards.enemy_boss,
+                    xp_reward = constants.enemies.xp_rewards.enemy_boss,
                 },
             },
         },

@@ -143,6 +143,7 @@ return {
             entries = {
                 {
                     credit_reward = constants.enemies.credit_rewards.enemy_drone,
+                    xp_reward = constants.enemies.xp_rewards.enemy_drone,
                 },
             },
         },

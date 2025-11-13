@@ -2,7 +2,7 @@ local table_util = require("src.util.table")
 
 local defaults = {
     fire_rate = 2.2,
-    projectile_speed = 320,
+    projectile_speed = 140,
     projectile_lifetime = 4.6,
     projectile_size = 6,
     damage = 110,
@@ -53,7 +53,7 @@ return {
             constantKey = "missile",
             damageType = "explosive",
             fireRate = with_default("fire_rate", 2.2),
-            projectileSpeed = with_default("projectile_speed", 320),
+            projectileSpeed = with_default("projectile_speed", 140),
             projectileLifetime = with_default("projectile_lifetime", 4.6),
             projectileSize = with_default("projectile_size", 6),
             damage = with_default("damage", 110),
@@ -65,9 +65,9 @@ return {
             travelIndicatorRadius = 28,
             projectileHoming = {
                 turnRateDegrees = 210,
-                speed = 320,
-                acceleration = 260,
-                maxSpeed = 450,
+                acceleration = 720,
+                minSpeed = 140,
+                maxSpeed = 520,
                 faceTarget = true,
                 hitRadius = 14,
                 explosion = {

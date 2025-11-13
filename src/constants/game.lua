@@ -155,6 +155,23 @@ constants.enemies = {
         enemy_drone = 45,
         enemy_boss = 500,
     },
+    xp_rewards = {
+        enemy_scout = {
+            amount = 25,
+            category = "combat",
+            skill = "weapons",
+        },
+        enemy_drone = {
+            amount = 20,
+            category = "combat",
+            skill = "weapons",
+        },
+        enemy_boss = {
+            amount = 150,
+            category = "combat",
+            skill = "weapons",
+        },
+    },
 }
 
 -- ============================================================================
@@ -193,6 +210,7 @@ constants.render = {
     entity_cull_margin = 200,
     fonts = {
         primary = "assets/fonts/Orbitron-Regular.ttf",
+        bold = "assets/fonts/Orbitron-Bold.ttf",
         sizes = {
             small = 12,
             medium = 16,

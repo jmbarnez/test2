@@ -70,6 +70,28 @@ function FloatingText.add(state, position, text, opts)
     local amount = opts.amount
     local label = text or (amount and string.format("+%s", tostring(amount))) or "+0"
 
+    local fonts = theme.get_fonts()
+    local requestedFont = opts.font
+    local font
+    if fonts then
+        if type(requestedFont) == "string" and fonts[requestedFont] then
+            font = fonts[requestedFont]
+        elseif type(requestedFont) == "userdata" then
+            font = requestedFont
+        else
+            font = fonts.body
+        end
+    end
+    font = font or love.graphics.getFont()
+
+    local lines = {}
+    for line in string.gmatch(label, "[^\n]+") do
+        lines[#lines + 1] = line
+    end
+    if #lines == 0 then
+        lines[1] = label
+    end
+
     local duration = math.max(0.1, opts.duration or DEFAULT_DURATION)
     local rise = opts.rise or DEFAULT_RISE
     local offsetY = opts.offsetY or 0
@@ -82,6 +104,10 @@ function FloatingText.add(state, position, text, opts)
         vx = (opts.vx or 0) + (love.math.random() - 0.5) * HORIZONTAL_DRIFT,
         vy = -(rise),
         text = label,
+        lines = lines,
+        font = font,
+        fontHeight = font:getHeight(),
+        lineHeight = font:getHeight() * font:getLineHeight(),
         color = {
             color[1] or 1,
             color[2] or 1,
@@ -128,10 +154,9 @@ function FloatingText.draw(state)
     end
 
     local fonts = theme.get_fonts()
-    local font = fonts and fonts.body or love.graphics.getFont()
+    local defaultFont = fonts and fonts.body or love.graphics.getFont()
 
     love.graphics.push("all")
-    love.graphics.setFont(font)
 
     for i = 1, #container do
         local entry = container[i]
@@ -142,20 +167,35 @@ function FloatingText.draw(state)
         local textX = entry.x
         local textY = entry.y
 
+        local font = entry.font or defaultFont
+        love.graphics.setFont(font)
+        local baseLineHeight = entry.lineHeight or (font:getHeight() * font:getLineHeight())
+        local scaledLineHeight = baseLineHeight * scale
+
         if entry.shadow then
             love.graphics.setColor(0, 0, 0, alpha * 0.55)
-            love.graphics.print(entry.text, textX + 1, textY + 1, 0, scale, scale)
+            for lineIndex = 1, #entry.lines do
+                local line = entry.lines[lineIndex]
+                local lineY = textY + (lineIndex - 1) * scaledLineHeight
+                love.graphics.print(line, textX + 1, lineY + 1, 0, scale, scale)
+            end
         end
 
         local color = entry.color
         love.graphics.setColor(color[1], color[2], color[3], (color[4] or 1) * alpha)
-        love.graphics.print(entry.text, textX, textY, 0, scale, scale)
+        for lineIndex = 1, #entry.lines do
+            local line = entry.lines[lineIndex]
+            local lineY = textY + (lineIndex - 1) * scaledLineHeight
+            love.graphics.print(line, textX, lineY, 0, scale, scale)
+        end
 
         if entry.icon == "currency" then
-            local textWidth = font:getWidth(entry.text) * scale
-            local iconSize = font:getHeight() * scale * 0.9
+            local lastLine = entry.lines[#entry.lines] or entry.text
+            local textWidth = font:getWidth(lastLine or "") * scale
+            local iconSize = (entry.fontHeight or font:getHeight()) * scale * 0.9
             local iconX = textX + textWidth + 4
-            CurrencyIcon.draw(iconX, textY, iconSize, alpha)
+            local iconY = textY + scaledLineHeight * (#entry.lines - 1)
+            CurrencyIcon.draw(iconX, iconY, iconSize, alpha)
         end
     end
 

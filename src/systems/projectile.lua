@@ -117,13 +117,15 @@ local function apply_homing(entity, dt, damageEntity, system)
 
     local newAngle = currentAngle + delta
 
-    local targetSpeed = homing.speed or speed
     local acceleration = homing.acceleration or homing.accel
-    if acceleration and acceleration ~= 0 and targetSpeed then
+    if acceleration and acceleration ~= 0 then
+        -- Accelerate toward maxSpeed if set, otherwise toward homing.speed
+        local targetSpeed = homing.maxSpeed or homing.speed or speed
         if targetSpeed > speed then
-            speed = math.min(targetSpeed, speed + acceleration * dt)
-        else
-            speed = math.max(targetSpeed, speed - math.abs(acceleration) * dt)
+            speed = speed + acceleration * dt
+        elseif homing.speed and homing.speed < speed then
+            -- Decelerate toward homing.speed if it's lower than current speed
+            speed = math.max(homing.speed, speed - math.abs(acceleration) * dt)
         end
     elseif homing.speed then
         speed = homing.speed

@@ -261,10 +261,9 @@ local function get_line_height(font)
     return font:getHeight() * font:getLineHeight()
 end
 
-local function load_font(size)
-    local font_path = constants.render and constants.render.fonts and constants.render.fonts.primary
-    if font_path then
-        local ok, font = pcall(love.graphics.newFont, font_path, size)
+local function load_font(path, size)
+    if path then
+        local ok, font = pcall(love.graphics.newFont, path, size)
         if ok and font then
             return font
         end
@@ -277,11 +276,16 @@ function theme.get_fonts()
         return theme._fonts
     end
 
+    local renderFonts = constants.render and constants.render.fonts or {}
+    local primary = renderFonts.primary
+    local bold = renderFonts.bold or primary
+
     theme._fonts = {
-        title = load_font(theme.font_sizes.title),
-        body = load_font(theme.font_sizes.body),
-        small = load_font(theme.font_sizes.small),
-        tiny = load_font(theme.font_sizes.tiny),
+        title = load_font(primary, theme.font_sizes.title),
+        body = load_font(primary, theme.font_sizes.body),
+        small = load_font(primary, theme.font_sizes.small),
+        tiny = load_font(primary, theme.font_sizes.tiny),
+        bold = load_font(bold, theme.font_sizes.body),
     }
 
     return theme._fonts

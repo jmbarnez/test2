@@ -142,40 +142,6 @@ function TargetPanel.draw(context, player)
     local text_x = x + padding
     local text_width = width - padding * 2
     love.graphics.push("all")
-    if isLocking then
-        local progress = math.max(0, math.min(1, lockProgress))
-        local screenCX = love.graphics.getWidth() * 0.5
-        local screenCY = 18 + (showFullPanel and 120 or 96)
-
-        local cursorX = cache and cache.cursorWorldX or target.position.x
-        local cursorY = cache and cache.cursorWorldY or target.position.y
-        if cache and cache.cursorWorldX and cache.cursorWorldY and state and state.camera then
-            local cam = state.camera
-            local zoom = cam.zoom or 1
-            cursorX = (cache.cursorWorldX - cam.x) * zoom
-            cursorY = (cache.cursorWorldY - cam.y) * zoom
-        else
-            cursorX = screenCX
-            cursorY = screenCY
-        end
-
-        local ringColor = hud_colors.accent or { 0.32, 0.64, 1.0, 1 }
-        local remainingColor = { ringColor[1], ringColor[2], ringColor[3], 0.3 }
-        love.graphics.setBlendMode("add")
-        love.graphics.setLineWidth(4)
-        love.graphics.setColor(remainingColor)
-        love.graphics.circle("line", cursorX, cursorY, 36)
-
-        love.graphics.setLineWidth(4)
-        love.graphics.setColor(ringColor[1], ringColor[2], ringColor[3], ringColor[4] or 1)
-        local arcAngle = progress * math.pi * 2
-        love.graphics.arc("line", "open", cursorX, cursorY, 36, -math.pi/2, -math.pi/2 + arcAngle)
-
-        love.graphics.setPointSize(6)
-        love.graphics.points(cursorX + math.cos(-math.pi/2 + arcAngle) * 36, cursorY + math.sin(-math.pi/2 + arcAngle) * 36)
-
-        love.graphics.setBlendMode("alpha")
-    end
     love.graphics.pop()
 
     if showFullPanel then

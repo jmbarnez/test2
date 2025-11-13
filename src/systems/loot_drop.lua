@@ -98,10 +98,24 @@ local function roll_loot(loot_config)
                     end
                 end
 
+                local xpSpec = entry.xp_reward or entry.xp or entry.experience
+                local xpReward
+                if xpSpec ~= nil then
+                    if type(xpSpec) == "table" then
+                        xpReward = xpSpec
+                    else
+                        local amount = tonumber(xpSpec)
+                        if amount and amount > 0 then
+                            xpReward = { amount = amount }
+                        end
+                    end
+                end
+
                 local hasItem = item ~= nil
                 local hasCredits = creditReward ~= nil
+                local hasXP = xpReward ~= nil
 
-                if hasItem or hasCredits then
+                if hasItem or hasCredits or hasXP then
                     local drop = {
                         id = entry.id,
                         quantity = hasItem and quantity or nil,
@@ -110,6 +124,7 @@ local function roll_loot(loot_config)
                         offset = entry.offset or entry.positionOffset,
                         scatter = entry.scatter or entry.scatterRadius,
                         credit_reward = creditReward,
+                        xp_reward = xpReward,
                         raw = entry,
                     }
                     drops[#drops + 1] = drop

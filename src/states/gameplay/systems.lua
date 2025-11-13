@@ -30,29 +30,6 @@ local PlayerManager = require("src.player.manager")
 
 local Systems = {}
 
-local LOOT_DESTRUCTION_XP = {
-    ["resource:hull_scrap"] = {
-        category = "industry",
-        skill = "salvaging",
-        xp = 10,
-    },
-    ["enemy_scout"] = {
-        category = "combat",
-        skill = "weapons",
-        xp = 25,
-    },
-    ["enemy_drone"] = {
-        category = "combat",
-        skill = "weapons",
-        xp = 20,
-    },
-    ["enemy_boss"] = {
-        category = "combat",
-        skill = "weapons",
-        xp = 150,
-    },
-}
-
 local function resolve_player_id_from_entity(entity)
     if not entity then
         return nil
@@ -122,46 +99,46 @@ local function add_common_systems(state, context)
                 position = localPlayer.position
             end
 
-            local spec = LOOT_DESTRUCTION_XP[drop.id]
-            if spec then
-                local playerId = resolve_loot_player_id(drop, entity)
-                if playerId then
-                    PlayerManager.addSkillXP(state, spec.category, spec.skill, spec.xp, playerId)
+            local xpSpec = drop.xp_reward or (drop.raw and drop.raw.xp_reward)
+            if type(xpSpec) == "table" and xpSpec.amount then
+                local amount = tonumber(xpSpec.amount)
+                if amount and amount > 0 then
+                    local category = xpSpec.category or "combat"
+                    local skill = xpSpec.skill or "weapons"
+                    local playerId = resolve_loot_player_id(drop, entity)
+                    if playerId then
+                        PlayerManager.addSkillXP(state, category, skill, amount, playerId)
 
-                    if position and FloatingText and FloatingText.add then
-                        FloatingText.add(state, position, string.format("+%d XP", spec.xp), {
-                            offsetY = (localPlayer and localPlayer.mountRadius or 36) + 18,
-                            color = { 0.3, 0.9, 0.4, 1 },
-                            rise = 40,
-                            scale = 1.1,
-                        })
+                        if position and FloatingText and FloatingText.add then
+                            FloatingText.add(state, position, string.format("+%d XP", amount), {
+                                offsetY = (localPlayer and localPlayer.mountRadius or 36) + 18,
+                                color = { 0.3, 0.9, 0.4, 1 },
+                                rise = 40,
+                                scale = 1.1,
+                                font = "bold",
+                            })
+                        end
                     end
                 end
             end
 
             local credits = drop.credit_reward or (drop.raw and drop.raw.credit_reward)
-            if type(credits) ~= "number" or credits <= 0 then
-                return
+            if type(credits) == "number" and credits > 0 then
+                if localPlayer then
+                    PlayerManager.adjustCurrency(state, credits)
+
+                    if position and FloatingText and FloatingText.add then
+                        FloatingText.add(state, position, string.format("+%d credits", credits), {
+                            offsetY = (localPlayer and localPlayer.mountRadius or 36) + 18 + 22,
+                            color = { 1.0, 0.9, 0.2, 1 },
+                            rise = 40,
+                            scale = 1.1,
+                            font = "bold",
+                            icon = "currency",
+                        })
+                    end
+                end
             end
-
-            if not localPlayer then
-                return
-            end
-
-            PlayerManager.adjustCurrency(state, credits)
-
-            if not (position and FloatingText and FloatingText.add) then
-                return
-            end
-
-            FloatingText.add(state, position, nil, {
-                amount = credits,
-                offsetY = (localPlayer and localPlayer.mountRadius or 36) + 18,
-                color = { 1.0, 0.9, 0.2, 1 },
-                rise = 40,
-                scale = 1.1,
-                icon = "currency",
-            })
         end,
     })))
     state.destructionSystem = state.world:addSystem(createDestructionSystem(GameContext.extend(sharedContext)))

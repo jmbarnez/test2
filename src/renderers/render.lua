@@ -145,16 +145,59 @@ local function draw_highlight(entity, cache)
 
     local hovered_entity = cache.hoveredEntity
     local active_entity = cache.activeEntity
+    local lock_candidate = cache.lockCandidate
+    local lock_progress = cache.lockProgress or 0
+
     local is_hovered = hovered_entity == entity
     local is_active = active_entity == entity
+    local is_lock_candidate = (lock_candidate == entity) and not is_active
 
-    if not (is_hovered or is_active) then
+    if not (is_hovered or is_active or is_lock_candidate) then
         return
     end
 
     local position = entity.position
     if not (position and position.x and position.y) then
         return
+    end
+
+    if is_lock_candidate then
+        local progress = math.max(0, math.min(1, lock_progress))
+        local base_radius = cache.lockRadius
+            or cache.activeRadius
+            or cache.hoveredRadius
+            or cache.hoverRadius
+            or compute_highlight_radius(entity)
+
+        if type(base_radius) ~= "number" or base_radius <= 0 then
+            base_radius = 32
+        end
+
+        local ring_radius = base_radius * 1.12
+        local outline_radius = ring_radius + 4
+        local start_angle = -math.pi * 0.5
+
+        love.graphics.push("all")
+        love.graphics.setLineWidth(2.4)
+        love.graphics.setColor(lock_secondary[1], lock_secondary[2], lock_secondary[3], (lock_secondary[4] or 1) * 0.45)
+        love.graphics.circle("line", position.x, position.y, outline_radius)
+
+        if progress > 0 then
+            local arc_angle = progress * math.pi * 2
+            local end_angle = start_angle + arc_angle
+
+            love.graphics.setLineWidth(3)
+            love.graphics.setColor(lock_primary)
+            love.graphics.arc("line", "open", position.x, position.y, ring_radius, start_angle, end_angle)
+
+            love.graphics.setPointSize(6)
+            love.graphics.points(
+                position.x + math.cos(end_angle) * ring_radius,
+                position.y + math.sin(end_angle) * ring_radius
+            )
+        end
+
+        love.graphics.pop()
     end
 
     if is_active then
