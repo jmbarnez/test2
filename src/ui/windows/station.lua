@@ -284,7 +284,12 @@ function station_window.draw(context)
         love.graphics.setFont(summary_font)
         if is_active then
             set_color(window_colors.accent_player or { 0.3, 0.78, 0.46, 1 })
-            love.graphics.printf("Accepted", text_x, rect.y + rect.height - summary_font:getHeight() - row_inner_padding * 0.5, text_width, "right")
+            local progress_label = QuestGenerator.progressLabel(quest)
+            if progress_label ~= "" then
+                love.graphics.printf(progress_label, text_x, rect.y + rect.height - summary_font:getHeight() - row_inner_padding * 0.5, text_width, "right")
+            else
+                love.graphics.printf("Accepted", text_x, rect.y + rect.height - summary_font:getHeight() - row_inner_padding * 0.5, text_width, "right")
+            end
             set_color(window_colors.text or { 0.85, 0.9, 1.0, 1 })
         else
             set_color(window_colors.muted or { 0.65, 0.7, 0.8, 1 })
@@ -345,7 +350,8 @@ function station_window.draw(context)
         end
 
         if active_id == selectedQuest.id then
-            local status_text = "This contract is active."
+            local progress_label = QuestGenerator.progressLabel(selectedQuest)
+            local status_text = progress_label ~= "" and string.format("Active - Progress: %s", progress_label) or "This contract is active."
             love.graphics.setFont(summary_font)
             set_color(window_colors.accent_player or { 0.3, 0.78, 0.46, 1 })
             love.graphics.printf(status_text, detail_inner_x, detail_cursor_y, detail_inner_width, "left")

@@ -11,25 +11,33 @@ function Minimap.draw(context, player)
     local minimap_size = 120
     local minimap_half_size = minimap_size * 0.5
     local margin = 24
-    local centerX = screenWidth - minimap_half_size - margin
-    local centerY = margin + minimap_half_size
+
+    local rect = {
+        x = screenWidth - minimap_size - margin,
+        y = margin,
+        width = minimap_size,
+        height = minimap_size,
+    }
+
+    local centerX = rect.x + minimap_half_size
+    local centerY = rect.y + minimap_half_size
 
     local world = context.world
     local bounds = context.worldBounds
 
     if not (world and player and bounds and player.position) then
-        return
+        return nil
     end
 
     local visible_radius_world = 4000
     local scale = minimap_half_size / visible_radius_world
 
     love.graphics.setColor(hud_colors.minimap_background)
-    love.graphics.rectangle("fill", centerX - minimap_half_size, centerY - minimap_half_size, minimap_size, minimap_size)
+    love.graphics.rectangle("fill", rect.x, rect.y, minimap_size, minimap_size)
 
     love.graphics.setColor(hud_colors.minimap_border)
     love.graphics.setLineWidth(2)
-    love.graphics.rectangle("line", centerX - minimap_half_size, centerY - minimap_half_size, minimap_size, minimap_size)
+    love.graphics.rectangle("line", rect.x, rect.y, minimap_size, minimap_size)
 
     love.graphics.setColor(hud_colors.minimap_player)
     love.graphics.circle("fill", centerX, centerY, 3)
@@ -64,6 +72,8 @@ function Minimap.draw(context, player)
             end
         end
     end
+
+    return rect
 end
 
 return Minimap

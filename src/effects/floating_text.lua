@@ -1,4 +1,5 @@
 local theme = require("src.ui.theme")
+local CurrencyIcon = require("src.ui.util.currency_icon")
 
 ---@diagnostic disable-next-line: undefined-global
 local love = love
@@ -91,6 +92,7 @@ function FloatingText.add(state, position, text, opts)
         duration = duration,
         shadow = opts.shadow ~= false,
         scale = opts.scale or 1,
+        icon = opts.icon,
         __alive = true,
     }
     container[#container + 1] = entry
@@ -137,14 +139,23 @@ function FloatingText.draw(state)
         local alpha = math.max(0, 1 - t)
         local scale = entry.scale
 
+        local textX = entry.x
+        local textY = entry.y
+
+        if entry.icon == "currency" then
+            local iconSize = font:getHeight() * scale * 0.9
+            CurrencyIcon.draw(textX, textY, iconSize, alpha)
+            textX = textX + iconSize + 4
+        end
+
         if entry.shadow then
             love.graphics.setColor(0, 0, 0, alpha * 0.55)
-            love.graphics.print(entry.text, entry.x + 1, entry.y + 1, 0, scale, scale)
+            love.graphics.print(entry.text, textX + 1, textY + 1, 0, scale, scale)
         end
 
         local color = entry.color
         love.graphics.setColor(color[1], color[2], color[3], (color[4] or 1) * alpha)
-        love.graphics.print(entry.text, entry.x, entry.y, 0, scale, scale)
+        love.graphics.print(entry.text, textX, textY, 0, scale, scale)
     end
 
     love.graphics.pop()

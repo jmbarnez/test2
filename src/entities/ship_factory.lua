@@ -251,6 +251,13 @@ function ship_factory.instantiate(blueprint, context)
     local previous_on_destroyed = entity.onDestroyed
     entity.onDestroyed = function(self, destruction_context)
         ShipWreckage.spawn(self, destruction_context)
+        
+        -- Track quest progress for hunting enemies
+        if self.enemy and self.lastDamagePlayerId and destruction_context then
+            local QuestTracker = require("src.quests.tracker")
+            QuestTracker.onEnemyDestroyed(destruction_context)
+        end
+        
         if type(previous_on_destroyed) == "function" then
             previous_on_destroyed(self, destruction_context)
         end

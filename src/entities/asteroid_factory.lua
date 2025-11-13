@@ -69,7 +69,7 @@ local function award_mining_xp(entity, destruction_context)
         if FloatingText and state and entity.position then
             FloatingText.add(state, entity.position, string.format("+%d XP", xpAward), {
                 offsetY = (entity.drawable and entity.drawable.radius or entity.radius or 28) * 0.5,
-                color = { 0.42, 0.78, 1.0, 1 },
+                color = { 0.3, 0.9, 0.4, 1 },
                 rise = 42,
                 duration = 1.4,
             })
@@ -444,6 +444,14 @@ function asteroid_factory.instantiate(blueprint, context)
     entity.onDestroyed = function(self, destruction_context)
         award_mining_xp(self, destruction_context)
         spawn_chunks(self, destruction_context)
+        
+        -- Track quest progress for mining
+        local playerId = self.lastDamagePlayerId
+        if playerId and destruction_context then
+            local QuestTracker = require("src.quests.tracker")
+            QuestTracker.onAsteroidDestroyed(destruction_context)
+        end
+        
         if previous_on_destroyed then
             previous_on_destroyed(self, destruction_context)
         end

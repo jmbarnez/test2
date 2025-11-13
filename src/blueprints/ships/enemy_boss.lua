@@ -1,3 +1,5 @@
+local constants = require("src.constants.game")
+
 local scale = 28
 
 local hull_outer = {

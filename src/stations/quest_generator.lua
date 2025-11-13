@@ -7,32 +7,40 @@ local QuestGenerator = {}
 
 local DEFAULT_CONTRACTS = {
     {
-        id = "station_patrol",
-        title = "Station Patrol",
-        objective = "Destroy hostile ships that threaten the docking perimeter.",
-        summary = "Assist station security by patrolling the nearby sector and eliminating raiders you encounter.",
-        credits = 750,
+        id = "mining_operation",
+        title = "Mining Operation",
+        objective = "Destroy asteroids to clear the sector.",
+        summary = "The station needs raw materials. Destroy asteroids in the area to extract ore and minerals.",
+        credits = 500,
+        type = "mining",
+        target = 5,
     },
     {
-        id = "salvage_run",
-        title = "Salvage Run",
-        objective = "Recover valuable scrap from defeated enemies or derelict hulks.",
-        summary = "Collect salvageable materials in the sector and return them to the station quartermaster.",
-        credits = 620,
+        id = "heavy_mining",
+        title = "Heavy Mining Contract",
+        objective = "Destroy a large number of asteroids.",
+        summary = "A major construction project requires substantial mineral resources. Clear out asteroid fields.",
+        credits = 1200,
+        type = "mining",
+        target = 12,
     },
     {
-        id = "trade_escort",
-        title = "Escort Traders",
-        objective = "Guard civilian haulers while they depart the station.",
-        summary = "Provide covering fire for outbound freighters until the area is clear of immediate threats.",
-        credits = 680,
+        id = "hostile_elimination",
+        title = "Hostile Elimination",
+        objective = "Destroy enemy ships threatening the station.",
+        summary = "Raiders have been spotted in the sector. Eliminate hostile vessels to secure the area.",
+        credits = 800,
+        type = "hunting",
+        target = 3,
     },
     {
-        id = "asteroid_clearance",
-        title = "Asteroid Clearance",
-        objective = "Break apart hazardous asteroids drifting near traffic lanes.",
-        summary = "Use ship weapons to fracture nearby asteroids so that shuttle traffic remains safe.",
-        credits = 540,
+        id = "sector_defense",
+        title = "Sector Defense",
+        objective = "Eliminate multiple enemy threats.",
+        summary = "A large enemy force is approaching. Destroy hostile ships to defend the station perimeter.",
+        credits = 1500,
+        type = "hunting",
+        target = 6,
     },
 }
 
@@ -50,6 +58,9 @@ local function duplicate_contract(template, suffix)
         objective = template.objective,
         summary = template.summary,
         rewardCredits = template.credits,
+        type = template.type,
+        target = template.target,
+        progress = 0,
     }
 end
 
@@ -96,6 +107,23 @@ function QuestGenerator.rewardLabel(quest)
     end
 
     return string.format("%d credits", credits)
+end
+
+--- Formats quest progress for UI display.
+---@param quest table
+---@return string
+function QuestGenerator.progressLabel(quest)
+    if not quest then
+        return ""
+    end
+
+    local progress = quest.progress or 0
+    local target = quest.target or 0
+    if target <= 0 then
+        return ""
+    end
+
+    return string.format("%d / %d", progress, target)
 end
 
 return QuestGenerator

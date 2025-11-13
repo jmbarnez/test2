@@ -4,6 +4,7 @@
 -- appear in front of ships, stations, and other game objects
 
 local tiny = require("libs.tiny")
+local explosion_renderer = require("src.renderers.explosion")
 
 ---@diagnostic disable-next-line: undefined-global
 local love = love
@@ -34,6 +35,11 @@ return function(context)
                     end
                     
                     lg.pop()
+                end
+
+                local explosions = projectileSystem.explosions
+                if explosions and #explosions > 0 then
+                    explosion_renderer.draw(explosions)
                 end
             end
             

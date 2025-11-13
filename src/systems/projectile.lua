@@ -51,7 +51,7 @@ local function is_target_valid(target)
     return true
 end
 
-local function apply_homing(entity, dt, damageEntity)
+local function apply_homing(entity, dt, damageEntity, system)
     local homing = entity.homing
     if not homing or dt <= 0 then
         return
@@ -169,6 +169,10 @@ local function apply_homing(entity, dt, damageEntity)
                 end
             end
 
+            if system and system.explosions and homing.explosion and not homing._explosionSpawned then
+                spawn_explosion_effect(system.explosions, system.impactParticles, tx, ty, entity, homing.explosion)
+            end
+
             entity.pendingDestroy = true
             return
         end
@@ -261,6 +265,98 @@ local function create_impact_particles(x, y, projectile)
     end
 
     return particles
+end
+
+local function clone_color(color, defaultAlpha)
+    if type(color) ~= "table" then
+        if defaultAlpha then
+            return { 1, 1, 1, defaultAlpha }
+        end
+        return nil
+    end
+
+    return {
+        color[1] or 1,
+        color[2] or 1,
+        color[3] or 1,
+        color[4] ~= nil and color[4] or defaultAlpha or 1,
+    }
+end
+
+local function spawn_explosion_effect(explosionPool, impactPool, x, y, projectile, config)
+    if not explosionPool then
+        return
+    end
+
+    config = config or {}
+
+    local maxRadius = config.radius or 52
+    local startRadius = config.startRadius or math.max(8, maxRadius * 0.35)
+    local duration = config.duration or 0.5
+
+    local color = clone_color(config.color, 0.85) or { 1.0, 0.62, 0.24, 0.85 }
+    local ringColor = clone_color(config.ringColor, 0.9)
+
+    local entry = {
+        x = x,
+        y = y,
+        radius = startRadius,
+        startRadius = startRadius,
+        maxRadius = maxRadius,
+        lifetime = duration,
+        maxLifetime = duration,
+        color = color,
+        baseAlpha = color and (color[4] or 1) or 1,
+        ringColor = ringColor,
+        baseRingAlpha = ringColor and (ringColor[4] or 1) or 0,
+        ringWidth = config.ringWidth or maxRadius * 0.12,
+        ringRadiusScale = config.ringRadiusScale or 1.0,
+    }
+
+    explosionPool[#explosionPool + 1] = entry
+
+    if impactPool and config.sparkCount and config.sparkCount > 0 then
+        local sparkColor = clone_color(config.sparkColor, 1) or color or { 1, 0.72, 0.3, 1 }
+        local minSpeed = config.sparkSpeedMin or 140
+        local maxSpeed = config.sparkSpeedMax or 260
+        local minLifetime = config.sparkLifetimeMin or 0.28
+        local maxLifetime = config.sparkLifetimeMax or 0.55
+        local minSize = config.sparkSizeMin or 2.0
+        local maxSize = config.sparkSizeMax or 4.2
+        local glowScale = config.sparkGlowScale or 1.6
+        for i = 1, config.sparkCount do
+            local angle = math.random() * math.pi * 2
+            local speed = minSpeed + math.random() * (maxSpeed - minSpeed)
+            local lifetime = minLifetime + math.random() * (maxLifetime - minLifetime)
+            local size = minSize + math.random() * (maxSize - minSize)
+
+            impactPool[#impactPool + 1] = {
+                x = x,
+                y = y,
+                vx = math.cos(angle) * speed,
+                vy = math.sin(angle) * speed,
+                size = size,
+                maxSize = size,
+                glowSize = size * glowScale,
+                maxGlowSize = size * glowScale,
+                lifetime = lifetime,
+                maxLifetime = lifetime,
+                baseAlpha = sparkColor[4] or 1,
+                color = {
+                    sparkColor[1] or 1,
+                    sparkColor[2] or 0.8,
+                    sparkColor[3] or 0.4,
+                    sparkColor[4] or 1,
+                }
+            }
+        end
+    end
+
+    if projectile and projectile.homing then
+        projectile.homing._explosionSpawned = true
+    end
+
+    return entry
 end
 
 local function trigger_delayed_spawn(system, projectile, reason, physicsWorld)
@@ -427,6 +523,7 @@ return function(context)
         init = function(self)
             self.processedCollisions = {}
             self.impactParticles = {}
+            self.explosions = {}
             self.pendingSpawns = {}
             self._destroyQueue = {}
 
@@ -479,6 +576,10 @@ return function(context)
             local particles = create_impact_particles(x, y, projectile)
             for i = 1, #particles do
                 self.impactParticles[#self.impactParticles + 1] = particles[i]
+            end
+
+            if projectile.homing and projectile.homing.explosion and not projectile.homing._explosionSpawned then
+                spawn_explosion_effect(self.explosions, self.impactParticles, x, y, projectile, projectile.homing.explosion)
             end
 
             -- Don't hit the shooter or same playerId
@@ -599,6 +700,30 @@ return function(context)
                 end
             end
 
+            local explosions = self.explosions
+            if explosions and #explosions > 0 then
+                for i = #explosions, 1, -1 do
+                    local e = explosions[i]
+                    e.lifetime = e.lifetime - dt
+                    if e.lifetime <= 0 then
+                        explosions[i] = explosions[#explosions]
+                        explosions[#explosions] = nil
+                    else
+                        local lifeRatio = math.max(0, e.lifetime / (e.maxLifetime or 1))
+                        local progress = 1 - lifeRatio
+                        e.radius = e.startRadius + (e.maxRadius - e.startRadius) * progress
+                        e.ringRadius = (e.ringRadiusScale or 1) * e.radius
+
+                        if e.color then
+                            e.color[4] = (e.baseAlpha or 1) * lifeRatio
+                        end
+                        if e.ringColor then
+                            e.ringColor[4] = (e.baseRingAlpha or 1) * lifeRatio
+                        end
+                    end
+                end
+            end
+
             -- Update projectile lifetimes and delayed spawns
             for entity in pairs(self.__pool) do
                 if entity.projectile and entity.projectile.lifetime then
@@ -643,7 +768,7 @@ return function(context)
             if not body or body:isDestroyed() then return end
 
             if entity.homing then
-                apply_homing(entity, dt, damageEntity)
+                apply_homing(entity, dt, damageEntity, self)
             end
 
             -- Sync position

@@ -133,9 +133,10 @@ local function add_common_systems(state, context)
             FloatingText.add(state, position, nil, {
                 amount = credits,
                 offsetY = (localPlayer and localPlayer.mountRadius or 36) + 18,
-                color = { 0.8, 0.95, 0.3, 1 },
+                color = { 1.0, 0.9, 0.2, 1 },
                 rise = 40,
                 scale = 1.1,
+                icon = "currency",
             })
         end,
     })))

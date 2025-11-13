@@ -3,6 +3,7 @@
 
 local theme = require("src.ui.theme")
 local CargoData = require("src.ui.windows.cargo.data")
+local CurrencyIcon = require("src.ui.util.currency_icon")
 
 ---@diagnostic disable-next-line: undefined-global
 local love = love
@@ -18,42 +19,7 @@ local set_color = theme.utils.set_color
 ---@param y number Y position
 ---@param size number Icon size
 function CargoRendering.drawCurrencyIcon(x, y, size)
-    love.graphics.push("all")
-
-    local radius = size * 0.5
-    local centerX = x + radius
-    local centerY = y + radius
-
-    local baseColor = window_colors.currency_icon_base or { 0.35, 0.7, 1.0, 1 }
-    local highlightColor = window_colors.currency_icon_highlight or { 0.75, 0.9, 1.0, 0.9 }
-    local borderColor = window_colors.currency_icon_border or { 0.08, 0.25, 0.38, 1 }
-    local symbolColor = window_colors.currency_icon_symbol or window_colors.title_text or { 1, 1, 1, 1 }
-
-    -- Base circle
-    set_color(baseColor)
-    love.graphics.circle("fill", centerX, centerY, radius)
-
-    -- Highlight
-    set_color(highlightColor)
-    love.graphics.circle("fill", centerX, centerY - radius * 0.25, radius * 0.6)
-
-    -- Border
-    set_color(borderColor)
-    local borderWidth = math.max(1, size * 0.08)
-    love.graphics.setLineWidth(borderWidth)
-    love.graphics.circle("line", centerX, centerY, radius - borderWidth * 0.5)
-
-    -- Currency symbol
-    set_color(symbolColor)
-    local lineWidth = math.max(1.2, size * 0.14)
-    love.graphics.setLineWidth(lineWidth)
-    love.graphics.line(centerX, centerY - radius * 0.4, centerX, centerY + radius * 0.4)
-
-    love.graphics.setLineWidth(math.max(1, size * 0.1))
-    love.graphics.line(centerX - radius * 0.45, centerY - radius * 0.15, centerX + radius * 0.45, centerY - radius * 0.15)
-    love.graphics.line(centerX - radius * 0.45, centerY + radius * 0.2, centerX + radius * 0.45, centerY + radius * 0.2)
-
-    love.graphics.pop()
+    CurrencyIcon.draw(x, y, size)
 end
 
 --- Draws a single icon layer
