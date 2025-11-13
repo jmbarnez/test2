@@ -6,6 +6,7 @@ local theme = require("src.ui.theme")
 local window = require("src.ui.components.window")
 local PlayerManager = require("src.player.manager")
 local Modules = require("src.ships.modules")
+local ShipCargo = require("src.ships.cargo")
 local utf8 = require("utf8")
 
 -- Specialized cargo modules
@@ -527,6 +528,7 @@ function cargo_window.draw(context)
     local hoveredItem
     local hoveredSlotIndex
     local hoveredSlotRect
+    local hoveredSlotNumber
     local cargoSlotRects = {}
 
     for slotNumber = 1, totalVisibleSlots do
@@ -610,6 +612,43 @@ function cargo_window.draw(context)
             if insideCargoArea then
                 Modules.unequip(player, state.dragIndex)
                 handled = true
+            end
+        end
+
+        if not handled and state.dragSource == "cargo" then
+            local insideWindow = mouseInsideWindow
+            if not insideWindow then
+                local uiContext = context
+                local gameState = uiContext and uiContext.state or context
+                local camera = uiContext and uiContext.camera or (gameState and gameState.camera)
+                local worldX, worldY = mouse_x, mouse_y
+                if camera then
+                    local zoom = camera.zoom or 1
+                    if zoom ~= 0 then
+                        worldX = mouse_x / zoom + (camera.x or 0)
+                        worldY = mouse_y / zoom + (camera.y or 0)
+                    else
+                        worldX = camera.x or mouse_x
+                        worldY = camera.y or mouse_y
+                    end
+                end
+
+                local quantity = dragItem.quantity or 1
+                local removed = false
+                if player.cargo and player.cargo.tryRemoveItem then
+                    removed = player.cargo:tryRemoveItem(dragItem.id or dragItem.name, quantity)
+                elseif ShipCargo.try_remove_item then
+                    removed = ShipCargo.try_remove_item(player.cargo, dragItem.id or dragItem.name, quantity)
+                end
+
+                if removed and gameState and gameState.world then
+                    require("src.states.gameplay.entities").spawnLootPickup(gameState, {
+                        item = dragItem,
+                        quantity = quantity,
+                        position = { x = worldX, y = worldY },
+                    })
+                    handled = true
+                end
             end
         end
 

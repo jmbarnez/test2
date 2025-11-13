@@ -188,11 +188,14 @@ return {
             thrustDrain = 42,
         },
         cargo = {
-            capacity = 5,
+            capacity = 50,
             items = {
                 { weapon = "cannon" },
                 { weapon = "laser_beam" },
+                { weapon = "firework_launcher" },
                 { weapon = "shock_burst_launcher" },
+                { weapon = "lightning_arc" },
+                { module = "ability_dash", installed = true },
                 { module = "shield_t1" },
             },
         },
@@ -217,6 +220,7 @@ return {
             defaultType = "defense",
             slots = {
                 { type = "defense" },
+                { type = "ability" },
             },
         },
         colliders = {

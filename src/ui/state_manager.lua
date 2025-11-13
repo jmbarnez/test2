@@ -6,6 +6,35 @@ local dropdown = require("src.ui.components.dropdown")
 ---@diagnostic disable-next-line: undefined-global
 local love = love
 
+local function resolve_state_pair(state)
+    if not state then
+        return nil, nil
+    end
+
+    if type(state.resolveState) == "function" then
+        local ok, resolved = pcall(state.resolveState, state)
+        if ok and type(resolved) == "table" and resolved ~= state then
+            return resolved, state
+        end
+    end
+
+    if type(state.state) == "table" and state.state ~= state then
+        return state.state, state
+    end
+
+    return state, nil
+end
+
+local function set_state_field(primary, secondary, key, value)
+    if primary then
+        primary[key] = value
+    end
+
+    if secondary and secondary ~= primary then
+        secondary[key] = value
+    end
+end
+
 -- Create default UI state configurations
 local function createCargoUIState()
     return {
@@ -38,6 +67,11 @@ local function createSkillsUIState()
 end
 
 local function any_modal_visible(state)
+    state = resolve_state_pair(state)
+    if not state then
+        return false
+    end
+
     return (state.pauseUI and state.pauseUI.visible)
         or (state.deathUI and state.deathUI.visible)
         or (state.cargoUI and state.cargoUI.visible)
@@ -47,6 +81,7 @@ local function any_modal_visible(state)
 end
 
 local function capture_input(state)
+    state = resolve_state_pair(state)
     if state and state.uiInput then
         state.uiInput.mouseCaptured = true
         state.uiInput.keyboardCaptured = true
@@ -54,6 +89,7 @@ local function capture_input(state)
 end
 
 local function release_input(state, respect_modals)
+    state = resolve_state_pair(state)
     if not (state and state.uiInput) then
         return
     end
@@ -76,19 +112,25 @@ local function create_visibility_handlers(windowKey, config)
     config = config or {}
 
     local function set_visibility(state, visible)
+        local resolved, proxy = resolve_state_pair(state)
+        if not resolved then
+            return
+        end
+
+        state = resolved
         if not (state and state[windowKey]) then
             return
         end
 
         local window_state = state[windowKey]
 
-        if config.beforeSet and config.beforeSet(state, window_state, visible) == false then
+        if config.beforeSet and config.beforeSet(state, window_state, visible, proxy) == false then
             return
         end
 
         if window_state.visible == visible then
             if config.onUnchanged then
-                config.onUnchanged(state, window_state, visible)
+                config.onUnchanged(state, window_state, visible, proxy)
             end
             return
         end
@@ -96,7 +138,7 @@ local function create_visibility_handlers(windowKey, config)
         window_state.visible = visible
 
         if config.afterSet then
-            config.afterSet(state, window_state, visible)
+            config.afterSet(state, window_state, visible, proxy)
         end
     end
 
@@ -124,8 +166,11 @@ local function createDeathUIState()
         title = "Ship Destroyed",
         message = "Your ship has been destroyed. Respawn to re-enter the fight.",
         buttonLabel = "Respawn",
+        exitButtonLabel = "Exit to Menu",
         hint = "Press Enter to respawn",
         buttonHovered = false,
+        respawnHovered = false,
+        exitHovered = false,
         _was_mouse_down = false,
     }
 end
@@ -224,9 +269,12 @@ local function generatePlayerColor(playerId)
 end
 
 function UIStateManager.initialize(state)
-    if not state then
+    local resolved, proxy = resolve_state_pair(state)
+    if not resolved then
         return
     end
+
+    state = resolved
 
     -- Initialize UI states
     state.cargoUI = state.cargoUI or createCargoUIState()
@@ -248,13 +296,16 @@ function UIStateManager.initialize(state)
         state.respawnRequested = false
     end
 
-    state.isPaused = state.pauseUI.visible
+    set_state_field(state, proxy, "isPaused", state.pauseUI and state.pauseUI.visible or false)
 end
 
 function UIStateManager.cleanup(state)
-    if not state then
+    local resolved, proxy = resolve_state_pair(state)
+    if not resolved then
         return
     end
+
+    state = resolved
 
     state.cargoUI = nil
     state.deathUI = nil
@@ -265,17 +316,21 @@ function UIStateManager.cleanup(state)
     state.debugUI = nil
     state.uiInput = nil
     state.respawnRequested = nil
-    state.isPaused = nil
+    set_state_field(state, proxy, "isPaused", nil)
 end
 
 function UIStateManager.showDeathUI(state)
-    if not (state and state.deathUI) then
+    local resolved = resolve_state_pair(state)
+    if not (resolved and resolved.deathUI) then
         return
     end
 
+    state = resolved
     local deathUI = state.deathUI
     deathUI.visible = true
     deathUI.buttonHovered = false
+    deathUI.respawnHovered = false
+    deathUI.exitHovered = false
     deathUI._was_mouse_down = love.mouse and love.mouse.isDown and love.mouse.isDown(1) or false
 
     if UIStateManager.isPauseUIVisible(state) then
@@ -289,13 +344,18 @@ function UIStateManager.showDeathUI(state)
 end
 
 function UIStateManager.hideDeathUI(state)
-    if not (state and state.deathUI) then
+    local resolved = resolve_state_pair(state)
+    if not (resolved and resolved.deathUI) then
         return
     end
 
+    state = resolved
     local deathUI = state.deathUI
     deathUI.visible = false
     deathUI._was_mouse_down = love.mouse and love.mouse.isDown and love.mouse.isDown(1) or false
+    deathUI.buttonHovered = false
+    deathUI.respawnHovered = false
+    deathUI.exitHovered = false
 
     if state.uiInput then
         state.uiInput.mouseCaptured = false
@@ -304,10 +364,12 @@ function UIStateManager.hideDeathUI(state)
 end
 
 function UIStateManager.toggleCargoUI(state)
-    if not (state and state.cargoUI) then
+    local resolved = resolve_state_pair(state)
+    if not (resolved and resolved.cargoUI) then
         return
     end
 
+    state = resolved
     state.cargoUI.visible = not state.cargoUI.visible
 end
 
@@ -364,10 +426,6 @@ local pauseVisibilityController = create_visibility_handlers("pauseUI", {
     end,
 })
 
-local function setPauseVisibility(state, visible)
-    pauseVisibilityController.set(state, visible)
-end
-
 function UIStateManager.showPauseUI(state)
     pauseVisibilityController.show(state)
 end
@@ -378,6 +436,11 @@ end
 
 function UIStateManager.togglePauseUI(state)
     pauseVisibilityController.toggle(state)
+end
+
+function UIStateManager.isPauseUIVisible(state)
+    state = resolve_state_pair(state)
+    return state and state.pauseUI and state.pauseUI.visible
 end
 
 local mapVisibilityController = create_visibility_handlers("mapUI", {
@@ -407,15 +470,13 @@ function UIStateManager.toggleMapUI(state)
     mapVisibilityController.toggle(state)
 end
 
-function UIStateManager.isPauseUIVisible(state)
-    return state and state.pauseUI and state.pauseUI.visible
-end
-
 function UIStateManager.showOptionsUI(state, source)
-    if not (state and state.optionsUI) then
+    local resolved, proxy = resolve_state_pair(state)
+    if not (resolved and resolved.optionsUI) then
         return
     end
 
+    state = resolved
     local optionsUI = state.optionsUI
     optionsUI.visible = true
     optionsUI.returnTo = source
@@ -432,14 +493,16 @@ function UIStateManager.showOptionsUI(state, source)
         state.uiInput.keyboardCaptured = true
     end
 
-    state.isPaused = true
+    set_state_field(state, proxy, "isPaused", true)
 end
 
 function UIStateManager.hideOptionsUI(state)
-    if not (state and state.optionsUI) then
+    local resolved, proxy = resolve_state_pair(state)
+    if not (resolved and resolved.optionsUI) then
         return
     end
 
+    state = resolved
     local optionsUI = state.optionsUI
     local returnTo = optionsUI.returnTo
     optionsUI.visible = false
@@ -459,19 +522,22 @@ function UIStateManager.hideOptionsUI(state)
     end
 
     if not any_modal_visible(state) then
-        state.isPaused = false
+        set_state_field(state, proxy, "isPaused", false)
     end
 end
 
 function UIStateManager.isOptionsUIVisible(state)
+    state = resolve_state_pair(state)
     return state and state.optionsUI and state.optionsUI.visible
 end
 
 function UIStateManager.isMapUIVisible(state)
+    state = resolve_state_pair(state)
     return state and state.mapUI and state.mapUI.visible
 end
 
 function UIStateManager.isPaused(state)
+    state = resolve_state_pair(state)
     return state and state.isPaused == true
 end
 
@@ -502,39 +568,48 @@ function UIStateManager.hideDebugUI(state)
 end
 
 function UIStateManager.isDebugUIVisible(state)
+    state = resolve_state_pair(state)
     return state and state.debugUI and state.debugUI.visible
 end
 
 function UIStateManager.isDeathUIVisible(state)
+    state = resolve_state_pair(state)
     return state and state.deathUI and state.deathUI.visible
 end
 
 function UIStateManager.isCargoUIVisible(state)
+    state = resolve_state_pair(state)
     return state and state.cargoUI and state.cargoUI.visible
 end
 
 function UIStateManager.requestRespawn(state)
-    if not state then
+    local resolved, proxy = resolve_state_pair(state)
+    if not resolved then
         return
     end
 
-    state.respawnRequested = true
+    set_state_field(resolved, proxy, "respawnRequested", true)
 end
 
 function UIStateManager.isRespawnRequested(state)
+    state = resolve_state_pair(state)
     return state and state.respawnRequested
 end
 
 function UIStateManager.clearRespawnRequest(state)
-    if state then
-        state.respawnRequested = false
+    local resolved, proxy = resolve_state_pair(state)
+    if resolved then
+        set_state_field(resolved, proxy, "respawnRequested", false)
     end
 end
 
 function UIStateManager.onResize(state, width, height)
-    if not state then
+    local resolved = resolve_state_pair(state)
+    if not resolved then
         return
     end
+
+    state = resolved
 
     reset_window_geometry(state.cargoUI)
     reset_window_geometry(state.pauseUI)

@@ -1,18 +1,13 @@
 local theme = require("src.ui.theme")
+local geometry = require("src.util.geometry")
+local math_util = require("src.util.math")
 ---@diagnostic disable-next-line: undefined-global
 local love = love
 
 local window = {}
 local set_color = theme.utils.set_color
 
-local function point_in_rect(px, py, rect)
-    return px >= rect.x and px <= rect.x + rect.width and
-           py >= rect.y and py <= rect.y + rect.height
-end
-
-local function clamp(value, min_val, max_val)
-    return math.max(min_val, math.min(value, max_val))
-end
+local point_in_rect = geometry.point_in_rect
 
 function window.draw_frame(options)
     local colors = theme.colors.window
@@ -101,8 +96,8 @@ function window.draw_frame(options)
             local screen_width = love.graphics.getWidth()
             local screen_height = love.graphics.getHeight()
 
-            state.x = clamp(mouse_x - offset_x, 0, screen_width - width)
-            state.y = clamp(mouse_y - offset_y, 0, screen_height - top_bar_height)
+            state.x = math_util.clamp(mouse_x - offset_x, 0, screen_width - width)
+            state.y = math_util.clamp(mouse_y - offset_y, 0, screen_height - top_bar_height)
             x = state.x
             y = state.y
         end

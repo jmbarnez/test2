@@ -1,5 +1,6 @@
 local theme = require("src.ui.theme")
 local AudioManager = require("src.audio.manager")
+local geometry = require("src.util.geometry")
 ---@diagnostic disable-next-line: undefined-global
 local love = love
 
@@ -7,27 +8,8 @@ local ui_button = {}
 
 local hover_state = {}
 
-local function resolve_rect(rect)
-    if not rect then
-        return 0, 0, 0, 0
-    end
-
-    local x = rect.x or rect[1] or 0
-    local y = rect.y or rect[2] or 0
-    local width = rect.width or rect.w or rect[3] or 0
-    local height = rect.height or rect.h or rect[4] or 0
-
-    return x, y, width, height
-end
-
-local function point_in_rect(px, py, rect)
-    if not rect then
-        return false
-    end
-
-    local x, y, width, height = resolve_rect(rect)
-    return px >= x and px <= x + width and py >= y and py <= y + height
-end
+local resolve_rect = geometry.resolve_rect
+local point_in_rect = geometry.point_in_rect
 
 local function rect_key(rect, fallback)
     if fallback then
@@ -84,6 +66,7 @@ function ui_button.render(options)
 
     local fill = base_color
     local current_text_color = text_color
+    local current_border_color = border_color
     
     if disabled then
         fill = options.disabled_fill or { 
@@ -93,6 +76,7 @@ function ui_button.render(options)
             base_color[4] or 1 
         }
         current_text_color = options.disabled_text_color or disabled_color
+        current_border_color = options.border_color_disabled or options.disabled_border or border_color
     elseif active then
         fill = active_color
     elseif hovered then
@@ -107,7 +91,7 @@ function ui_button.render(options)
 
     -- Draw border
     if border_width and border_width > 0 then
-        love.graphics.setColor(border_color)
+        love.graphics.setColor(current_border_color)
         love.graphics.setLineWidth(border_width)
         love.graphics.rectangle("line", x + 0.5, y + 0.5, width - 1, height - 1, corner_radius, corner_radius)
     end

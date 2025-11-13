@@ -6,6 +6,30 @@ local vector = require("src.util.vector")
 local ship_renderer = {}
 local ship_bar_defaults = constants.ships and constants.ships.health_bar or {}
 
+local function resolve_entity_level(entity)
+    if not entity then
+        return nil
+    end
+
+    local level = entity.level
+    if type(level) == "table" then
+        level = level.current or level.value or level.level
+    end
+
+    if not level and entity.pilot and type(entity.pilot.level) == "table" then
+        level = entity.pilot.level.current or entity.pilot.level.value or entity.pilot.level.level
+    end
+
+    if type(level) == "number" then
+        local rounded = math.floor(level + 0.5)
+        if rounded > 0 then
+            return rounded
+        end
+    end
+
+    return nil
+end
+
 local function mirror_points(points)
     local mirrored = {}
     for i = 1, #points, 2 do
@@ -408,6 +432,28 @@ local function draw_health_bar(entity)
     love.graphics.setColor(0, 0, 0, 0.9 * alpha)
     love.graphics.setLineWidth(1)
     love.graphics.rectangle("line", -halfWidth, -height * 0.5, width, height)
+
+    local level = resolve_entity_level(entity)
+    if level then
+        local font = love.graphics.getFont()
+        local text = tostring(level)
+        local paddingX, paddingY = 3, 2
+        local textWidth = font and font:getWidth(text) or (#text * 6)
+        local textHeight = font and font:getHeight() or 10
+        local badgeWidth = textWidth + paddingX * 2
+        local badgeHeight = math.max(textHeight + paddingY * 2, height)
+        local badgeX = halfWidth + 6
+        local badgeY = -badgeHeight * 0.5
+
+        love.graphics.setColor(0, 0, 0, 0.55 * alpha)
+        love.graphics.rectangle("fill", badgeX, badgeY, badgeWidth, badgeHeight)
+
+        love.graphics.setColor(0, 0, 0, 0.9 * alpha)
+        love.graphics.rectangle("line", badgeX, badgeY, badgeWidth, badgeHeight)
+
+        love.graphics.setColor(0.82, 0.88, 0.93, alpha)
+        love.graphics.print(text, badgeX + paddingX, badgeY + paddingY)
+    end
 
     love.graphics.pop()
 end

@@ -61,7 +61,11 @@ local function createTrailTexture(textureSize, layers)
             love.graphics.circle("fill", cx, cy, layer.radius or textureSize * 0.5)
         end
     end)
-    return canvas
+    local imageData = canvas:newImageData()
+    local image = love.graphics.newImage(imageData)
+    image:setFilter("linear", "linear")
+    canvas:release()
+    return image
 end
 
 local function unpack_range(range, defaultA, defaultB)
@@ -179,25 +183,43 @@ function EngineTrail:updateFromPlayer()
 
     local pos = self.player.position
     local rot = self.player.rotation or 0
-    self.direction = rot + math.pi
 
-    -- Calculate the position for the rear jet
-    local anchor = self.player.engineTrailAnchor
-    local offsetX, offsetY
-    if anchor then
-        offsetX = anchor.x or 0
-        offsetY = anchor.y or 0
+    local thrustVectorX = self.player.engineTrailThrustVectorX or 0
+    local thrustVectorY = self.player.engineTrailThrustVectorY or 0
+    local thrustVectorMagnitudeSq = thrustVectorX * thrustVectorX + thrustVectorY * thrustVectorY
+
+    -- Use thrust vector direction if available, otherwise use ship rotation
+    if thrustVectorMagnitudeSq > 1e-6 then
+        local thrustAngle = math.atan2(thrustVectorY, thrustVectorX)
+        self.direction = thrustAngle + math.pi
     else
-        offsetX = 0
-        offsetY = self.player.thrusterOffset or 24
+        self.direction = rot + math.pi
+    end
+
+    -- Calculate the position - always at ship center for enemies, offset for player
+    local anchor = self.player.engineTrailAnchor
+    if anchor and (anchor.x ~= 0 or anchor.y ~= 0) then
+        -- Player with offset
+        local offsetX = anchor.x or 0
+        local offsetY = anchor.y or 0
+        local sinR, cosR = math.sin(rot), math.cos(rot)
+        self.position.x = pos.x + cosR * offsetX - sinR * offsetY
+        self.position.y = pos.y + sinR * offsetX + cosR * offsetY
+    elseif not anchor and self.player.thrusterOffset then
+        -- Player without anchor but with thrusterOffset
+        local offsetX = 0
+        local offsetY = self.player.thrusterOffset or 24
         if self.player.hullSize then
             offsetY = self.player.hullSize.y or offsetY
         end
+        local sinR, cosR = math.sin(rot), math.cos(rot)
+        self.position.x = pos.x + cosR * offsetX - sinR * offsetY
+        self.position.y = pos.y + sinR * offsetX + cosR * offsetY
+    else
+        -- Enemy ships - emit from center
+        self.position.x = pos.x
+        self.position.y = pos.y
     end
-
-    local sinR, cosR = math.sin(rot), math.cos(rot)
-    self.position.x = pos.x + cosR * offsetX - sinR * offsetY
-    self.position.y = pos.y + sinR * offsetX + cosR * offsetY
 
     -- Enhanced thrust strength calculation with shimmer
     local thrusting = self.player.isThrusting
@@ -218,6 +240,9 @@ function EngineTrail:updateFromPlayer()
         local pulse = 0.95 + 0.05 * math.sin(time * 6)
         strength = strength * shimmer * pulse
     end
+
+    -- Engine trail always points backward from ship rotation
+    -- (direction was already set to rot + math.pi at the start of this function)
 
     self.thrustStrength = strength
 end

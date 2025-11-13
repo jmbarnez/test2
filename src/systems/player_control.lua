@@ -90,11 +90,12 @@ return function(context)
 
                 body:applyForce(force_x, force_y)
                 entity.currentThrust = vector.length(force_x, force_y)
-                if entity.stats and entity.stats.main_thrust then
-                    entity.maxThrust = entity.stats.main_thrust
-                end
+                entity.engineTrailThrustVectorX = force_x
+                entity.engineTrailThrustVectorY = force_y
             else
                 entity.currentThrust = 0
+                entity.engineTrailThrustVectorX = 0
+                entity.engineTrailThrustVectorY = 0
             end
 
             if engineTrail then

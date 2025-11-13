@@ -24,23 +24,14 @@ local palette_keys = {
     "default",
 }
 
-local function clamp(value, min, max)
-    if value < min then
-        return min
-    elseif value > max then
-        return max
-    end
-    return value
-end
-
 local function jitter_color(color, variation)
     color = color or DEFAULT_COLORS[1]
     local v = variation or 0.12
 
-    local r = clamp((color[1] or 0.5) * (1 + (love.math.random() * 2 - 1) * v), 0, 1)
-    local g = clamp((color[2] or 0.5) * (1 + (love.math.random() * 2 - 1) * v), 0, 1)
-    local b = clamp((color[3] or 0.5) * (1 + (love.math.random() * 2 - 1) * v), 0, 1)
-    local a = clamp(color[4] or 1, 0, 1)
+    local r = math_util.clamp((color[1] or 0.5) * (1 + (love.math.random() * 2 - 1) * v), 0, 1)
+    local g = math_util.clamp((color[2] or 0.5) * (1 + (love.math.random() * 2 - 1) * v), 0, 1)
+    local b = math_util.clamp((color[3] or 0.5) * (1 + (love.math.random() * 2 - 1) * v), 0, 1)
+    local a = math_util.clamp(color[4] or 1, 0, 1)
 
     return { r, g, b, a }
 end
@@ -194,13 +185,13 @@ local function create_wreckage_piece(context, params)
     body:setAngularVelocity(params.angularVelocity)
 
     local shape = love.physics.newPolygonShape(unpack(polygon))
-    local density = clamp(params.density or 0.35, 0.05, 6)
+    local density = math_util.clamp(params.density or 0.35, 0.05, 6)
     local fixture = love.physics.newFixture(body, shape, density)
     fixture:setFriction(0.85)
     fixture:setRestitution(0.08)
 
     local radius = params.pieceRadius or 12
-    local baseHealth = clamp((radius * 0.9) + 12, 18, 140)
+    local baseHealth = math_util.clamp((radius * 0.9) + 12, 18, 140)
     local health = params.health or baseHealth
 
     local piece_radius = params.pieceRadius or 16
@@ -301,7 +292,7 @@ function ShipWreckage.spawn(ship, context)
     for i = 1, piece_count do
         local area_share = reference_area * (weights[i] / weight_sum)
         local nominal_radius = math.sqrt(math.abs(area_share) / math.pi)
-        local piece_radius = clamp(nominal_radius * random_between(0.85, 1.25), min_piece_radius, radius * 0.95)
+        local piece_radius = math_util.clamp(nominal_radius * random_between(0.85, 1.25), min_piece_radius, radius * 0.95)
 
         local polygon = generate_polygon(piece_radius)
 
@@ -323,15 +314,15 @@ function ShipWreckage.spawn(ship, context)
 
         local fill_color = choose_palette_color(palette)
         local outline_color = {
-            clamp(fill_color[1] * 0.55, 0, 1),
-            clamp(fill_color[2] * 0.55, 0, 1),
-            clamp(fill_color[3] * 0.55, 0, 1),
+            math_util.clamp(fill_color[1] * 0.55, 0, 1),
+            math_util.clamp(fill_color[2] * 0.55, 0, 1),
+            math_util.clamp(fill_color[3] * 0.55, 0, 1),
             fill_color[4] or 1,
         }
 
-        local density = clamp(piece_radius * 0.12, 0.08, 4)
+        local density = math_util.clamp(piece_radius * 0.12, 0.08, 4)
 
-        local pieceHealth = clamp((piece_radius * 1.25) + 24, 30, 200)
+        local pieceHealth = math_util.clamp((piece_radius * 1.25) + 24, 30, 200)
 
         create_wreckage_piece(context, {
             position = { x = px, y = py },
@@ -346,7 +337,7 @@ function ShipWreckage.spawn(ship, context)
             fadeDuration = random_between(1.2, 1.9),
             fillColor = fill_color,
             outlineColor = outline_color,
-            lineWidth = clamp(piece_radius * 0.12, 1.2, 2.4),
+            lineWidth = math_util.clamp(piece_radius * 0.12, 1.2, 2.4),
             pieceRadius = piece_radius,
             health = pieceHealth,
             loot = build_scrap_loot(piece_radius),

@@ -138,10 +138,10 @@ function WeaponPanel.draw(context, player)
     
     -- Text
     local textX = iconX + slotSize + padding
-    love.graphics.setFont(fonts.body)
+    if fonts.body then love.graphics.setFont(fonts.body) end
     set_color(window_colors.text or { 0.8, 0.8, 0.85, 1 })
     love.graphics.print(name, textX, iconY + 2)
-    
+
 
     if hasCooldown then
         local barX = textX

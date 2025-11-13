@@ -6,6 +6,7 @@ local window = require("src.ui.components.window")
 local UIStateManager = require("src.ui.state_manager")
 local theme = require("src.ui.theme")
 local dropdown = require("src.ui.components.dropdown")
+local geometry = require("src.util.geometry")
 
 -- Specialized settings modules
 local OptionsData = require("src.settings.options_data")
@@ -27,7 +28,7 @@ local GLOBAL_FULLSCREEN_STATE = {}
 ---@param rect table Rectangle {x, y, w, h}
 ---@return boolean Whether the point is inside
 local function point_in_rect(x, y, rect)
-    return x >= rect.x and x <= rect.x + rect.w and y >= rect.y and y <= rect.y + rect.h
+    return geometry.point_in_rect(x, y, rect)
 end
 
 --- Resets scroll interaction state

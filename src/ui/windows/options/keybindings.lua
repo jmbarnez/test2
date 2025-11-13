@@ -2,6 +2,7 @@
 -- Handles rebinding keys, displaying current bindings, and static hotkey info
 
 local theme = require("src.ui.theme")
+local geometry = require("src.util.geometry")
 
 ---@diagnostic disable-next-line: undefined-global
 local love = love
@@ -43,7 +44,7 @@ end
 ---@param rect table Rectangle {x, y, w, h}
 ---@return boolean Whether the point is inside
 local function point_in_rect(x, y, rect)
-    return x >= rect.x and x <= rect.x + rect.w and y >= rect.y and y <= rect.y + rect.h
+    return geometry.point_in_rect(x, y, rect)
 end
 
 --- Renders the keybinding configuration section

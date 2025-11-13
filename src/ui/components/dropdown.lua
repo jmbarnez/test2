@@ -1,4 +1,5 @@
 local theme = require("src.ui.theme")
+local geometry = require("src.util.geometry")
 
 ---@diagnostic disable-next-line: undefined-global
 local love = love
@@ -27,23 +28,8 @@ function dropdown.create_state(initial)
     return state
 end
 
-local function resolve_rect(rect)
-    rect = rect or {}
-    local x = rect.x or rect[1] or 0
-    local y = rect.y or rect[2] or 0
-    local width = rect.width or rect.w or rect[3] or 0
-    local height = rect.height or rect.h or rect[4] or 0
-    return x, y, width, height
-end
-
-local function point_in_rect(px, py, rect)
-    if not rect then
-        return false
-    end
-
-    local x, y, width, height = resolve_rect(rect)
-    return px >= x and px <= x + width and py >= y and py <= y + height
-end
+local resolve_rect = geometry.resolve_rect
+local point_in_rect = geometry.point_in_rect
 
 function dropdown.measure(options)
     options = options or {}

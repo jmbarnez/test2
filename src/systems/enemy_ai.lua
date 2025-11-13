@@ -24,6 +24,9 @@ local sqrt = math.sqrt
 local abs = math.abs
 local min = math.min
 local max = math.max
+local huge = math.huge
+
+local clamp_angle = math_util.clamp_angle
 
 local function has_tag(entity, tag)
     if not entity or not tag then
@@ -51,6 +54,21 @@ local function within_range(origin, candidate, range)
     return (dx * dx + dy * dy) <= (range * range)
 end
 
+local function is_target_valid(target)
+    if not target then
+        return false
+    end
+
+    if target.pendingDestroy or target.destroyed then
+        return false
+    end
+
+    local dead = (target.health and target.health.current and target.health.current <= 0)
+        or (target.body and target.body:isDestroyed())
+
+    return not dead
+end
+
 ---@param world table
 ---@param tag string
 ---@param preferred table|nil
@@ -58,23 +76,40 @@ end
 ---@param detectionRange number|nil
 ---@return table|nil
 local function find_target(world, tag, preferred, origin, detectionRange)
-    if preferred and has_tag(preferred, tag) and within_range(origin, preferred, detectionRange) then
+    if preferred and is_target_valid(preferred) and has_tag(preferred, tag) and within_range(origin, preferred, detectionRange) then
         return preferred
     end
 
-    if not world or not tag then
+    if not (world and world.entities and tag) then
         return nil
     end
 
+    local hasOrigin = origin and origin.x and origin.y
+    local rangeSq = (detectionRange and detectionRange > 0) and detectionRange * detectionRange or huge
+    local bestCandidate, bestDistSq = nil, huge
     local entities = world.entities
+
     for i = 1, #entities do
         local candidate = entities[i]
-        if candidate and has_tag(candidate, tag) and within_range(origin, candidate, detectionRange) then
-            return candidate
+        if candidate and has_tag(candidate, tag) and is_target_valid(candidate) then
+            if hasOrigin then
+                local pos = candidate.position
+                if pos then
+                    local dx = pos.x - origin.x
+                    local dy = pos.y - origin.y
+                    local distSq = dx * dx + dy * dy
+                    if distSq <= rangeSq and distSq < bestDistSq then
+                        bestDistSq = distSq
+                        bestCandidate = candidate
+                    end
+                end
+            else
+                return candidate
+            end
         end
     end
 
-    return nil
+    return bestCandidate
 end
 
 ---@param entity EnemyEntity
@@ -91,26 +126,9 @@ local function ensure_ai_state(entity)
     return state
 end
 
-local clamp_angle = math_util.clamp_angle
-
-local function is_target_valid(target)
-    if not target then
-        return false
-    end
-
-    if target.pendingDestroy or target.destroyed then
-        return false
-    end
-
-    local dead = (target.health and target.health.current and target.health.current <= 0)
-        or (target.body and target.body:isDestroyed())
-
-    return not dead
-end
-
 local normalize_vector = vector.normalize
-local clamp_vector = function(x, y, max)
-    return vector.clamp(x, y, max)
+local clamp_vector = function(x, y, maxMagnitude)
+    return vector.clamp(x, y, maxMagnitude)
 end
 
 ---@param entity EnemyEntity
@@ -126,12 +144,12 @@ local function update_engine_trail(entity, isThrusting, impulseX, impulseY, dt, 
 
     impulseX = impulseX or 0
     impulseY = impulseY or 0
+    local impulseMagnitude = vector.length(impulseX, impulseY)
 
     local thrusting = not not isThrusting
     local currentThrust = entity.currentThrust or 0
 
     if thrusting then
-        local impulseMagnitude = vector.length(impulseX, impulseY)
         if impulseMagnitude > 0 then
             currentThrust = dt and dt > 0 and (impulseMagnitude / dt) or impulseMagnitude
         elseif desiredSpeed and desiredSpeed > 0 then
@@ -151,6 +169,8 @@ local function update_engine_trail(entity, isThrusting, impulseX, impulseY, dt, 
         if entity.engineTrail then
             entity.engineTrail:setActive(false)
         end
+        entity.engineTrailThrustVectorX = 0
+        entity.engineTrailThrustVectorY = 0
         return
     end
 
@@ -161,8 +181,19 @@ local function update_engine_trail(entity, isThrusting, impulseX, impulseY, dt, 
         entity.maxThrust = currentThrust
     end
 
-    if entity.engineTrail then
-        entity.engineTrail:setActive(true)
+    -- Only show trail when actively applying impulse
+    if impulseMagnitude > 0 then
+        entity.engineTrailThrustVectorX = impulseX
+        entity.engineTrailThrustVectorY = impulseY
+        if entity.engineTrail then
+            entity.engineTrail:setActive(true)
+        end
+    else
+        entity.engineTrailThrustVectorX = 0
+        entity.engineTrailThrustVectorY = 0
+        if entity.engineTrail then
+            entity.engineTrail:setActive(false)
+        end
     end
 end
 
@@ -195,7 +226,7 @@ end
 ---@return number
 local function choose_wander_point(home, radius)
     local angle = random() * TAU
-    local dist = random() * radius
+    local dist = sqrt(random()) * radius
     return home.x + cos(angle) * dist, home.y + sin(angle) * dist
 end
 
@@ -484,8 +515,8 @@ local function create_behavior_tree(context)
         local mass = stats.mass or body:getMass() or 1
 
         local distanceError = distance - preferredDistance
-        local normalizedError = preferredDistance > 0 
-            and (distanceError / preferredDistance) 
+        local normalizedError = preferredDistance > 0
+            and (distanceError / preferredDistance)
             or (distanceError / max(distance, 1))
         normalizedError = max(-1, min(1, normalizedError))
 
@@ -539,9 +570,15 @@ local function create_behavior_tree(context)
             local maxRange = weaponRange or weapon.maxRange or stats.max_range or engagementRange
             local canFire = maxRange and distance <= min(maxRange, engagementRange)
 
-            weapon.firing = canFire
-            weapon.targetX = canFire and tx or nil
-            weapon.targetY = canFire and ty or nil
+            if canFire then
+                weapon.firing = (not weapon.cooldown or weapon.cooldown <= 0)
+                weapon.targetX = weapon.firing and tx or nil
+                weapon.targetY = weapon.firing and ty or nil
+            else
+                weapon.firing = false
+                weapon.targetX = nil
+                weapon.targetY = nil
+            end
         end
 
         return BTStatus.running

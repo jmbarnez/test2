@@ -89,6 +89,10 @@ return function(context)
                 Intent.setFireSecondary(intent, love.mouse.isDown and love.mouse.isDown(2))
             end
 
+            if love.keyboard then
+                Intent.setAbility(intent, 1, love.keyboard.isDown("space"))
+            end
+
         end,
     }
 end

@@ -72,6 +72,7 @@ return {
         position = { x = 0, y = 0 },
         velocity = { x = 0, y = 0 },
         rotation = 0,
+        mountRadius = outer_radius * 1.05,
         drawable = {
             type = "ship",
             defaultStrokeWidth = 4,
@@ -159,6 +160,14 @@ return {
             width = 240,
             height = 18,
             offset = 170,
+        },
+        stationInfluence = {
+            radius = 900,
+            lineWidth = 2.5,
+            accentOffset = 8,
+            color = { 0.18, 0.46, 0.78, 0.22 },
+            accentColor = { 0.3, 0.78, 1.0, 0.35 },
+            activeColor = { 0.3, 0.85, 1.0, 0.55 },
         },
         colliders = {
             {

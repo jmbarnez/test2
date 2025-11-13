@@ -3,6 +3,7 @@ local window = require("src.ui.components.window")
 local Diagnostics = require("src.hud.diagnostics")
 local PlayerManager = require("src.player.manager")
 local UIStateManager = require("src.ui.state_manager")
+local math_util = require("src.util.math")
 
 ---@diagnostic disable-next-line: undefined-global
 local love = love
@@ -21,8 +22,8 @@ local function get_dimensions()
     local x = (screen_width - width) * 0.5
     local y = (screen_height - height) * 0.5
 
-    x = math.max(margin, math.min(x, screen_width - width - margin))
-    y = math.max(margin, math.min(y, screen_height - height - margin))
+    x = math_util.clamp(x, margin, screen_width - width - margin)
+    y = math_util.clamp(y, margin, screen_height - height - margin)
 
     return {
         x = x,
@@ -42,7 +43,7 @@ local function clamp_scroll(state, content_height, viewport_height)
         state.scrollOffset = 0
     end
 
-    state.scrollOffset = math.max(0, math.min(max_offset, state.scrollOffset))
+    state.scrollOffset = math_util.clamp(state.scrollOffset, 0, max_offset)
     return state.scrollOffset
 end
 

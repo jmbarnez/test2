@@ -11,16 +11,21 @@ return tiny.processingSystem {
     end,
 
     draw = function(self)
-        local entities = self.entities
-        if not entities then
+        local world = self.world
+        local pool = self.__pool
+
+        if not (world and pool) then
             return
         end
 
+        local entities = world.entities
         for i = 1, #entities do
             local entity = entities[i]
-            local trail = entity.engineTrail
-            if trail then
-                trail:draw()
+            if pool[entity] then
+                local trail = entity.engineTrail
+                if trail then
+                    trail:draw()
+                end
             end
         end
     end,

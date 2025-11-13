@@ -85,6 +85,9 @@ return {
             offset = weapon_defaults.offset,
             color = table_util.clone_array(weapon_defaults.color),
             glowColor = table_util.clone_array(weapon_defaults.glowColor),
+            sfx = {
+                fire = "sfx:cannon_shot",
+            },
             energyPerShot = 0,
             projectileBlueprint = {
                 projectile = table_util.deep_copy(weapon_defaults.projectile),

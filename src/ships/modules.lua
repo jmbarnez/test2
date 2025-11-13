@@ -74,7 +74,6 @@ local function apply_module_effects(entity)
 
     local totalShieldBonus = 0
     local totalShieldRegen = 0
-    local moduleRechargeDelay = nil
     local hasShieldModifier = false
 
     for i = 1, #modules.slots do
@@ -93,14 +92,7 @@ local function apply_module_effects(entity)
                 hasShieldModifier = true
             end
 
-            local delay = tonumber(stats.shield_recharge_delay)
-            if delay then
-                delay = math.max(0, delay)
-                if moduleRechargeDelay == nil then
-                    moduleRechargeDelay = delay
-                else
-                    moduleRechargeDelay = math.min(moduleRechargeDelay, delay)
-                end
+            if stats.shield_recharge_delay then
                 hasShieldModifier = true
             end
         end
@@ -116,10 +108,9 @@ local function apply_module_effects(entity)
             baseShield = {
                 max = math.max(0, tonumber(currentShield.max or currentShield.capacity or currentShield.limit or currentShield.current or 0) or 0),
                 regen = math.max(0, tonumber(currentShield.regen) or 0),
-                rechargeDelay = math.max(0, tonumber(currentShield.rechargeDelay) or 0),
             }
         else
-            baseShield = { max = 0, regen = 0, rechargeDelay = 0 }
+            baseShield = { max = 0, regen = 0 }
         end
         entity._moduleBase.shield = baseShield
     end
@@ -131,7 +122,6 @@ local function apply_module_effects(entity)
                 max = 0,
                 current = 0,
                 regen = 0,
-                rechargeDelay = baseShield.rechargeDelay or 0,
                 rechargeTimer = 0,
                 percent = 0,
                 isDepleted = true,
@@ -164,15 +154,11 @@ local function apply_module_effects(entity)
     if hasShieldModifier then
         newMax = math.max(0, (baseShield.max or 0) + totalShieldBonus)
         newRegen = math.max(0, (baseShield.regen or 0) + totalShieldRegen)
-        if moduleRechargeDelay ~= nil then
-            newDelay = moduleRechargeDelay
-        else
-            newDelay = math.max(0, baseShield.rechargeDelay or 0)
-        end
+        newDelay = 0
     else
         newMax = math.max(0, baseShield.max or 0)
         newRegen = math.max(0, baseShield.regen or 0)
-        newDelay = math.max(0, baseShield.rechargeDelay or 0)
+        newDelay = 0
     end
 
     shieldComponent.max = newMax
@@ -180,13 +166,69 @@ local function apply_module_effects(entity)
     shieldComponent.current = newCurrent
     shieldComponent.regen = newRegen
 
-    local clampedDelay = math.max(0, newDelay)
-    shieldComponent.rechargeDelay = clampedDelay
-    local timer = tonumber(shieldComponent.rechargeTimer) or 0
-    shieldComponent.rechargeTimer = math.min(math.max(0, timer), clampedDelay)
+    shieldComponent.rechargeDelay = 0
+    shieldComponent.rechargeTimer = 0
 
     shieldComponent.percent = newMax > 0 and (newCurrent / newMax) or 0
     shieldComponent.isDepleted = newCurrent <= 0
+
+    -- Track ability modules
+    local abilitySlots = {}
+    local abilityLookup = {}
+    for i = 1, #modules.slots do
+        local slot = modules.slots[i]
+        if slot and slot.type == "ability" then
+            local item = slot.item
+            local abilityComponent = item and item.module and item.module.ability
+            if abilityComponent then
+                local key = abilityComponent.id or slot.id or ("ability_" .. i)
+                abilitySlots[#abilitySlots + 1] = {
+                    slotIndex = i,
+                    slot = slot,
+                    item = item,
+                    ability = abilityComponent,
+                    key = key,
+                }
+                abilityLookup[key] = true
+            end
+        end
+    end
+
+    if #abilitySlots > 0 then
+        entity.abilityModules = abilitySlots
+    else
+        entity.abilityModules = nil
+    end
+
+    local abilityState = entity._abilityState or {}
+    for index = 1, #abilitySlots do
+        local entry = abilitySlots[index]
+        local key = entry.key
+        local state = abilityState[key]
+        if not state then
+            state = {
+                cooldown = 0,
+                cooldownDuration = entry.ability.cooldown or 0,
+                activeTimer = 0,
+                wasDown = false,
+            }
+            abilityState[key] = state
+        else
+            state.cooldownDuration = entry.ability.cooldown or state.cooldownDuration or 0
+        end
+    end
+
+    for key in pairs(abilityState) do
+        if not abilityLookup[key] then
+            abilityState[key] = nil
+        end
+    end
+
+    if next(abilityState) then
+        entity._abilityState = abilityState
+    else
+        entity._abilityState = nil
+    end
 end
 
 local function remove_item_reference(modules, item)

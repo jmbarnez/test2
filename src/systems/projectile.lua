@@ -26,11 +26,17 @@ local function randf(min, max)
     return min + (max - min) * math.random()
 end
 
-local function queue_spawn(system, owner, x, y, dirX, dirY, weaponConfig)
+local function queue_spawn(system, owner, x, y, dirX, dirY, weaponConfig, speedMultiplier)
     if not system then return end
     local pending = system.pendingSpawns
     pending[#pending + 1] = {
-        owner = owner, x = x, y = y, dirX = dirX, dirY = dirY, weapon = weaponConfig,
+        owner = owner,
+        x = x,
+        y = y,
+        dirX = dirX,
+        dirY = dirY,
+        weapon = weaponConfig,
+        speedMultiplier = speedMultiplier,
     }
 end
 
@@ -159,8 +165,26 @@ local function trigger_delayed_spawn(system, projectile, reason, physicsWorld)
     if delayed.angleOffset then
         baseAngle = baseAngle + delayed.angleOffset
     end
+    if delayed.baseJitter and delayed.baseJitter > 0 then
+        baseAngle = baseAngle + randf(-delayed.baseJitter, delayed.baseJitter)
+    end
 
-    local count = math.max(1, delayed.count or 1)
+    local countMin = delayed.countMin or delayed.count or 1
+    local countMax = delayed.countMax or countMin
+    if countMax < countMin then
+        countMin, countMax = countMax, countMin
+    end
+
+    countMin = math.max(1, math.floor(countMin + 0.5))
+    countMax = math.max(countMin, math.floor(countMax + 0.5))
+
+    local count
+    if countMin == countMax then
+        count = countMin
+    else
+        count = math.random(countMin, countMax)
+    end
+
     local spread = delayed.spread or 0
 
     if delayed.spawnOffset and delayed.spawnOffset ~= 0 then
@@ -168,14 +192,68 @@ local function trigger_delayed_spawn(system, projectile, reason, physicsWorld)
         spawnY = spawnY + math.sin(baseAngle) * delayed.spawnOffset
     end
 
-    if count == 1 then
-        queue_spawn(system, owner, spawnX, spawnY, math.cos(baseAngle), math.sin(baseAngle), weaponConfig)
+    local lateralJitter = delayed.lateralJitter or 0
+
+    local speedMin = delayed.speedMultiplierMin
+    local speedMax = delayed.speedMultiplierMax
+    if speedMin == nil and speedMax == nil then
+        speedMin, speedMax = 1, 1
     else
-        local step = spread / (count - 1)
-        local startAngle = baseAngle - spread * 0.5
-        for i = 0, count - 1 do
-            local dirAngle = startAngle + step * i
-            queue_spawn(system, owner, spawnX, spawnY, math.cos(dirAngle), math.sin(dirAngle), weaponConfig)
+        speedMin = speedMin or speedMax or 1
+        speedMax = speedMax or speedMin or 1
+    end
+
+    if speedMax < speedMin then
+        speedMin, speedMax = speedMax, speedMin
+    end
+
+    local function pick_speed_multiplier()
+        if not speedMin or not speedMax then
+            return 1
+        end
+        if speedMin == speedMax then
+            return speedMin
+        end
+        return randf(speedMin, speedMax)
+    end
+
+    if count <= 1 or spread <= 0 then
+        local jitterX, jitterY = 0, 0
+        if lateralJitter and lateralJitter > 0 then
+            local jitter = randf(-lateralJitter, lateralJitter)
+            jitterX = math.cos(baseAngle + math.pi * 0.5) * jitter
+            jitterY = math.sin(baseAngle + math.pi * 0.5) * jitter
+        end
+        local speedMultiplier = pick_speed_multiplier()
+        queue_spawn(system, owner, spawnX + jitterX, spawnY + jitterY, math.cos(baseAngle), math.sin(baseAngle), weaponConfig, speedMultiplier)
+    else
+        local halfSpread = spread * 0.5
+        if delayed.randomizeSpread then
+            for _ = 1, count do
+                local dirAngle = baseAngle + randf(-halfSpread, halfSpread)
+                local jitterX, jitterY = 0, 0
+                if lateralJitter and lateralJitter > 0 then
+                    local jitter = randf(-lateralJitter, lateralJitter)
+                    jitterX = math.cos(dirAngle + math.pi * 0.5) * jitter
+                    jitterY = math.sin(dirAngle + math.pi * 0.5) * jitter
+                end
+                local speedMultiplier = pick_speed_multiplier()
+                queue_spawn(system, owner, spawnX + jitterX, spawnY + jitterY, math.cos(dirAngle), math.sin(dirAngle), weaponConfig, speedMultiplier)
+            end
+        else
+            local step = spread / (count - 1)
+            local startAngle = baseAngle - halfSpread
+            for i = 0, count - 1 do
+                local dirAngle = startAngle + step * i
+                local jitterX, jitterY = 0, 0
+                if lateralJitter and lateralJitter > 0 then
+                    local jitter = randf(-lateralJitter, lateralJitter)
+                    jitterX = math.cos(dirAngle + math.pi * 0.5) * jitter
+                    jitterY = math.sin(dirAngle + math.pi * 0.5) * jitter
+                end
+                local speedMultiplier = pick_speed_multiplier()
+                queue_spawn(system, owner, spawnX + jitterX, spawnY + jitterY, math.cos(dirAngle), math.sin(dirAngle), weaponConfig, speedMultiplier)
+            end
         end
     end
 
@@ -233,6 +311,10 @@ return function(context)
 
             -- Avoid double-processing this pair this frame
             local key = tostring(projectile) .. ":" .. tostring(target)
+            if projectile and projectile.ignoreCollisions then
+                return
+            end
+
             if self.processedCollisions[key] then return end
             self.processedCollisions[key] = true
 
@@ -240,21 +322,9 @@ return function(context)
             local pos = projectile.position or {}
             local x, y = pos.x or 0, pos.y or 0
             
-            -- Debug: Log station impacts
-            if target and target.station then
-                print(string.format("[PROJECTILE] Impact on station at (%.1f, %.1f), type=%s, particles before=%d", 
-                    x, y, tostring(targetData.type), #self.impactParticles))
-            end
-            
             local particles = create_impact_particles(x, y, projectile)
             for i = 1, #particles do
                 self.impactParticles[#self.impactParticles + 1] = particles[i]
-            end
-            
-            -- Debug: Verify particles were added
-            if target and target.station then
-                print(string.format("[PROJECTILE] Particles after=%d, added=%d", 
-                    #self.impactParticles, #particles))
             end
 
             -- Don't hit the shooter or same playerId
@@ -402,7 +472,13 @@ return function(context)
             if #pending > 0 then
                 for i = 1, #pending do
                     local entry = pending[i]
-                    ProjectileFactory.spawn(self.world, physicsWorld, entry.owner, entry.x, entry.y, entry.dirX, entry.dirY, entry.weapon)
+                    local dirX = entry.dirX
+                    local dirY = entry.dirY
+                    if entry.speedMultiplier and entry.speedMultiplier ~= 1 then
+                        dirX = dirX * entry.speedMultiplier
+                        dirY = dirY * entry.speedMultiplier
+                    end
+                    ProjectileFactory.spawn(self.world, physicsWorld, entry.owner, entry.x, entry.y, dirX, dirY, entry.weapon)
                     pending[i] = nil
                 end
             end

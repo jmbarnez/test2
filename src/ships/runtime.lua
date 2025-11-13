@@ -3,6 +3,7 @@ local vector = require("src.util.vector")
 local ship_util = require("src.ships.util")
 local ShipCargo = require("src.ships.cargo")
 local Modules = require("src.ships.modules")
+local math_util = require("src.util.math")
 
 local runtime = {}
 
@@ -208,10 +209,6 @@ local function resolve_shield_component(entity)
     return nil
 end
 
-local function clamp(value, min_val, max_val)
-    return math.max(min_val, math.min(value, max_val))
-end
-
 local function initialize_shield(entity)
     local shield = resolve_shield_component(entity)
     if not shield then return end
@@ -220,10 +217,10 @@ local function initialize_shield(entity)
         or shield.strength or shield.current or 0) or 0)
     
     shield.max = maxShield
-    shield.current = maxShield > 0 and clamp(tonumber(shield.current) or maxShield, 0, maxShield) or 0
+    shield.current = maxShield > 0 and math_util.clamp(tonumber(shield.current) or maxShield, 0, maxShield) or 0
     shield.regen = math.max(0, tonumber(shield.regen) or 0)
-    shield.rechargeDelay = math.max(0, tonumber(shield.rechargeDelay) or 0)
-    shield.rechargeTimer = math.max(0, tonumber(shield.rechargeTimer) or 0)
+    shield.rechargeDelay = 0
+    shield.rechargeTimer = 0
     shield.percent = maxShield > 0 and (shield.current / maxShield) or 0
     shield.isDepleted = shield.current <= 0
 end
@@ -241,17 +238,16 @@ local function update_shield(entity, dt)
         return
     end
 
-    local current = clamp(tonumber(shield.current) or maxShield, 0, maxShield)
-    local rechargeTimer = math.max(0, (tonumber(shield.rechargeTimer) or 0) - dt)
+    local current = math_util.clamp(tonumber(shield.current) or maxShield, 0, maxShield)
     local regenRate = math.max(0, tonumber(shield.regen) or 0)
 
-    -- Regenerate shield
-    if regenRate > 0 and rechargeTimer <= 0 and current < maxShield then
+    -- Regenerate shield continuously when below maximum
+    if regenRate > 0 and current < maxShield then
         current = math.min(maxShield, current + regenRate * dt)
     end
 
     shield.current = current
-    shield.rechargeTimer = rechargeTimer
+    shield.rechargeTimer = 0
     shield.percent = current / maxShield
     shield.isDepleted = current <= 0
 end
@@ -266,7 +262,7 @@ local function initialize_energy(entity)
         or energy.current or stats.main_thrust or 0) or 0)
 
     energy.max = maxEnergy
-    energy.current = maxEnergy > 0 and clamp(tonumber(energy.current) or maxEnergy, 0, maxEnergy) or 0
+    energy.current = maxEnergy > 0 and math_util.clamp(tonumber(energy.current) or maxEnergy, 0, maxEnergy) or 0
     energy.regen = math.max(0, tonumber(energy.regen) or 0)
     energy.thrustDrain = math.max(0, tonumber(energy.thrustDrain) or stats.main_thrust or 0)
     energy.rechargeDelay, energy.rechargeTimer = 0, 0

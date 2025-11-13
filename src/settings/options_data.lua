@@ -4,6 +4,7 @@
 local constants = require("src.constants.game")
 local runtime_settings = require("src.settings.runtime")
 local AudioManager = require("src.audio.manager")
+local math_util = require("src.util.math")
 
 ---@diagnostic disable-next-line: undefined-global
 local love = love
@@ -26,13 +27,6 @@ local DEFAULT_KEYBINDINGS = {
     toggleSkills = { "k" },
     pause = { "escape" },
 }
-
---- Clamps a value between 0 and 1
----@param value number|nil The value to clamp
----@return number The clamped value
-local function clamp01(value)
-    return math.max(0, math.min(1, value or 0))
-end
 
 --- Creates a deep copy of keybindings
 ---@param source table The source keybindings
@@ -78,9 +72,9 @@ function OptionsData.ensure(state, context)
     if state.syncPending or not settings.masterVolume then
         state.syncPending = false
 
-        settings.masterVolume = clamp01((love.audio and love.audio.getVolume and love.audio.getVolume()) or settings.masterVolume or DEFAULT_MASTER_VOLUME)
-        settings.musicVolume = clamp01(settings.musicVolume or settings.masterVolume)
-        settings.sfxVolume = clamp01(settings.sfxVolume or settings.masterVolume)
+        settings.masterVolume = math_util.clamp01((love.audio and love.audio.getVolume and love.audio.getVolume()) or settings.masterVolume or DEFAULT_MASTER_VOLUME)
+        settings.musicVolume = math_util.clamp01(settings.musicVolume or settings.masterVolume)
+        settings.sfxVolume = math_util.clamp01(settings.sfxVolume or settings.masterVolume)
 
         if love.window and love.window.getMode then
             local width, height, flags = love.window.getMode()
@@ -118,9 +112,9 @@ function OptionsData.ensure(state, context)
     end
 
     -- Normalize volume values
-    settings.masterVolume = clamp01(settings.masterVolume)
-    settings.musicVolume = clamp01(settings.musicVolume)
-    settings.sfxVolume = clamp01(settings.sfxVolume)
+    settings.masterVolume = math_util.clamp01(settings.masterVolume)
+    settings.musicVolume = math_util.clamp01(settings.musicVolume)
+    settings.sfxVolume = math_util.clamp01(settings.sfxVolume)
 
     -- Normalize boolean flags
     settings.fullscreen = not not settings.fullscreen

@@ -29,6 +29,273 @@ local SPARK_LIFETIME_BASE = 0.2 -- Minimum lifetime for beam impact sparks (seco
 local SPARK_LIFETIME_VARIANCE = 0.18 -- Additional randomized spark lifetime (seconds)
 local SPARK_VELOCITY_DAMPING = 0.88 -- Damping factor applied each frame to spark velocity
 
+local function copy_color(color)
+    if type(color) ~= "table" then
+        return nil
+    end
+    return {
+        color[1] or 0,
+        color[2] or 0,
+        color[3] or 0,
+        color[4] or 1,
+    }
+end
+
+local function resolve_entity_position(entity)
+    local pos = entity and entity.position
+    if pos and pos.x and pos.y then
+        return pos.x, pos.y
+    end
+    return nil, nil
+end
+
+local function is_friendly_fire(shooter, target)
+    if not shooter or not target then
+        return false
+    end
+    if shooter == target then
+        return true
+    end
+    if shooter.faction and target.faction and shooter.faction == target.faction then
+        return true
+    end
+    if shooter.player and target.player then
+        return true
+    end
+    if shooter.enemy and target.enemy then
+        return true
+    end
+    return false
+end
+
+local function distance_sq(ax, ay, bx, by)
+    local dx = (ax or 0) - (bx or 0)
+    local dy = (ay or 0) - (by or 0)
+    return dx * dx + dy * dy
+end
+
+local function apply_hitscan_damage(damageEntity, target, baseDamage, source, weapon, hitX, hitY)
+    if not (damageEntity and target) then
+        return 0
+    end
+
+    local damage = math.max(0, baseDamage or 0)
+    if damage <= 0 then
+        return 0
+    end
+
+    local damageType = weapon and weapon.damageType
+    local armorType = target.armorType
+    local multiplier = damage_util.resolve_multiplier(damageType, armorType)
+    damage = damage * multiplier
+    if damage <= 0 then
+        return 0
+    end
+
+    damageEntity(target, damage, source, {
+        x = hitX,
+        y = hitY,
+    })
+
+    return damage
+end
+
+local function find_chain_target(world, shooter, originX, originY, rangeSq, alreadyHit)
+    if not (world and world.entities) then
+        return nil
+    end
+
+    local bestTarget
+    local bestDistanceSq
+
+    for i = 1, #world.entities do
+        local candidate = world.entities[i]
+        if candidate and candidate ~= shooter and not (alreadyHit and alreadyHit[candidate]) then
+            if candidate.health and (candidate.health.current or 0) > 0 and not candidate.pendingDestroy then
+                if not is_friendly_fire(shooter, candidate) then
+                    local cx, cy = resolve_entity_position(candidate)
+                    if cx and cy then
+                        local distSq = distance_sq(originX, originY, cx, cy)
+                        if distSq <= rangeSq then
+                            if not bestDistanceSq or distSq < bestDistanceSq then
+                                bestDistanceSq = distSq
+                                bestTarget = candidate
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    return bestTarget
+end
+
+local function perform_chain_lightning(world, shooter, weapon, damageEntity, baseDamage, originTarget, originX, originY, beams, chainConfig)
+    if not (world and chainConfig and baseDamage and baseDamage > 0 and originTarget) then
+        return
+    end
+
+    local maxTargets = chainConfig.maxTargets or chainConfig.maxBounces or chainConfig.bounces or 1
+    maxTargets = math.max(1, math.floor(maxTargets + 0.5))
+    if maxTargets <= 1 then
+        return
+    end
+
+    local range = math.max(0, chainConfig.range or chainConfig.radius or 220)
+    local rangeSq = range * range
+    local falloff = chainConfig.falloff or chainConfig.damageFalloff or 0.65
+    local minDamage = chainConfig.minDamage or 0
+    local minFraction = chainConfig.minFraction
+    if minFraction then
+        minDamage = math.max(minDamage, baseDamage * math.max(0, minFraction))
+    end
+
+    local chainColor = chainConfig.color or weapon.color
+    local chainGlow = chainConfig.glowColor or weapon.glowColor
+    local chainWidth = chainConfig.width or weapon.width or 3
+
+    local alreadyHit = alreadyHit or {}
+    alreadyHit[originTarget] = true
+
+    local currentDamage = baseDamage
+    local currentX = originX
+    local currentY = originY
+
+    local remaining = maxTargets - 1
+    for _ = 1, remaining do
+        currentDamage = currentDamage * falloff
+        if currentDamage <= 0 then
+            break
+        end
+        if minDamage > 0 and currentDamage < minDamage then
+            break
+        end
+
+        local nextTarget = find_chain_target(world, shooter, currentX, currentY, rangeSq, alreadyHit)
+        if not nextTarget then
+            break
+        end
+
+        local nx, ny = resolve_entity_position(nextTarget)
+        if not (nx and ny) then
+            alreadyHit[nextTarget] = true
+            break
+        end
+
+        local applied = apply_hitscan_damage(damageEntity, nextTarget, currentDamage, shooter, weapon, nx, ny)
+        if applied > 0 then
+            if beams then
+                beams[#beams + 1] = {
+                    x1 = currentX,
+                    y1 = currentY,
+                    x2 = nx,
+                    y2 = ny,
+                    width = chainWidth,
+                    color = chainColor,
+                    glow = chainGlow,
+                }
+            end
+        end
+
+        alreadyHit[nextTarget] = true
+        currentX, currentY = nx, ny
+    end
+end
+
+local function randf(min, max)
+    return min + (max - min) * math.random()
+end
+
+local function fire_shotgun_pattern(world, physicsWorld, entity, startX, startY, dirX, dirY, weapon, config)
+    if not config then
+        return ProjectileFactory.spawn(world, physicsWorld, entity, startX, startY, dirX, dirY, weapon)
+    end
+
+    local pellets = math.max(1, math.floor((config.count or config.pellets or 6) + 0.5))
+    local spreadDeg = config.spreadDegrees or config.spread or 25
+    local spreadRad = math.rad(spreadDeg)
+    local baseJitterDeg = config.baseJitterDegrees or config.baseJitter or 0
+    local baseJitter = math.rad(baseJitterDeg)
+    local lateralJitter = config.lateralJitter or 0
+    local speedMin = config.speedMultiplierMin or config.speedMultiplier or 1
+    local speedMax = config.speedMultiplierMax or config.speedMultiplier or speedMin
+    if speedMax < speedMin then
+        speedMin, speedMax = speedMax, speedMin
+    end
+
+    local baseAngle = math.atan2(dirY, dirX)
+    local halfSpread = spreadRad * 0.5
+
+    for i = 1, pellets do
+        local angle
+        if pellets == 1 then
+            angle = baseAngle
+        else
+            angle = baseAngle - halfSpread + spreadRad * ((i - 1) / (pellets - 1))
+        end
+
+        if config.randomizeSpread ~= false then
+            angle = angle + randf(-baseJitter, baseJitter)
+        end
+
+        local speedMul
+        if speedMin == speedMax then
+            speedMul = speedMin
+        else
+            speedMul = randf(speedMin, speedMax)
+        end
+        if speedMul <= 0 then
+            speedMul = 1
+        end
+
+        local shotDirX = math.cos(angle)
+        local shotDirY = math.sin(angle)
+
+        local offsetX, offsetY = 0, 0
+        if lateralJitter and lateralJitter > 0 then
+            local jitter = randf(-lateralJitter, lateralJitter)
+            offsetX = math.cos(angle + math.pi * 0.5) * jitter
+            offsetY = math.sin(angle + math.pi * 0.5) * jitter
+        end
+
+        ProjectileFactory.spawn(world, physicsWorld, entity, startX + offsetX, startY + offsetY, shotDirX * speedMul, shotDirY * speedMul, weapon)
+    end
+end
+
+local function random_color_from_palette(palette)
+    if type(palette) ~= "table" or #palette == 0 then
+        return nil
+    end
+
+    local rng = (love and love.math and love.math.random) or math.random
+    local index = rng(1, #palette)
+    local selected = palette[index]
+    if type(selected) ~= "table" then
+        return nil
+    end
+
+    return copy_color(selected)
+end
+
+local function lighten_color(color, factor)
+    if type(color) ~= "table" then
+        return nil
+    end
+
+    local clamped = math.max(0, math.min(factor or 0.4, 1))
+    local r = color[1] or 0
+    local g = color[2] or 0
+    local b = color[3] or 0
+
+    return {
+        r + (1 - r) * clamped,
+        g + (1 - g) * clamped,
+        b + (1 - b) * clamped,
+        color[4] or 1,
+    }
+end
+
 local function resolve_damage_multiplier(shooter)
     if shooter and shooter.enemy then
         return ENEMY_DAMAGE_MULTIPLIER
@@ -188,7 +455,7 @@ end
 ---@param dt number
 ---@param beams WeaponBeamContainer
 ---@param impacts WeaponImpactContainer
-local function fire_hitscan(entity, startX, startY, dirX, dirY, weapon, physicsWorld, damageEntity, dt, beams, impacts)
+local function fire_hitscan(world, entity, startX, startY, dirX, dirY, weapon, physicsWorld, damageEntity, dt, beams, impacts)
     local maxRange = weapon.maxRange or 600
     local endX = startX + dirX * maxRange
     local endY = startY + dirY * maxRange
@@ -227,10 +494,6 @@ local function fire_hitscan(entity, startX, startY, dirX, dirY, weapon, physicsW
                         nx = xn,
                         ny = yn,
                     }
-                    -- Debug: Log station hits
-                    if targetEntity and targetEntity.station then
-                        print(string.format("[WEAPON] Hit station at (%.1f, %.1f), type=%s", x, y, tostring(user.type)))
-                    end
                 end
                 return fraction
             end
@@ -256,17 +519,18 @@ local function fire_hitscan(entity, startX, startY, dirX, dirY, weapon, physicsW
         if shouldDamage and damageEntity and target then
             local dps = weapon.damagePerSecond or 0
             dps = dps * resolve_damage_multiplier(entity)
-            local damage = dps * dt
-            if damage > 0 then
-                local damageType = weapon.damageType
-                local armorType = target.armorType
-                local multiplier = damage_util.resolve_multiplier(damageType, armorType)
-                damage = damage * multiplier
-                if damage > 0 then
-                    damageEntity(target, damage, entity, {
-                        x = hitInfo.x,
-                        y = hitInfo.y,
-                    })
+            local baseDamage = dps * dt
+            if baseDamage > 0 then
+                local hitX = hitInfo.x
+                local hitY = hitInfo.y
+                local applied = apply_hitscan_damage(damageEntity, target, baseDamage, entity, weapon, hitX, hitY)
+
+                if applied > 0 and weapon.chainLightning then
+                    local originX, originY = resolve_entity_position(target)
+                    if not (originX and originY) then
+                        originX, originY = hitX, hitY
+                    end
+                    perform_chain_lightning(world, entity, weapon, damageEntity, baseDamage, target, originX, originY, beams, weapon.chainLightning)
                 end
             end
         end
@@ -389,6 +653,21 @@ return function(context)
                     weapon.targetX = targetX
                     weapon.targetY = targetY
 
+                    if weapon.travelToCursor and targetX and targetY and isLocalPlayer then
+                        local indicator = weapon._pendingTravelIndicator or {}
+                        indicator.x = targetX
+                        indicator.y = targetY
+                        indicator.radius = weapon.travelIndicatorRadius
+                            or weapon.impactRadius
+                            or (weapon.projectileSize and weapon.projectileSize * 3.2)
+                            or 32
+                        indicator.outlineColor = indicator.outlineColor or weapon.travelIndicatorColor or weapon.glowColor or weapon.color
+                        indicator.innerColor = indicator.innerColor or weapon.travelIndicatorInnerColor
+                        weapon._pendingTravelIndicator = indicator
+                    else
+                        weapon._pendingTravelIndicator = nil
+                    end
+
                     -- Determine firing direction
                     local dirX, dirY
                     if targetX and targetY then
@@ -421,7 +700,29 @@ return function(context)
                             end
 
                             if fire then
-                                ProjectileFactory.spawn(world, physicsWorld, entity, startX, startY, dirX, dirY, weapon)
+                                if weapon.travelToCursor and targetX and targetY then
+                                    local dx = targetX - startX
+                                    local dy = targetY - startY
+                                    local speed = weapon.projectileSpeed or 0
+                                    if speed > 0 then
+                                        local distance = math.sqrt(dx * dx + dy * dy)
+                                        weapon._shotLifetime = math.max(0.1, distance / speed)
+                                    end
+                                end
+
+                                if weapon.randomizeColorOnFire and weapon.colorPalette then
+                                    local shotColor = random_color_from_palette(weapon.colorPalette)
+                                    if shotColor then
+                                        weapon._shotColor = shotColor
+                                        weapon._shotGlow = lighten_color(shotColor, weapon.glowBoost or 0.45)
+                                    end
+                                end
+
+                                if weapon.projectilePattern == "shotgun" and type(weapon.shotgunPatternConfig) == "table" then
+                                    fire_shotgun_pattern(world, physicsWorld, entity, startX, startY, dirX, dirY, weapon, weapon.shotgunPatternConfig)
+                                else
+                                    ProjectileFactory.spawn(world, physicsWorld, entity, startX, startY, dirX, dirY, weapon)
+                                end
                                 play_weapon_sound(weapon, "fire")
 
                                 -- Reset cooldown
@@ -478,7 +779,7 @@ return function(context)
                         end
 
                         if beamActive then
-                            fire_hitscan(entity, startX, startY, dirX, dirY, weapon, physicsWorld, damageEntity, dt, beams, beamImpacts)
+                            fire_hitscan(world, entity, startX, startY, dirX, dirY, weapon, physicsWorld, damageEntity, dt, beams, beamImpacts)
                         end
 
                         if usesBurst and weapon.beamTimer then

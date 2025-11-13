@@ -44,16 +44,43 @@ local function find_station_anchor(state)
     end
 
     local stations = state.stationEntities
-    if type(stations) == "table" then
-        for i = 1, #stations do
-            local station = stations[i]
-            if station and station.position then
-                return station
+    if type(stations) ~= "table" or #stations == 0 then
+        return nil
+    end
+
+    local referenceX, referenceY
+
+    if state.playerShip and state.playerShip.position then
+        referenceX = state.playerShip.position.x
+        referenceY = state.playerShip.position.y
+    elseif state.camera then
+        referenceX = state.camera.x or 0
+        referenceY = state.camera.y or 0
+    end
+
+    if not (referenceX and referenceY) then
+        return stations[1]
+    end
+
+    local closestStation
+    local closestDistSq
+
+    for i = 1, #stations do
+        local station = stations[i]
+        local pos = station and station.position
+        if pos then
+            local dx = (pos.x or 0) - referenceX
+            local dy = (pos.y or 0) - referenceY
+            local distSq = dx * dx + dy * dy
+
+            if not closestDistSq or distSq < closestDistSq then
+                closestDistSq = distSq
+                closestStation = station
             end
         end
     end
 
-    return nil
+    return closestStation or stations[1]
 end
 
 local function resolve_player_spawn_position(state)
@@ -317,8 +344,7 @@ function Entities.damage(entity, amount, source, context)
             end
             shield.percent = percent
             shield.isDepleted = current <= 0
-            local rechargeDelay = math.max(0, tonumber(shield.rechargeDelay) or 0)
-            shield.rechargeTimer = rechargeDelay
+            shield.rechargeTimer = 0
         end
     end
 
@@ -558,8 +584,8 @@ function Entities.spawnLootPickup(state, drop)
             y = position.y or 0,
         },
         velocity = {
-            x = velocity.x or 0,
-            y = velocity.y or 0,
+            x = (velocity.x or 0) * (drop.speedMultiplier or 1),
+            y = (velocity.y or 0) * (drop.speedMultiplier or 1),
         },
         drawable = {
             type = "pickup",

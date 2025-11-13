@@ -9,6 +9,30 @@ function projectile_renderer.draw(entity)
 
     local x = entity.position.x
     local y = entity.position.y
+    local indicator = entity.travelIndicator
+    if indicator and indicator.x and indicator.y and indicator.radius and indicator.radius > 0 then
+        love.graphics.push("all")
+        love.graphics.setBlendMode("add")
+
+        indicator.timer = (indicator.timer or 0) + (love.timer and love.timer.getDelta() or 0)
+        local outline = indicator.outlineColor or { 0.82, 0.96, 1.0, 0.85 }
+        local inner = indicator.innerColor or { 0.62, 0.86, 1.0, 0.38 }
+        local radius = math.max(indicator.radius, 6)
+        local pulse = 1 + 0.08 * math.sin((indicator.timer or 0) * 4.2)
+        local outerRadius = radius * pulse
+
+        love.graphics.setLineWidth(2.4)
+        love.graphics.setColor(outline[1], outline[2], outline[3], outline[4])
+        love.graphics.circle("line", indicator.x or x, indicator.y or y, outerRadius)
+
+        love.graphics.setLineWidth(1.2)
+        love.graphics.setColor(inner[1], inner[2], inner[3], inner[4])
+        local innerRadius = radius * 0.58 + 2.5 * math.sin((indicator.timer or 0) * 5.2)
+        love.graphics.circle("line", indicator.x or x, indicator.y or y, math.max(4, innerRadius))
+
+        love.graphics.pop()
+    end
+
     local drawable = entity.drawable
     local size = drawable.size or 6
     local color = drawable.color or { 0.2, 0.8, 1.0 }

@@ -125,6 +125,19 @@ local nebulaShader = love.graphics.newShader([[
     }
 ]])
 
+local function configure_nebula_state(state, config)
+    config = config or {}
+
+    local base_intensity = random_range(config.intensity_range, 0.3)
+    state.nebulaIntensity = math.min(2.0, base_intensity * 1.75 + 0.2)
+
+    local base_alpha = random_range(config.alpha_range, 0.4)
+    state.nebulaAlpha = math.min(1.0, base_alpha * 1.5 + 0.1)
+
+    state.nebulaHueShift = love.math.random()
+    state.nebulaSaturation = math.min(1.0, 0.85 + love.math.random() * 0.25)
+end
+
 local function generate_stars(count, bounds, sizeRange, alphaRange, colorVariation)
     local stars = {}
     local width = bounds.width
@@ -202,15 +215,6 @@ local function generate_asteroid_belts(state)
     local marginX = margin
     local marginY = margin
 
-    local function clamp_to_bounds(value, min_val, max_val)
-        if value < min_val then
-            return min_val
-        elseif value > max_val then
-            return max_val
-        end
-        return value
-    end
-
     local centerX = bounds.x + bounds.width * 0.5
     local centerY = bounds.y + bounds.height * 0.5
 
@@ -242,8 +246,8 @@ local function generate_asteroid_belts(state)
         local offsetX = (love.math.random() * 2 - 1) * spawnRadiusX
         local offsetY = (love.math.random() * 2 - 1) * spawnRadiusY
 
-        local center_x = clamp_to_bounds(centerX + offsetX, bounds.x, bounds.x + bounds.width)
-        local center_y = clamp_to_bounds(centerY + offsetY, bounds.y, bounds.y + bounds.height)
+        local center_x = math_util.clamp(centerX + offsetX, bounds.x, bounds.x + bounds.width)
+        local center_y = math_util.clamp(centerY + offsetY, bounds.y, bounds.y + bounds.height)
 
         local segments = {}
         for i = 1, segment_count do
@@ -344,11 +348,8 @@ function Starfield.initialize(state)
     state.starLayers = Starfield.generateLayers(bounds)
     state.nebulaSeed = love.math.random() * 1000
     local nebula_config = constants.stars.nebula or {}
-    state.nebulaIntensity = random_range(nebula_config.intensity_range, 0.3)
-    state.nebulaAlpha = random_range(nebula_config.alpha_range, 0.4)
     state.starfieldTime = 0
-    state.nebulaHueShift = love.math.random()
-    state.nebulaSaturation = 0.7 + love.math.random() * 0.3
+    configure_nebula_state(state, nebula_config)
     state.asteroidBelts = generate_asteroid_belts(bounds)
     state._starfieldBounds = {
         x = bounds.x,
@@ -389,10 +390,7 @@ function Starfield.refresh(state, options)
     state.starLayers = Starfield.generateLayers(bounds)
     state.nebulaSeed = love.math.random() * 1000
     local nebula_config = constants.stars.nebula or {}
-    state.nebulaIntensity = random_range(nebula_config.intensity_range, 0.3)
-    state.nebulaAlpha = random_range(nebula_config.alpha_range, 0.4)
-    state.nebulaHueShift = love.math.random()
-    state.nebulaSaturation = 0.7 + love.math.random() * 0.3
+    configure_nebula_state(state, nebula_config)
     state.asteroidBelts = generate_asteroid_belts(bounds)
     state._starfieldBounds = {
         x = bounds.x,

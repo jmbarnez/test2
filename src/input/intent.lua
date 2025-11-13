@@ -12,6 +12,7 @@ local function create_default_intent()
         hasAim = false,
         firePrimary = false,
         fireSecondary = false,
+        ability1 = false,
     }
 end
 
@@ -60,6 +61,7 @@ function Intent.reset(intent)
     intent.hasAim = false
     intent.firePrimary = false
     intent.fireSecondary = false
+    intent.ability1 = false
 end
 
 function Intent.setMove(intent, moveX, moveY)
@@ -102,6 +104,20 @@ end
 function Intent.setFireSecondary(intent, isDown)
     if intent then
         intent.fireSecondary = not not isDown
+    end
+end
+
+function Intent.setAbility(intent, index, isDown)
+    if not intent then
+        return
+    end
+
+    index = index or 1
+    if index == 1 then
+        intent.ability1 = not not isDown
+    else
+        local field = "ability" .. tostring(index)
+        intent[field] = not not isDown
     end
 end
 

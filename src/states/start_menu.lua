@@ -5,6 +5,8 @@ local UIButton = require("src.ui.components.button")
 local Starfield = require("src.states.gameplay.starfield")
 local SaveLoad = require("src.util.save_load")
 
+local TWO_PI = math.pi * 2
+
 ---@diagnostic disable-next-line: undefined-global
 local love = love
 
@@ -35,6 +37,61 @@ local function point_in_rect(x, y, rect)
         and x <= rect.x + width
         and y >= rect.y
         and y <= rect.y + height
+end
+
+local function draw_wrapped_arc(mode, cx, cy, radius, start_angle, end_angle)
+    local two_pi = TWO_PI
+    if end_angle < start_angle then
+        start_angle, end_angle = end_angle, start_angle
+    end
+
+    local span = end_angle - start_angle
+    if span <= 0 then
+        return
+    end
+
+    if span >= two_pi then
+        love.graphics.arc(mode, cx, cy, radius, 0, two_pi)
+        return
+    end
+
+    local norm_start = start_angle % two_pi
+    if norm_start < 0 then
+        norm_start = norm_start + two_pi
+    end
+
+    local norm_end = norm_start + span
+    if norm_end <= two_pi then
+        love.graphics.arc(mode, cx, cy, radius, norm_start, norm_end)
+    else
+        love.graphics.arc(mode, cx, cy, radius, norm_start, two_pi)
+        love.graphics.arc(mode, cx, cy, radius, 0, norm_end - two_pi)
+    end
+end
+
+local function draw_refresh_icon(rect, hovered, active, time)
+    love.graphics.push("all")
+
+    local size = math.min(rect.width, rect.height)
+    local cx = rect.x + rect.width * 0.5
+    local cy = rect.y + rect.height * 0.5
+    local base_alpha = active and 1.0 or hovered and 0.92 or 0.78
+    local outer_radius = size * 0.36
+    local inner_radius = outer_radius * 0.58
+    local pulse = math.sin((time or 0) * 1.2) * 0.08 + 0.12
+
+    love.graphics.setColor(1.0, 1.0, 1.0, base_alpha)
+    love.graphics.setLineWidth(math.max(2.0, size * 0.14))
+    love.graphics.setLineStyle("smooth")
+    love.graphics.circle("line", cx, cy, outer_radius)
+
+    love.graphics.setColor(1.0, 1.0, 1.0, base_alpha * 0.55)
+    love.graphics.circle("line", cx, cy, inner_radius)
+
+    love.graphics.setColor(1.0, 1.0, 1.0, base_alpha * (0.35 + pulse))
+    love.graphics.circle("fill", cx, cy, inner_radius * 0.68)
+
+    love.graphics.pop()
 end
 
 local function set_status(self, text, color)
@@ -76,94 +133,6 @@ function start_menu:load_game()
     self.transitioning = true
     local gameplay = require("src.states.gameplay")
     Gamestate.switch(gameplay, { loadGame = true })
-end
-
-local function build_aurora_shader()
-    return love.graphics.newShader([[
-        extern float time;
-        extern float intensity;
-
-        float hash(vec2 p) {
-            return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
-        }
-
-        float noise(vec2 p) {
-            vec2 i = floor(p);
-            vec2 f = fract(p);
-            float a = hash(i);
-            float b = hash(i + vec2(1.0, 0.0));
-            float c = hash(i + vec2(0.0, 1.0));
-            float d = hash(i + vec2(1.0, 1.0));
-            vec2 u = f * f * (3.0 - 2.0 * f);
-            return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
-        }
-
-        float fbm(vec2 p) {
-            float v = 0.0;
-            float a = 0.5;
-            for (int i = 0; i < 5; i++) {
-                v += a * noise(p);
-                p = p * 2.02 + vec2(37.1, 9.2);
-                a *= 0.5;
-            }
-            return v;
-        }
-
-        vec3 palette(float t) {
-            vec3 a = vec3(0.15, 0.55, 0.35); // deep green
-            vec3 b = vec3(0.10, 0.40, 0.95); // blue
-            vec3 c = vec3(0.85, 0.35, 0.85); // purple
-            vec3 g = mix(a, b, smoothstep(0.0, 0.6, t));
-            return mix(g, c, smoothstep(0.6, 1.0, t));
-        }
-
-        vec4 effect(vec4 color, Image tex, vec2 texture_coords, vec2 screen_coords) {
-            vec4 sample = Texel(tex, texture_coords);
-
-            // Only render aurora inside the letters
-            if (sample.a < 0.08) {
-                return vec4(0.0);
-            }
-
-            // Normalized screen UV (built-in love_ScreenSize)
-            vec2 uv = screen_coords / love_ScreenSize.xy;
-
-            // Stretch X for curtain-like flow
-            vec2 p = uv * vec2(1.8, 1.0);
-            float t = time;
-
-            // Domain-warped FBM for organic motion
-            float base = fbm(p * 2.5 + vec2(0.0, t * 0.05));
-            vec2 warp = vec2(
-                fbm(p * 3.0 + vec2(13.2, -7.1) + base * 2.0 + t * 0.08),
-                fbm(p * 3.0 + vec2(-5.7, 21.4) - base * 2.0 - t * 0.07)
-            );
-
-            // Flowing vertical bands
-            float bands = sin(p.y * 10.0 + warp.x * 6.0 + t * 1.25) * 0.5 + 0.5;
-            bands = smoothstep(0.25, 0.85, bands);
-
-            // Aurora energy field
-            float glow = fbm(p + warp * 1.7 + vec2(0.0, t * 0.10));
-            float energy = clamp(glow * 0.8 + bands * 0.7, 0.0, 1.0);
-
-            // Subtle twinkle
-            float twinkle = smoothstep(0.97, 1.0, noise(p * 24.0 + t * 0.4)) * 0.25;
-
-            // Color palette with slow hue shift
-            float hueShift = 0.5 + 0.5 * sin(t * 0.4 + uv.x * 3.0);
-            vec3 aurora = palette(clamp(energy * 0.9 + hueShift * 0.15, 0.0, 1.0));
-
-            // Emphasize bright cores and soften glyph edges
-            float edge = smoothstep(0.05, 0.95, sample.a);
-            float core = pow(energy, 1.2);
-
-            vec3 finalColor = aurora * (core * 1.3 + 0.15) + vec3(twinkle);
-            finalColor *= edge * intensity;
-
-            return vec4(finalColor, sample.a);
-        }
-    ]])
 end
 
 function start_menu:enter()
@@ -211,8 +180,6 @@ function start_menu:enter()
     Starfield.initialize(self)
 
     self.titleText = "Novus"
-
-    self.auroraShader = build_aurora_shader()
     self._center_camera = center_camera
 end
 
@@ -242,23 +209,41 @@ function start_menu:draw()
 
     love.graphics.push("all")
 
-    if self.auroraShader and self.titleFont then
-        love.graphics.setShader(self.auroraShader)
-        self.auroraShader:send("time", self.time)
-        self.auroraShader:send("intensity", 1.0)
-    end
-
     if self.titleFont and self.titleText then
         love.graphics.setFont(self.titleFont)
         local titleWidth = self.titleFont:getWidth(self.titleText)
         local titleHeight = self.titleFont:getHeight()
         local titleX = (width - titleWidth) * 0.5
         local titleY = height * 0.22 - titleHeight * 0.5
-        love.graphics.setColor(1, 1, 1, 1)
+        love.graphics.push("all")
+        love.graphics.setBlendMode("add")
+        local glow_time = self.time or 0
+        local base_radius = 4.5
+        local layer_count = 8
+        local rotation_speed = 0.18
+        local pulse_speed = 0.35
+
+        for i = 1, layer_count do
+            local t = (i - 1) / layer_count
+            local angle = glow_time * rotation_speed + t * math.pi * 2
+            local pulse = math.sin(glow_time * pulse_speed + t * 4.0) * 0.5 + 0.5
+            local radius = base_radius + pulse * 3.0 + t * 2.0
+            local alpha = 0.04 + t * 0.06 + pulse * 0.02
+
+            love.graphics.setColor(1.0, 1.0, 1.0, alpha)
+            local offset_x = math.cos(angle) * radius
+            local offset_y = math.sin(angle * 0.87) * radius
+            love.graphics.print(self.titleText, titleX + offset_x, titleY + offset_y)
+        end
+
+        love.graphics.setColor(1.0, 1.0, 1.0, 0.22)
+        love.graphics.print(self.titleText, titleX, titleY - 1)
+        love.graphics.print(self.titleText, titleX, titleY + 1)
+        love.graphics.pop()
+
+        love.graphics.setColor(1.0, 1.0, 1.0, 1.0)
         love.graphics.print(self.titleText, titleX, titleY)
     end
-
-    love.graphics.setShader()
 
     local button_width = math.min(140, width * 0.16)
     local button_height = 36
@@ -274,12 +259,67 @@ function start_menu:draw()
     self._was_mouse_down = is_mouse_down
 
     local save_available = SaveLoad.saveExists()
-    local buttons = {
-        { label = "New Game", action = "new", disabled = false },
-        { label = "Load Game", action = "load", disabled = not save_available },
+
+    local shared_button_colors = {
+        fill = { 1.0, 1.0, 1.0, 0.05 },
+        hover = { 1.0, 1.0, 1.0, 0.12 },
+        active = { 1.0, 1.0, 1.0, 0.18 },
+        border = { 1.0, 1.0, 1.0, 0.85 },
+        text = { 1.0, 1.0, 1.0, 1.0 },
+        disabled_fill = { 1.0, 1.0, 1.0, 0.02 },
+        disabled_border = { 1.0, 1.0, 1.0, 0.25 },
+        disabled_text = { 1.0, 1.0, 1.0, 0.35 },
     }
 
-    self.buttonHovered = false
+    local refresh_size = math.min(40, width * 0.05)
+    local refresh_margin = 24
+    local refresh_rect = {
+        x = width - refresh_margin - refresh_size,
+        y = refresh_margin,
+        width = refresh_size,
+        height = refresh_size,
+    }
+
+    local refresh_result = UIButton.render {
+        rect = refresh_rect,
+        label = "",
+        font = self.fonts.small or self.buttonFont,
+        fonts = self.fonts,
+        disabled = false,
+        fill_color = shared_button_colors.fill,
+        hover_color = shared_button_colors.hover,
+        active_color = shared_button_colors.active,
+        border_color = shared_button_colors.border,
+        text_color = shared_button_colors.text,
+        input = {
+            x = mouse_x,
+            y = mouse_y,
+            is_down = is_mouse_down,
+            just_pressed = just_pressed,
+        },
+    }
+
+    draw_refresh_icon(refresh_rect, refresh_result.hovered, refresh_result.active, self.time)
+
+    self.buttonHovered = refresh_result.hovered or false
+
+    if refresh_result.clicked then
+        Starfield.refresh(self, true)
+        set_status(self, "Background regenerated", { 0.7, 0.94, 1.0, 1.0 })
+    end
+
+    self.buttonRects[#self.buttonRects + 1] = {
+        rect = refresh_rect,
+        action = "refresh",
+        disabled = false,
+    }
+
+    local buttons = {
+        { label = "New Game", action = "new", disabled = false, colors = shared_button_colors },
+        { label = "Load Game", action = "load", disabled = not save_available, colors = shared_button_colors },
+    }
+
+    self.buttonHovered = self.buttonHovered or false
 
     for index = 1, #buttons do
         local button = buttons[index]
@@ -292,11 +332,13 @@ function start_menu:draw()
             h = button_height,
         }
 
-        self.buttonRects[index] = {
+        self.buttonRects[#self.buttonRects + 1] = {
             rect = rect,
             action = button.action,
             disabled = button.disabled,
         }
+
+        local colors = button.colors or {}
 
         local result = UIButton.render {
             rect = rect,
@@ -304,6 +346,14 @@ function start_menu:draw()
             font = self.buttonFont,
             fonts = self.fonts,
             disabled = button.disabled,
+            fill_color = colors.fill,
+            hover_color = colors.hover,
+            active_color = colors.active,
+            border_color = colors.border,
+            text_color = colors.text,
+            disabled_fill = colors.disabled_fill,
+            border_color_disabled = colors.disabled_border,
+            disabled_text_color = colors.disabled_text,
             input = {
                 x = mouse_x,
                 y = mouse_y,
@@ -389,6 +439,9 @@ function start_menu:mousepressed(x, y, button)
                 self:start_game()
             elseif entry.action == "load" then
                 self:load_game()
+            elseif entry.action == "refresh" then
+                Starfield.refresh(self, true)
+                set_status(self, "Background regenerated", { 0.7, 0.94, 1.0, 1.0 })
             end
             break
         end

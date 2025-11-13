@@ -16,9 +16,11 @@ local createEnemyAISystem = require("src.systems.enemy_ai")
 local createWeaponSystem = require("src.systems.weapon_fire")
 local createProjectileSystem = require("src.systems.projectile")
 local createShipSystem = require("src.systems.ship")
+local createAbilityModuleSystem = require("src.systems.ability_modules")
 local createHudSystem = require("src.systems.hud")
 local createUiSystem = require("src.systems.ui")
 local createTargetingSystem = require("src.systems.targeting")
+local createStationInfluenceSystem = require("src.systems.station_influence")
 local createDestructionSystem = require("src.systems.destruction")
 local createLootDropSystem = require("src.systems.loot_drop")
 local createPickupSystem = require("src.systems.pickup")
@@ -84,6 +86,7 @@ local function add_common_systems(state, context)
     state.pickupSystem = state.world:addSystem(createPickupSystem(GameContext.extend(sharedContext)))
     state.weaponSystem = state.world:addSystem(createWeaponSystem(GameContext.extend(sharedContext)))
     state.shipSystem = state.world:addSystem(createShipSystem(GameContext.extend(sharedContext)))
+    state.abilitySystem = state.world:addSystem(createAbilityModuleSystem(GameContext.extend(sharedContext)))
     state.projectileSystem = state.world:addSystem(createProjectileSystem(GameContext.extend(sharedContext)))
     state.lootDropSystem = state.world:addSystem(createLootDropSystem(GameContext.extend(sharedContext, {
         spawnLootItem = function(drop)
@@ -153,6 +156,7 @@ function Systems.initialize(state, damageCallback)
         camera = state.camera,
         uiInput = state.uiInput,
     })))
+    state.stationInfluenceSystem = state.world:addSystem(createStationInfluenceSystem(GameContext.extend(baseContext)))
     state.hudSystem = state.world:addSystem(createHudSystem(baseContext))
     state.uiSystem = state.world:addSystem(createUiSystem(baseContext))
 end
@@ -172,6 +176,7 @@ function Systems.teardown(state)
     state.pickupSystem = nil
     state.renderSystem = nil
     state.weaponSystem = nil
+    state.stationInfluenceSystem = nil
     if state.projectileSystem and state.projectileSystem.detachPhysicsCallbacks then
         state.projectileSystem:detachPhysicsCallbacks()
     end

@@ -30,6 +30,84 @@ local function choose_count(range)
     return range or 1
 end
 
+local function clone_table(value)
+    if type(value) ~= "table" then
+        return nil
+    end
+
+    local copy = {}
+    for key, item in pairs(value) do
+        if type(item) == "table" then
+            copy[key] = clone_table(item)
+        else
+            copy[key] = item
+        end
+    end
+    return copy
+end
+
+local function normalize_level_value(source)
+    if source == nil then
+        return nil
+    end
+
+    if type(source) == "number" then
+        local value = math.floor(source + 0.5)
+        return { current = math.max(1, value) }
+    elseif type(source) == "table" then
+        local copy = clone_table(source) or {}
+        local current = copy.current or copy.value or copy.level
+        if type(current) == "number" then
+            copy.current = math.max(1, math.floor(current + 0.5))
+            return copy
+        end
+
+        local minValue = copy.min or copy.minimum or copy.lower or copy[1]
+        local maxValue = copy.max or copy.maximum or copy.upper or copy[2] or minValue
+
+        if type(minValue) == "number" and type(maxValue) == "number" then
+            local lower = math.floor(minValue + 0.5)
+            local upper = math.floor(maxValue + 0.5)
+            if upper < lower then
+                lower, upper = upper, lower
+            end
+            local rolled = love.math.random(lower, upper)
+            copy.current = math.max(1, rolled)
+            copy.min = lower
+            copy.max = upper
+            return copy
+        end
+
+        if copy.current == nil then
+            copy.current = 1
+        end
+        copy.current = math.max(1, math.floor((copy.current or 1) + 0.5))
+        return copy
+    end
+
+    return nil
+end
+
+local function resolve_enemy_level(existing, override)
+    local normalized = normalize_level_value(override)
+    if normalized then
+        if type(existing) == "table" then
+            for key, value in pairs(existing) do
+                if normalized[key] == nil then
+                    normalized[key] = type(value) == "table" and clone_table(value) or value
+                end
+            end
+        end
+        return normalized
+    end
+
+    normalized = normalize_level_value(existing)
+    if normalized then
+        return normalized
+    end
+
+    return { current = 1 }
+end
 local function normalize_ship_variants(entries)
     if type(entries) ~= "table" then
         return nil
@@ -193,22 +271,9 @@ return function(context)
             enemy.enemy = true
             enemy.faction = enemy.faction or "enemy"
 
-            if not enemy.level then
-                local configLevel = enemyConfig.level
-                if type(configLevel) == "table" then
-                    local levelCopy = {}
-                    for key, value in pairs(configLevel) do
-                        levelCopy[key] = value
-                    end
-                    enemy.level = levelCopy
-                elseif type(configLevel) == "number" then
-                    enemy.level = { current = configLevel }
-                else
-                    enemy.level = { current = 1 }
-                end
-            elseif enemy.level.current == nil then
-                enemy.level.current = 1
-            end
+            local variantContextLevel = chosen_variant and chosen_variant.context and chosen_variant.context.level
+            local overrideLevel = instantiate_context.level or variantContextLevel or enemyConfig.level
+            enemy.level = resolve_enemy_level(enemy.level, overrideLevel)
 
             enemy.spawnPosition = enemy.spawnPosition or { x = spawn_x, y = spawn_y }
             enemy.ai = enemy.ai or {}

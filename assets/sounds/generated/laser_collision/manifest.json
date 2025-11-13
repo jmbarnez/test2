@@ -1,0 +1,67 @@
+{
+  "preset": "laser_collision",
+  "description": "Bright laser impact burst with quick sparkle tail",
+  "source": "scripts\\audio\\presets\\laser_collision.json",
+  "variants": [
+    {
+      "path": "assets\\sounds\\generated\\laser_collision\\laser_collision_default.wav",
+      "duration": 0.28,
+      "sample_rate": 44100,
+      "seed": 45127,
+      "parameters": {
+        "duration": 0.28,
+        "sample_rate": 44100,
+        "frequency": {
+          "start": 1600,
+          "decay": 5.2,
+          "floor": 260,
+          "jitter_amplitude": 0.05,
+          "jitter_frequency": 110
+        },
+        "harmonics": [
+          {
+            "ratio": 1.0,
+            "amplitude": 0.82
+          },
+          {
+            "ratio": 1.9,
+            "amplitude": 0.32,
+            "phase": 0.35
+          },
+          {
+            "ratio": 2.75,
+            "amplitude": 0.18,
+            "phase": -0.5
+          },
+          {
+            "ratio": 4.1,
+            "amplitude": 0.1
+          }
+        ],
+        "burst": {
+          "frequency": 24
+        },
+        "tremolo": {
+          "frequency": 13,
+          "depth": 0.38,
+          "floor": 0.62
+        },
+        "sub": {
+          "ratio": 0.48,
+          "amplitude": 0.32
+        },
+        "noise": {
+          "amplitude": 0.22,
+          "decay": 10.5
+        },
+        "envelope": {
+          "attack": 0.004,
+          "decay": 5.8,
+          "release": 0.12
+        }
+      },
+      "variant": "default",
+      "filename": "laser_collision_default.wav"
+    }
+  ]
+}

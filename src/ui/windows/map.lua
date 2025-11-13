@@ -3,17 +3,12 @@ local window = require("src.ui.components.window")
 local UIStateManager = require("src.ui.state_manager")
 local UIButton = require("src.ui.components.button")
 local PlayerManager = require("src.player.manager")
+local math_util = require("src.util.math")
 
 ---@diagnostic disable-next-line: undefined-global
 local love = love
 
 local map_window = {}
-
-local function clamp(value, min_val, max_val)
-    if value < min_val then return min_val end
-    if value > max_val then return max_val end
-    return value
-end
 
 local function point_in_rect(px, py, rect)
     return px >= rect.x and px <= rect.x + rect.width
@@ -69,8 +64,8 @@ local function clamp_center(state, bounds, rect, scale)
     half_view_world_width = math.min(half_view_world_width, bounds.width * 0.5)
     half_view_world_height = math.min(half_view_world_height, bounds.height * 0.5)
 
-    state.centerX = clamp(state.centerX, bounds.x + half_view_world_width, bounds.x + bounds.width - half_view_world_width)
-    state.centerY = clamp(state.centerY, bounds.y + half_view_world_height, bounds.y + bounds.height - half_view_world_height)
+    state.centerX = math_util.clamp(state.centerX, bounds.x + half_view_world_width, bounds.x + bounds.width - half_view_world_width)
+    state.centerY = math_util.clamp(state.centerY, bounds.y + half_view_world_height, bounds.y + bounds.height - half_view_world_height)
 end
 
 local function get_window_rect(screen_width, screen_height)
@@ -304,7 +299,7 @@ function map_window.draw(context)
 
     local windowRect = get_window_rect(screenWidth, screenHeight)
 
-    state.zoom = clamp(state.zoom or 1, state.min_zoom or 0.35, state.max_zoom or 6)
+    state.zoom = math_util.clamp(state.zoom or 1, state.min_zoom or 0.35, state.max_zoom or 6)
 
     if state._just_opened or not (state.centerX and state.centerY) then
         reset_view(state, context, bounds)
@@ -507,7 +502,7 @@ function map_window.wheelmoved(context, x, y)
         newZoom = state.zoom / (1 + zoomStep)
     end
 
-    local clamped = clamp(newZoom, state.min_zoom or 0.35, state.max_zoom or 6)
+    local clamped = math_util.clamp(newZoom, state.min_zoom or 0.35, state.max_zoom or 6)
     if math.abs(clamped - state.zoom) < 1e-4 then
         return false
     end

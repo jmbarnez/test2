@@ -59,4 +59,33 @@ function math_util.random_float_range(range, default)
     return default
 end
 
+---Clamps a value between the provided min and max.
+---@param value number
+---@param min_val number
+---@param max_val number
+---@return number
+function math_util.clamp(value, min_val, max_val)
+    if value < min_val then
+        return min_val
+    elseif value > max_val then
+        return max_val
+    end
+    return value
+end
+
+---Clamps a value to the [0, 1] range.
+---@param value number|nil
+---@return number
+function math_util.clamp01(value)
+    if value == nil then
+        return 0
+    end
+    if value < 0 then
+        return 0
+    elseif value > 1 then
+        return 1
+    end
+    return value
+end
+
 return math_util

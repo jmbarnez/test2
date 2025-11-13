@@ -3,18 +3,13 @@
 
 local theme = require("src.ui.theme")
 local AudioManager = require("src.audio.manager")
+local geometry = require("src.util.geometry")
+local math_util = require("src.util.math")
 
 ---@diagnostic disable-next-line: undefined-global
 local love = love
 
 local AudioSettings = {}
-
---- Clamps a value between 0 and 1
----@param value number|nil The value to clamp
----@return number The clamped value
-local function clamp01(value)
-    return math.max(0, math.min(1, value or 0))
-end
 
 --- Applies volume settings to the audio engine
 ---@param settings table The settings table
@@ -131,17 +126,13 @@ function AudioSettings.handleInteraction(state, settings, mouseX, mouseY, isMous
             return false
         end
 
-        local function point_in_rect(x, y, r)
-            return x >= r.x and x <= r.x + r.w and y >= r.y and y <= r.y + r.h
-        end
-
-        if justPressed and point_in_rect(mouseX, mouseY, rect) then
+        if justPressed and geometry.point_in_rect(mouseX, mouseY, rect) then
             state.activeSlider = label
         end
 
         if state.activeSlider == label then
             local localX = math.max(rect.x, math.min(rect.x + rect.w, mouseX))
-            settings[key] = clamp01((localX - rect.x) / rect.w)
+            settings[key] = math_util.clamp01((localX - rect.x) / rect.w)
             return true
         end
 

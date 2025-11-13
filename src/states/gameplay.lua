@@ -172,7 +172,6 @@ local function is_control_modifier_active()
 
     for i = 1, #CONTROL_KEYS do
         local key = CONTROL_KEYS[i]
-        ---@cast key love.KeyboardConstant
         if love.keyboard.isDown(key) then
             return true
         end
