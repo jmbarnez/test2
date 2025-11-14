@@ -241,6 +241,10 @@ local PlayerManager = require("src.player.manager")
 ---@param context EnemyBehaviorContext
 ---@return table|nil
 local function get_local_player(context)
+    if context and type(context.getLocalPlayer) == "function" then
+        return context:getLocalPlayer()
+    end
+
     return PlayerManager.resolveLocalPlayer(context)
 end
 

@@ -12,12 +12,12 @@ local lg = love.graphics
 
 ---@class ParticleEffectsSystemContext
 ---@field projectileSystem table|nil   # Projectile system providing impact particles/explosions
----@field weaponFireSystem table|nil   # Weapon system providing beam impact sparks
+---@field weaponBeamSystem table|nil   # Weapon beam VFX system providing beam impact sparks
 
 return function(context)
     -- Get reference to projectile system for its particles
     local projectileSystem = context and context.projectileSystem
-    local weaponFireSystem = context and context.weaponFireSystem
+    local weaponBeamSystem = context and context.weaponBeamSystem
     
     return tiny.system {
         draw = function(self)
@@ -48,17 +48,19 @@ return function(context)
             end
             
             -- Draw laser beam impact sparks
-            if weaponFireSystem then
-                local beamImpacts = weaponFireSystem.beamImpacts
+            if weaponBeamSystem then
+                local beamImpacts = weaponBeamSystem.beamImpacts
                 if beamImpacts and #beamImpacts > 0 then
                     lg.push("all")
-                    
+
                     for i = 1, #beamImpacts do
                         local spark = beamImpacts[i]
-                        lg.setColor(spark.color)
-                        lg.circle("fill", spark.x, spark.y, spark.size)
+                        local color = spark.color or { 1, 1, 1, 1 }
+                        local size = spark.size or 3
+                        lg.setColor(color)
+                        lg.circle("fill", spark.x or 0, spark.y or 0, math.max(1, size))
                     end
-                    
+
                     lg.pop()
                 end
             end

@@ -93,6 +93,8 @@ function station_renderer.draw(entity, context)
         return
     end
 
+    ship_renderer.draw_shield_pulses(entity)
+
     -- Additional station overlays can be rendered here in the future.
 end
 

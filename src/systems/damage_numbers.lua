@@ -13,6 +13,40 @@ local DEFAULTS = {
     refreshBuffer = 0.3,
 }
 
+local STYLE_PRESETS = {
+    hull = {
+        color = { 0.92, 0.36, 0.32, 1 },
+    },
+    shield = {
+        color = { 0.4, 0.7, 1.0, 1.0 },
+    },
+    crit = {
+        color = { 1.0, 0.9, 0.2, 1.0 },
+        scale = 1.15,
+    },
+}
+
+local function resolve_style(options)
+    options = options or {}
+    local kind = options.kind or "hull"
+    local preset = STYLE_PRESETS[kind] or STYLE_PRESETS.hull or {}
+
+    local color = options.color or preset.color or DEFAULTS.color
+    local rise = options.rise or preset.rise or DEFAULTS.rise
+    local duration = options.duration or preset.duration or DEFAULTS.duration
+    local scale = options.scale
+    if scale == nil then
+        scale = preset.scale
+    end
+
+    return {
+        color = color,
+        rise = rise,
+        duration = duration,
+        scale = scale,
+    }
+end
+
 local function get_time()
     return (love and love.timer and love.timer.getTime) and love.timer.getTime() or os.clock()
 end
@@ -36,6 +70,7 @@ function damage_numbers.push(state, entity, amount, options)
     local buckets = ensure_state(host).buckets
     local now = get_time()
     local offsetY = options.position and 0 or radius
+    local style = resolve_style(options)
     
     local bucket = key and buckets[key]
     if bucket and bucket.entry and bucket.entry.__alive and (now - bucket.lastUpdate) <= batchWindow then
@@ -49,16 +84,16 @@ function damage_numbers.push(state, entity, amount, options)
         entry.x = position.x + bucket.offsetX
         entry.y = position.y - bucket.offsetY
         entry.age = math.min(entry.age, math.max(0, entry.duration - DEFAULTS.refreshBuffer))
-        entry.duration = math.max(entry.duration, options.duration or DEFAULTS.duration)
+        entry.duration = math.max(entry.duration, style.duration)
         return
     end
     
     local entry = FloatingText.add(host, position, string.format("-%d", math.floor(amount + 0.5)), {
         offsetY = offsetY,
-        color = options.color or DEFAULTS.color,
-        rise = options.rise or DEFAULTS.rise,
-        duration = options.duration or DEFAULTS.duration,
-        scale = options.scale,
+        color = style.color,
+        rise = style.rise,
+        duration = style.duration,
+        scale = style.scale,
         shadow = options.shadow,
         vx = options.vx,
     })

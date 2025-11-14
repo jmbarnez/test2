@@ -252,6 +252,93 @@ local function update_shield(entity, dt)
     shield.isDepleted = current <= 0
 end
 
+local function resolve_shield_visual_radius(entity, shield)
+    if not entity then
+        return 0
+    end
+
+    if shield then
+        local cached = tonumber(shield.visualRadius)
+        if cached and cached > 0 then
+            return cached
+        end
+    end
+
+    local radius = entity.mountRadius
+        or runtime.compute_drawable_radius(entity.drawable)
+        or entity.radius
+
+    if not radius or radius <= 0 then
+        radius = (entity.healthBar and entity.healthBar.width and entity.healthBar.width * 0.5)
+            or 48
+    end
+
+    radius = math.max(24, radius)
+
+    if shield then
+        shield.visualRadius = radius
+    end
+
+    return radius
+end
+
+local function update_shield_pulses(entity, dt)
+    if not entity or dt <= 0 then
+        return
+    end
+
+    local shield = resolve_shield_component(entity)
+    if not shield then
+        return
+    end
+
+    local pulses = shield.pulses
+    if type(pulses) ~= "table" or #pulses == 0 then
+        return
+    end
+
+    local baseRadius = resolve_shield_visual_radius(entity, shield)
+
+    for i = #pulses, 1, -1 do
+        local pulse = pulses[i]
+        local duration = math.max(0.12, tonumber(pulse.duration) or 0.45)
+        pulse.duration = duration
+        pulse.age = (tonumber(pulse.age) or 0) + dt
+
+        if pulse.age >= duration then
+            table.remove(pulses, i)
+        else
+            local progress = pulse.age / duration
+            pulse.progress = progress
+
+            local fade = math.max(0, 1 - progress)
+            local eased = 1 - fade * fade
+            local intensity = math.max(0.15, tonumber(pulse.intensity) or 0.4)
+
+            local centerAngle = tonumber(pulse.angle) or tonumber(pulse.startAngle) or 0
+            local arcSpread = 0.35 + 0.6 * intensity + 0.9 * eased
+            arcSpread = math.min(arcSpread, math.pi * 0.9)
+            local halfSpread = arcSpread * 0.5
+            pulse.startAngle = centerAngle - halfSpread
+            pulse.endAngle = centerAngle + halfSpread
+
+            pulse.radius = baseRadius * (0.94 + 0.1 * eased)
+
+            local ringAlpha = fade ^ 1.15 * (0.3 + 0.45 * intensity)
+            pulse.alpha = ringAlpha
+            pulse.innerAlpha = ringAlpha * 0.6
+            pulse.dotAlpha = fade ^ 0.85 * (0.7 + 0.25 * intensity)
+
+            pulse.ringWidth = math.max(1.6, baseRadius * 0.03)
+            pulse.glowWidth = pulse.ringWidth * 2.15
+        end
+    end
+
+    if #pulses == 0 then
+        shield.pulses = nil
+    end
+end
+
 -- Energy system
 local function initialize_energy(entity)
     local energy = entity.energy
@@ -326,6 +413,7 @@ function runtime.update(entity, dt)
     end
     runtime.decrement_health_timer(entity, dt)
     update_shield(entity, dt)
+    update_shield_pulses(entity, dt)
     update_energy(entity, dt)
 end
 

@@ -384,6 +384,115 @@ local function assign_retaliation_target(entity, source)
     entity.currentTarget = attacker
 end
 
+local function update_last_damage_metadata(entity, source)
+    if not source then
+        return
+    end
+
+    entity.lastDamageSource = source
+
+    local playerId = source.playerId
+        or source.ownerPlayerId
+        or (source.owner and source.owner.playerId)
+
+    if not playerId and source.player then
+        playerId = source.playerId or (source.player and source.player.playerId)
+    end
+
+    if not playerId and source.lastDamagePlayerId then
+        playerId = source.lastDamagePlayerId
+    end
+
+    if playerId then
+        entity.lastDamagePlayerId = playerId
+    end
+end
+
+local function refresh_health_bar(entity)
+    if entity.healthBar then
+        entity.health.showTimer = entity.healthBar.showDuration or 0
+    end
+end
+
+local function resolve_damage_context_host(entity, source)
+    return entity.damageContext
+        or (source and source.damageContext)
+        or (source and source.state)
+        or entity.state
+end
+
+local function resolve_impact_position(context)
+    if not context then
+        return nil
+    end
+
+    if context.position then
+        return context.position
+    end
+
+    if context.x and context.y then
+        return { x = context.x, y = context.y }
+    end
+
+    return nil
+end
+
+local function push_shield_pulse(entity, shield, absorbed, impactPosition)
+    if not (entity and shield and absorbed and absorbed > 0) then
+        return
+    end
+
+    local pulses = shield.pulses
+    if type(pulses) ~= "table" then
+        pulses = {}
+        shield.pulses = pulses
+    end
+
+    local position = entity.position or {}
+    local px = (impactPosition and impactPosition.x) or position.x or 0
+    local py = (impactPosition and impactPosition.y) or position.y or 0
+    local ex = position.x or 0
+    local ey = position.y or 0
+
+    local dx = px - ex
+    local dy = py - ey
+
+    local rotation = entity.rotation
+    if not rotation and entity.body and not entity.body:isDestroyed() then
+        rotation = entity.body:getAngle()
+    end
+    rotation = rotation or 0
+
+    local cosR = math.cos(-rotation)
+    local sinR = math.sin(-rotation)
+    local localX = dx * cosR - dy * sinR
+    local localY = dx * sinR + dy * cosR
+
+    local maxShield = math.max(0, tonumber(shield.max) or 0)
+    local intensity
+    if maxShield > 0 then
+        intensity = math.max(0.15, math.min(1, absorbed / maxShield))
+    else
+        intensity = 0.5
+    end
+
+    local impactAngle = math.atan2(localY, localX)
+
+    pulses[#pulses + 1] = {
+        offsetX = localX,
+        offsetY = localY,
+        angle = impactAngle,
+        startAngle = impactAngle,
+        endAngle = impactAngle,
+        age = 0,
+        duration = 0.6,
+        intensity = intensity,
+    }
+
+    if #pulses > 6 then
+        table.remove(pulses, 1)
+    end
+end
 
 function Entities.damage(entity, amount, source, context)
     if not entity or not entity.health then
@@ -411,35 +520,26 @@ function Entities.damage(entity, amount, source, context)
             shield.percent = percent
             shield.isDepleted = current <= 0
             shield.rechargeTimer = 0
+
+            local contextHost = resolve_damage_context_host(entity, source)
+            local impactPosition = resolve_impact_position(context)
+
+            damage_numbers.push(contextHost, entity, absorbed, {
+                position = impactPosition,
+                kind = "shield",
+                key = shield or entity,
+            })
+
+            push_shield_pulse(entity, shield, absorbed, impactPosition)
         end
     end
 
     if damageAmount <= 0 then
-        if source ~= nil then
-            entity.lastDamageSource = source
-
-            local playerId = source.playerId
-                or source.ownerPlayerId
-                or (source.owner and source.owner.playerId)
-
-            if not playerId and source.player then
-                playerId = source.playerId or (source.player and source.player.playerId)
-            end
-
-            if not playerId and source.lastDamagePlayerId then
-                playerId = source.lastDamagePlayerId
-            end
-
-            if playerId then
-                entity.lastDamagePlayerId = playerId
-            end
-        end
+        update_last_damage_metadata(entity, source)
 
         assign_retaliation_target(entity, source)
 
-        if entity.healthBar then
-            entity.health.showTimer = entity.healthBar.showDuration or 0
-        end
+        refresh_health_bar(entity)
 
         return
     end
@@ -447,52 +547,21 @@ function Entities.damage(entity, amount, source, context)
     local previous = entity.health.current or entity.health.max or 0
     entity.health.current = math.max(0, previous - damageAmount)
 
-    if source ~= nil then
-        entity.lastDamageSource = source
-
-        local playerId = source.playerId
-            or source.ownerPlayerId
-            or (source.owner and source.owner.playerId)
-
-        if not playerId and source.player then
-            playerId = source.playerId or (source.player and source.player.playerId)
-        end
-
-        if not playerId and source.lastDamagePlayerId then
-            playerId = source.lastDamagePlayerId
-        end
-
-        if playerId then
-            entity.lastDamagePlayerId = playerId
-        end
-    end
-
+    update_last_damage_metadata(entity, source)
     assign_retaliation_target(entity, source)
-
-    if entity.healthBar then
-        entity.health.showTimer = entity.healthBar.showDuration or 0
-    end
+    refresh_health_bar(entity)
 
     if entity.health.current <= 0 then
         entity.pendingDestroy = true
     end
 
     if damageAmount and damageAmount > 0 then
-        local contextHost = entity.damageContext
-            or (source and source.damageContext)
-            or (source and source.state)
-            or entity.state
-        local impactPosition
-        if context then
-            if context.position then
-                impactPosition = context.position
-            elseif context.x and context.y then
-                impactPosition = { x = context.x, y = context.y }
-            end
-        end
+        local contextHost = resolve_damage_context_host(entity, source)
+        local impactPosition = resolve_impact_position(context)
 
         damage_numbers.push(contextHost, entity, damageAmount, {
             position = impactPosition,
+            kind = "hull",
         })
     end
 end

@@ -13,7 +13,10 @@ local createAsteroidSpawner = require("src.spawners.asteroid")
 local createEnemySpawner = require("src.spawners.enemy")
 local createStationSpawner = require("src.spawners.station")
 local createEnemyAISystem = require("src.systems.enemy_ai")
-local createWeaponSystem = require("src.systems.weapon_fire")
+local createWeaponLogicSystem = require("src.systems.weapon_logic")
+local createWeaponProjectileSystem = require("src.systems.weapon_projectile_spawn")
+local createWeaponHitscanSystem = require("src.systems.weapon_hitscan")
+local createWeaponBeamVFXSystem = require("src.systems.weapon_beam_vfx")
 local createProjectileSystem = require("src.systems.projectile")
 local createShipSystem = require("src.systems.ship")
 local createAbilityModuleSystem = require("src.systems.ability_modules")
@@ -47,7 +50,10 @@ local Systems = {}
 --       intentHolder = state,
 --   }))
 --   createPickupSystem(GameContext.extend(sharedContext))
---   createWeaponSystem(GameContext.extend(sharedContext))          -- uses physicsWorld, damageEntity, camera/intentHolder via GameContext
+--   createWeaponLogicSystem(GameContext.extend(sharedContext))
+--   createWeaponProjectileSystem(GameContext.extend(sharedContext))
+--   createWeaponHitscanSystem(GameContext.extend(sharedContext))
+--   createWeaponBeamVFXSystem(baseContext)
 --   createShipSystem(GameContext.extend(sharedContext))
 --   createAbilityModuleSystem(GameContext.extend(sharedContext))  -- uses state/intentHolder via GameContext
 --   createProjectileSystem(GameContext.extend(sharedContext))     -- uses physicsWorld, damageEntity, registerPhysicsCallback
@@ -115,7 +121,9 @@ local function add_common_systems(state, context)
     state.movementSystem = state.world:addSystem(createMovementSystem())
     local sharedContext = context or GameContext.compose(state)
     state.pickupSystem = state.world:addSystem(createPickupSystem(GameContext.extend(sharedContext)))
-    state.weaponSystem = state.world:addSystem(createWeaponSystem(GameContext.extend(sharedContext)))
+    state.weaponLogicSystem = state.world:addSystem(createWeaponLogicSystem(GameContext.extend(sharedContext)))
+    state.weaponProjectileSystem = state.world:addSystem(createWeaponProjectileSystem(GameContext.extend(sharedContext)))
+    state.weaponHitscanSystem = state.world:addSystem(createWeaponHitscanSystem(GameContext.extend(sharedContext)))
     state.shipSystem = state.world:addSystem(createShipSystem(GameContext.extend(sharedContext)))
     state.abilitySystem = state.world:addSystem(createAbilityModuleSystem(GameContext.extend(sharedContext)))
     state.projectileSystem = state.world:addSystem(createProjectileSystem(GameContext.extend(sharedContext)))
@@ -214,13 +222,28 @@ function Systems.initialize(state, damageCallback)
 
     add_common_systems(state, baseContext)
 
-    state.enemyAISystem = state.world:addSystem(createEnemyAISystem(baseContext))
+    local enemyAIContext = {
+        state = state,
+        resolveState = function()
+            return state
+        end,
+        resolveLocalPlayer = function()
+            return PlayerManager.getLocalPlayer(state)
+        end,
+    }
+
+    enemyAIContext.getLocalPlayer = function(self)
+        return PlayerManager.getLocalPlayer(state)
+    end
+
+    state.enemyAISystem = state.world:addSystem(createEnemyAISystem(enemyAIContext))
 
     state.engineTrailSystem = state.world:addSystem(EngineTrailSystem)
     state.renderSystem = state.world:addSystem(createRenderSystem(baseContext))
+    state.weaponBeamVFXSystem = state.world:addSystem(createWeaponBeamVFXSystem(baseContext))
     state.particleEffectsSystem = state.world:addSystem(createParticleEffectsSystem(GameContext.extend(baseContext, {
         projectileSystem = state.projectileSystem,
-        weaponFireSystem = state.weaponSystem,
+        weaponBeamSystem = state.weaponBeamVFXSystem,
     })))
     state.targetingSystem = state.world:addSystem(createTargetingSystem(GameContext.extend(baseContext, {
         camera = state.camera,
@@ -244,7 +267,10 @@ function Systems.teardown(state)
     state.movementSystem = nil
     state.pickupSystem = nil
     state.renderSystem = nil
-    state.weaponSystem = nil
+    state.weaponLogicSystem = nil
+    state.weaponProjectileSystem = nil
+    state.weaponHitscanSystem = nil
+    state.weaponBeamVFXSystem = nil
     if state.projectileSystem and state.projectileSystem.detachPhysicsCallbacks then
         state.projectileSystem:detachPhysicsCallbacks()
     end

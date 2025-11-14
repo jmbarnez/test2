@@ -23,10 +23,10 @@ Novus uses [Tiny-ecs](https://github.com/bakpakin/tiny-ecs) to drive gameplay sy
 - **Update Order** – The `gameplay:update` loop steps physics on a fixed timestep, then calls `world:update(dt)` so systems process freshly simulated positions.
 - **System Groups**:
   - *Input & Control*: `input_local`, `player_control`
-  - *Simulation*: `movement`, `ship`, `projectile`, `weapon_fire`, `enemy_ai`
+  - *Simulation*: `movement`, `ship`, `projectile`, `weapon_logic`, `weapon_projectile_spawn`, `weapon_hitscan`, `enemy_ai`
   - *Spawning & Progression*: `asteroid`, `enemy`, `station`, `loot_drop`, `pickup`
   - *Destruction & Effects*: `destruction`, `damage_numbers`
-  - *Presentation*: `render`, `hud`, `ui`, `targeting`
+  - *Presentation*: `render`, `weapon_beam_vfx`, `hud`, `ui`, `targeting`
 
 Each system resides in `src/systems/` (or `src/spawners/`, `src/renderers/`) and is created via factory functions that accept a gameplay **context** rather than the raw state table.
 

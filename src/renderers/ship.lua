@@ -3,8 +3,74 @@
 local constants = require("src.constants.game")
 local vector = require("src.util.vector")
 
+local TWO_PI = math.pi * 2
+
 local ship_renderer = {}
 local ship_bar_defaults = constants.ships and constants.ships.health_bar or {}
+
+ship_renderer.SHIELD_RING_COLOR = { 0.35, 0.95, 1.0, 0.85 }
+ship_renderer.SHIELD_GLOW_COLOR = { 0.18, 0.7, 1.0, 0.9 }
+ship_renderer.SHIELD_IMPACT_COLOR = { 0.82, 0.98, 1.0, 1.0 }
+
+local function normalize_angle(angle)
+    local wrapped = (angle + math.pi) % TWO_PI
+    if wrapped < 0 then
+        wrapped = wrapped + TWO_PI
+    end
+    return wrapped - math.pi
+end
+
+local function draw_wrapped_arc(radius, startAngle, endAngle, lineWidth)
+    if not radius or radius <= 0 or not lineWidth or lineWidth <= 0 then
+        return
+    end
+
+    local span = endAngle - startAngle
+    if span <= 0 then
+        return
+    end
+
+    love.graphics.setLineWidth(lineWidth)
+
+    if span >= TWO_PI - 1e-3 then
+        love.graphics.circle("line", 0, 0, radius)
+        return
+    end
+
+    local start = startAngle
+    local stop = endAngle
+
+    if stop < start then
+        local turns = math.ceil((start - stop) / TWO_PI)
+        stop = stop + turns * TWO_PI
+    end
+
+    local currentStart = start
+    while currentStart < stop do
+        local currentEnd = math.min(stop, currentStart + TWO_PI)
+        local segmentStart = normalize_angle(currentStart)
+        local segmentEnd = segmentStart + (currentEnd - currentStart)
+        love.graphics.arc("line", "open", 0, 0, radius, segmentStart, segmentEnd)
+        currentStart = currentEnd
+    end
+end
+
+local function resolve_shield(entity)
+    if not entity then
+        return nil
+    end
+
+    local shield = entity.shield
+    if type(shield) == "table" then
+        return shield
+    end
+
+    if entity.health and type(entity.health.shield) == "table" then
+        return entity.health.shield
+    end
+
+    return nil
+end
 
 local function resolve_entity_level(entity)
     if not entity then
@@ -389,6 +455,83 @@ local function draw_ship_generic(entity, context)
     return true
 end
 
+local function draw_shield_pulses(entity)
+    if not entity or not entity.position then
+        return
+    end
+
+    local shield = resolve_shield(entity)
+    local pulses = shield and shield.pulses
+    if type(pulses) ~= "table" or #pulses == 0 then
+        return
+    end
+
+    local px = entity.position.x or 0
+    local py = entity.position.y or 0
+    local rotation = entity.rotation or 0
+    local fallbackRadius = shield.visualRadius
+        or entity.mountRadius
+        or resolve_drawable_radius(entity.drawable)
+        or entity.radius
+        or 48
+
+    love.graphics.push("all")
+    love.graphics.translate(px, py)
+    love.graphics.rotate(rotation)
+    love.graphics.setBlendMode("add")
+
+    for i = 1, #pulses do
+        local pulse = pulses[i]
+        local startAngle = pulse.startAngle or pulse.angle or 0
+        local endAngle = pulse.endAngle or pulse.angle or 0
+        local radius = math.max(pulse.radius or fallbackRadius, fallbackRadius * 0.75)
+        local ringWidth = pulse.ringWidth or math.max(2.0, fallbackRadius * 0.03)
+        local glowWidth = (pulse.glowWidth or (ringWidth * 2.4))
+        local alpha = pulse.alpha or 0.45
+        local glowAlpha = pulse.innerAlpha or (alpha * 0.5)
+
+        if glowAlpha > 0 then
+            love.graphics.setColor(
+                ship_renderer.SHIELD_GLOW_COLOR[1],
+                ship_renderer.SHIELD_GLOW_COLOR[2],
+                ship_renderer.SHIELD_GLOW_COLOR[3],
+                glowAlpha
+            )
+            draw_wrapped_arc(radius, startAngle, endAngle, glowWidth)
+        end
+
+        if alpha > 0 then
+            love.graphics.setColor(
+                ship_renderer.SHIELD_RING_COLOR[1],
+                ship_renderer.SHIELD_RING_COLOR[2],
+                ship_renderer.SHIELD_RING_COLOR[3],
+                alpha
+            )
+            draw_wrapped_arc(radius, startAngle, endAngle, ringWidth)
+        end
+
+        local centerAngle = pulse.angle or ((startAngle + endAngle) * 0.5)
+        local dotAlpha = pulse.dotAlpha or (alpha * 0.9)
+        if dotAlpha > 0.05 then
+            local hx = math.cos(centerAngle) * radius
+            local hy = math.sin(centerAngle) * radius
+            love.graphics.setColor(
+                ship_renderer.SHIELD_IMPACT_COLOR[1],
+                ship_renderer.SHIELD_IMPACT_COLOR[2],
+                ship_renderer.SHIELD_IMPACT_COLOR[3],
+                dotAlpha
+            )
+            local coreRadius = math.max(1.2, ringWidth * 0.55)
+            love.graphics.circle("fill", hx, hy, coreRadius)
+        end
+    end
+
+    love.graphics.setBlendMode("alpha")
+    love.graphics.pop()
+end
+
+ship_renderer.draw_shield_pulses = draw_shield_pulses
+
 local function draw_health_bar(entity)
     local health = entity.health
     if not (health and health.max and health.max > 0) then
@@ -480,6 +623,7 @@ function ship_renderer.draw(entity, context)
         return
     end
 
+    draw_shield_pulses(entity)
     draw_health_bar(entity)
 end
 
