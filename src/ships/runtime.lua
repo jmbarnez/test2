@@ -6,6 +6,7 @@ local Modules = require("src.ships.modules")
 local math_util = require("src.util.math")
 
 local runtime = {}
+local TWO_PI = math.pi * 2
 
 -- Helper functions
 local function compute_polygon_radius(points)
@@ -282,21 +283,17 @@ local function resolve_shield_visual_radius(entity, shield)
     return radius
 end
 
-local function update_shield_pulses(entity, dt)
+local function update_impact_pulses(entity, dt)
     if not entity or dt <= 0 then
         return
     end
 
-    local shield = resolve_shield_component(entity)
-    if not shield then
-        return
-    end
-
-    local pulses = shield.pulses
+    local pulses = entity.impactPulses
     if type(pulses) ~= "table" or #pulses == 0 then
         return
     end
 
+    local shield = resolve_shield_component(entity)
     local baseRadius = resolve_shield_visual_radius(entity, shield)
 
     for i = #pulses, 1, -1 do
@@ -312,30 +309,31 @@ local function update_shield_pulses(entity, dt)
             pulse.progress = progress
 
             local fade = math.max(0, 1 - progress)
-            local eased = 1 - fade * fade
             local intensity = math.max(0.15, tonumber(pulse.intensity) or 0.4)
 
-            local centerAngle = tonumber(pulse.angle) or tonumber(pulse.startAngle) or 0
-            local arcSpread = 0.35 + 0.6 * intensity + 0.9 * eased
-            arcSpread = math.min(arcSpread, math.pi * 0.9)
-            local halfSpread = arcSpread * 0.5
-            pulse.startAngle = centerAngle - halfSpread
-            pulse.endAngle = centerAngle + halfSpread
-
-            pulse.radius = baseRadius * (0.94 + 0.1 * eased)
-
-            local ringAlpha = fade ^ 1.15 * (0.3 + 0.45 * intensity)
-            pulse.alpha = ringAlpha
-            pulse.innerAlpha = ringAlpha * 0.6
-            pulse.dotAlpha = fade ^ 0.85 * (0.7 + 0.25 * intensity)
-
-            pulse.ringWidth = math.max(1.6, baseRadius * 0.03)
-            pulse.glowWidth = pulse.ringWidth * 2.15
+            local impactRadius = baseRadius * 1.02
+            local expandSpeed = 2.8 + intensity * 1.2
+            local waveRadius = math.min(impactRadius * 2.5, impactRadius + expandSpeed * baseRadius * pulse.age)
+            
+            pulse.radius = baseRadius
+            pulse.waveRadius = waveRadius
+            pulse.waveThickness = math.max(2, baseRadius * 0.08 * (1 + intensity * 0.5))
+            
+            local waveAlpha = fade ^ 1.1 * (0.55 + 0.35 * intensity)
+            local ringAlpha = fade ^ 1.35 * (0.4 + 0.45 * intensity)
+            local glowAlpha = fade ^ 0.95 * (0.35 + 0.4 * intensity)
+            local coreAlpha = fade ^ 0.75 * (0.65 + 0.3 * intensity)
+            
+            pulse.waveAlpha = waveAlpha
+            pulse.ringAlpha = ringAlpha
+            pulse.glowAlpha = glowAlpha
+            pulse.coreAlpha = coreAlpha
+            pulse.coreRadius = math.max(3, baseRadius * 0.12 * (1 + intensity * 0.4))
         end
     end
 
     if #pulses == 0 then
-        shield.pulses = nil
+        entity.impactPulses = nil
     end
 end
 
@@ -413,7 +411,7 @@ function runtime.update(entity, dt)
     end
     runtime.decrement_health_timer(entity, dt)
     update_shield(entity, dt)
-    update_shield_pulses(entity, dt)
+    update_impact_pulses(entity, dt)
     update_energy(entity, dt)
 end
 

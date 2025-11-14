@@ -11,6 +11,7 @@ local ship_bar_defaults = constants.ships and constants.ships.health_bar or {}
 ship_renderer.SHIELD_RING_COLOR = { 0.35, 0.95, 1.0, 0.85 }
 ship_renderer.SHIELD_GLOW_COLOR = { 0.18, 0.7, 1.0, 0.9 }
 ship_renderer.SHIELD_IMPACT_COLOR = { 0.82, 0.98, 1.0, 1.0 }
+ship_renderer.HULL_GLOW_COLOR = { 1.0, 0.25, 0.15, 0.9 }
 
 local function normalize_angle(angle)
     local wrapped = (angle + math.pi) % TWO_PI
@@ -455,16 +456,17 @@ local function draw_ship_generic(entity, context)
     return true
 end
 
-local function draw_shield_pulses(entity)
+local function draw_impact_pulses(entity)
     if not entity or not entity.position then
         return
     end
 
-    local shield = resolve_shield(entity)
-    local pulses = shield and shield.pulses
+    local pulses = entity.impactPulses
     if type(pulses) ~= "table" or #pulses == 0 then
         return
     end
+
+    local shield = resolve_shield(entity)
 
     local px = entity.position.x or 0
     local py = entity.position.y or 0
@@ -482,47 +484,36 @@ local function draw_shield_pulses(entity)
 
     for i = 1, #pulses do
         local pulse = pulses[i]
-        local startAngle = pulse.startAngle or pulse.angle or 0
-        local endAngle = pulse.endAngle or pulse.angle or 0
-        local radius = math.max(pulse.radius or fallbackRadius, fallbackRadius * 0.75)
-        local ringWidth = pulse.ringWidth or math.max(2.0, fallbackRadius * 0.03)
-        local glowWidth = (pulse.glowWidth or (ringWidth * 2.4))
-        local alpha = pulse.alpha or 0.45
-        local glowAlpha = pulse.innerAlpha or (alpha * 0.5)
+        local radius = math.max(pulse.radius or fallbackRadius, fallbackRadius)
+        local waveRadius = pulse.waveRadius or radius
+        local waveThickness = pulse.waveThickness or 3
+        local waveAlpha = pulse.waveAlpha or 0
+        local ringAlpha = pulse.ringAlpha or 0
+        local glowAlpha = pulse.glowAlpha or 0
+        local coreAlpha = pulse.coreAlpha or 0
+        local coreRadius = pulse.coreRadius or 4
+        local impactX = pulse.impactX or 0
+        local impactY = pulse.impactY or 0
 
-        if glowAlpha > 0 then
+        if glowAlpha > 0.01 then
+            local pulseType = pulse.pulseType or "shield"
+            local glowColor = pulseType == "hull" and ship_renderer.HULL_GLOW_COLOR or ship_renderer.SHIELD_GLOW_COLOR
+            
             love.graphics.setColor(
-                ship_renderer.SHIELD_GLOW_COLOR[1],
-                ship_renderer.SHIELD_GLOW_COLOR[2],
-                ship_renderer.SHIELD_GLOW_COLOR[3],
-                glowAlpha
+                glowColor[1],
+                glowColor[2],
+                glowColor[3],
+                glowAlpha * 0.35
             )
-            draw_wrapped_arc(radius, startAngle, endAngle, glowWidth)
-        end
-
-        if alpha > 0 then
+            love.graphics.circle("fill", 0, 0, radius * 1.12)
+            
             love.graphics.setColor(
-                ship_renderer.SHIELD_RING_COLOR[1],
-                ship_renderer.SHIELD_RING_COLOR[2],
-                ship_renderer.SHIELD_RING_COLOR[3],
-                alpha
+                glowColor[1],
+                glowColor[2],
+                glowColor[3],
+                glowAlpha * 0.2
             )
-            draw_wrapped_arc(radius, startAngle, endAngle, ringWidth)
-        end
-
-        local centerAngle = pulse.angle or ((startAngle + endAngle) * 0.5)
-        local dotAlpha = pulse.dotAlpha or (alpha * 0.9)
-        if dotAlpha > 0.05 then
-            local hx = math.cos(centerAngle) * radius
-            local hy = math.sin(centerAngle) * radius
-            love.graphics.setColor(
-                ship_renderer.SHIELD_IMPACT_COLOR[1],
-                ship_renderer.SHIELD_IMPACT_COLOR[2],
-                ship_renderer.SHIELD_IMPACT_COLOR[3],
-                dotAlpha
-            )
-            local coreRadius = math.max(1.2, ringWidth * 0.55)
-            love.graphics.circle("fill", hx, hy, coreRadius)
+            love.graphics.circle("fill", 0, 0, radius * 1.25)
         end
     end
 
@@ -530,7 +521,7 @@ local function draw_shield_pulses(entity)
     love.graphics.pop()
 end
 
-ship_renderer.draw_shield_pulses = draw_shield_pulses
+ship_renderer.draw_shield_pulses = draw_impact_pulses
 
 local function draw_health_bar(entity)
     local health = entity.health
@@ -623,7 +614,7 @@ function ship_renderer.draw(entity, context)
         return
     end
 
-    draw_shield_pulses(entity)
+    draw_impact_pulses(entity)
     draw_health_bar(entity)
 end
 

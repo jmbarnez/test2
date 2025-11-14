@@ -437,15 +437,15 @@ local function resolve_impact_position(context)
     return nil
 end
 
-local function push_shield_pulse(entity, shield, absorbed, impactPosition)
-    if not (entity and shield and absorbed and absorbed > 0) then
+local function push_impact_pulse(entity, absorbed, impactPosition, pulseType)
+    if not (entity and absorbed and absorbed > 0) then
         return
     end
 
-    local pulses = shield.pulses
+    local pulses = entity.impactPulses
     if type(pulses) ~= "table" then
         pulses = {}
-        shield.pulses = pulses
+        entity.impactPulses = pulses
     end
 
     local position = entity.position or {}
@@ -468,30 +468,37 @@ local function push_shield_pulse(entity, shield, absorbed, impactPosition)
     local localX = dx * cosR - dy * sinR
     local localY = dx * sinR + dy * cosR
 
-    local maxShield = math.max(0, tonumber(shield.max) or 0)
+    local impactAngle = math.atan2(localY, localX)
+
+    local maxHealth = math.max(0, tonumber(entity.health and entity.health.max) or 0)
     local intensity
-    if maxShield > 0 then
-        intensity = math.max(0.15, math.min(1, absorbed / maxShield))
+    if maxHealth > 0 then
+        intensity = math.max(0.15, math.min(1, absorbed / maxHealth))
     else
         intensity = 0.5
     end
 
-    local impactAngle = math.atan2(localY, localX)
-
     pulses[#pulses + 1] = {
-        offsetX = localX,
-        offsetY = localY,
-        angle = impactAngle,
-        startAngle = impactAngle,
-        endAngle = impactAngle,
+        impactX = localX,
+        impactY = localY,
+        impactAngle = impactAngle,
         age = 0,
-        duration = 0.6,
+        duration = 0.5,
         intensity = intensity,
+        pulseType = pulseType or "shield",
     }
 
     if #pulses > 6 then
         table.remove(pulses, 1)
     end
+end
+
+local function push_shield_pulse(entity, shield, absorbed, impactPosition)
+    if not (entity and shield and absorbed and absorbed > 0) then
+        return
+    end
+
+    push_impact_pulse(entity, absorbed, impactPosition, "shield")
 end
 
 function Entities.damage(entity, amount, source, context)
@@ -563,6 +570,8 @@ function Entities.damage(entity, amount, source, context)
             position = impactPosition,
             kind = "hull",
         })
+
+        push_impact_pulse(entity, damageAmount, impactPosition, "hull")
     end
 end
 
