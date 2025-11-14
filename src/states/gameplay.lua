@@ -29,6 +29,7 @@ local Entities = require("src.states.gameplay.entities")
 local Systems = require("src.states.gameplay.systems")
 local View = require("src.states.gameplay.view")
 local Universe = require("src.states.gameplay.universe")
+local Metrics = require("src.states.gameplay.metrics")
 
 -- Effects
 local EngineTrail = require("src.effects.engine_trail")
@@ -47,18 +48,10 @@ local love = love
 -- Constants
 -- ============================================================================
 
-local SAMPLE_WINDOW = 120
 local DOCK_RADIUS_MULTIPLIER = 2.0
 local DOCK_RADIUS_FALLBACK = 1000
 
 local CONTROL_KEYS = { "lctrl", "rctrl" }
-
-local METRIC_ORDER = { "frame_dt_ms", "update_ms", "render_ms" }
-local METRIC_LABELS = {
-    frame_dt_ms = "Frame dt",
-    update_ms = "Update",
-    render_ms = "Render",
-}
 
 local VALID_PHYSICS_CALLBACK_PHASES = {
     beginContact = true,
@@ -70,13 +63,6 @@ local VALID_PHYSICS_CALLBACK_PHASES = {
 -- ============================================================================
 -- Utility Functions
 -- ============================================================================
-
-local function get_time()
-    if love and love.timer and love.timer.getTime then
-        return love.timer.getTime()
-    end
-    return nil
-end
 
 local function is_control_modifier_active()
     if not (love and love.keyboard and love.keyboard.isDown) then
@@ -183,112 +169,6 @@ local function update_station_dock_state(state)
         state.stationDockDistance = math.sqrt(bestDistanceSq)
         bestStation.stationInfluenceActive = true
     end
-end
-
--- ============================================================================
--- Performance Metrics System
--- ============================================================================
-
-local function record_metric(container, key, value)
-    if not container or type(value) ~= "number" then
-        return
-    end
-
-    local bucket = container[key]
-    if not bucket then
-        bucket = {
-            values = {},
-            cursor = 1,
-            count = 0,
-            sum = 0,
-            window = SAMPLE_WINDOW,
-        }
-        container[key] = bucket
-    end
-
-    local window = bucket.window or SAMPLE_WINDOW
-    local cursor = bucket.cursor or 1
-
-    -- Update rolling window
-    if bucket.count < window then
-        bucket.count = bucket.count + 1
-    else
-        local old = bucket.values[cursor]
-        if old then
-            bucket.sum = bucket.sum - old
-        end
-    end
-
-    bucket.values[cursor] = value
-    bucket.sum = (bucket.sum or 0) + value
-    bucket.last = value
-
-    -- Calculate average
-    bucket.avg = bucket.count > 0 and (bucket.sum / bucket.count) or value
-
-    -- Calculate min/max
-    local minValue, maxValue = value, value
-    for i = 1, bucket.count do
-        local sample = bucket.values[i]
-        if sample then
-            minValue = math.min(minValue, sample)
-            maxValue = math.max(maxValue, sample)
-        end
-    end
-
-    bucket.min = minValue
-    bucket.max = maxValue
-    bucket.cursor = (cursor % window) + 1
-end
-
-local function update_performance_strings(state)
-    if not state then
-        return
-    end
-
-    local metrics = state.performanceStatsRecords
-    if not metrics then
-        state.performanceStats = nil
-        return
-    end
-
-    local lines = {}
-    for i = 1, #METRIC_ORDER do
-        local key = METRIC_ORDER[i]
-        local bucket = metrics[key]
-        if bucket and bucket.last then
-            local avg = bucket.avg or bucket.last
-            local minv = bucket.min or bucket.last
-            local maxv = bucket.max or bucket.last
-            local last = bucket.last
-            lines[#lines + 1] = string.format(
-                "%s: avg %.2fms (%.2f-%.2f) last %.2f",
-                METRIC_LABELS[key] or key,
-                avg,
-                minv,
-                maxv,
-                last
-            )
-        end
-    end
-
-    state.performanceStats = lines
-end
-
-local function finalize_update_metrics(state, start_time)
-    if not state then
-        return
-    end
-
-    local metrics = state.performanceStatsRecords
-    if metrics and start_time then
-        local stop = get_time()
-        if stop then
-            record_metric(metrics, "update_ms", math.max(0, (stop - start_time) * 1000))
-        end
-    end
-
-    update_performance_strings(state)
 end
 
 -- ============================================================================
@@ -474,6 +354,26 @@ function gameplay:onPlayerDestroyed(entity)
 
     PlayerManager.clearShip(self, entity)
 
+    if self.world and self.world.entities then
+        local entities = self.world.entities
+        for i = 1, #entities do
+            local e = entities[i]
+            if e and e.enemy then
+                e.currentTarget = nil
+                e.retaliationTarget = nil
+                e.retaliationTimer = nil
+
+                local weapon = e.weapon
+                if weapon then
+                    weapon.firing = false
+                    weapon.targetX = nil
+                    weapon.targetY = nil
+                    weapon.beamTimer = nil
+                end
+            end
+        end
+    end
+
     if self.engineTrail then
         self.engineTrail:setActive(false)
         self.engineTrail:attachPlayer(nil)
@@ -590,18 +490,7 @@ function gameplay:update(dt)
         return
     end
 
-    -- Initialize metrics
-    local metrics = self.performanceStatsRecords
-    if not metrics then
-        metrics = {}
-        self.performanceStatsRecords = metrics
-    end
-
-    if dt then
-        record_metric(metrics, "frame_dt_ms", dt * 1000)
-    end
-
-    local updateStart = get_time()
+    local updateStart = Metrics.beginUpdate(self, dt)
 
     -- Handle respawn request
     if UIStateManager.isRespawnRequested(self) then
@@ -660,7 +549,7 @@ function gameplay:update(dt)
 
     -- Skip update if paused
     if UIStateManager.isPaused(self) then
-        finalize_update_metrics(self, updateStart)
+        Metrics.finalizeUpdate(self, updateStart)
         return
     end
 
@@ -700,7 +589,7 @@ function gameplay:update(dt)
     Entities.updateHealthTimers(self.world, dt)
     View.updateCamera(self)
 
-    finalize_update_metrics(self, updateStart)
+    Metrics.finalizeUpdate(self, updateStart)
 end
 
 -- ============================================================================
@@ -712,13 +601,7 @@ function gameplay:draw()
         return
     end
 
-    local metrics = self.performanceStatsRecords
-    if not metrics then
-        metrics = {}
-        self.performanceStatsRecords = metrics
-    end
-
-    local renderStart = get_time()
+    local renderStart = Metrics.beginRender(self)
 
     -- Clear screen
     local clearColor = constants.render.clear_color or { 0, 0, 0, 1 }
@@ -747,15 +630,7 @@ function gameplay:draw()
         love.graphics.pop()
     end
 
-    -- Record render metrics
-    if metrics and renderStart then
-        local renderStop = get_time()
-        if renderStop then
-            record_metric(metrics, "render_ms", math.max(0, (renderStop - renderStart) * 1000))
-        end
-    end
-
-    update_performance_strings(self)
+    Metrics.finalizeRender(self, renderStart)
 end
 
 -- ============================================================================
