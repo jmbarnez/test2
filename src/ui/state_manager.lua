@@ -271,6 +271,8 @@ end
 local function createMapUIState()
     return {
         visible = false,
+        mode = "sector",
+        title = "Sector Map",
         zoom = 1,
         min_zoom = 0.35,
         max_zoom = 6,

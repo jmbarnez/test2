@@ -4,6 +4,7 @@ local UIStateManager = require("src.ui.state_manager")
 local UIButton = require("src.ui.components.button")
 local PlayerManager = require("src.player.manager")
 local math_util = require("src.util.math")
+local Universe = require("src.states.gameplay.universe")
 
 ---@diagnostic disable-next-line: undefined-global
 local love = love
@@ -31,16 +32,23 @@ local function reset_view(state, context, bounds)
         return
     end
 
-    local player = PlayerManager.resolveLocalPlayer(context)
-    if player and player.position then
-        state.centerX = player.position.x
-        state.centerY = player.position.y
-    else
-        state.centerX = bounds.x + bounds.width * 0.5
-        state.centerY = bounds.y + bounds.height * 0.5
-    end
+	local mode = state and state.mode or "sector"
 
-    state.zoom = 1
+	if mode == "sector" then
+		local player = PlayerManager.resolveLocalPlayer(context)
+		if player and player.position then
+			state.centerX = player.position.x
+			state.centerY = player.position.y
+		else
+			state.centerX = bounds.x + bounds.width * 0.5
+			state.centerY = bounds.y + bounds.height * 0.5
+		end
+	else
+		state.centerX = bounds.x + bounds.width * 0.5
+		state.centerY = bounds.y + bounds.height * 0.5
+	end
+
+	state.zoom = 1
 end
 
 local function world_to_screen(wx, wy, rect, scale, centerX, centerY)
@@ -66,6 +74,40 @@ local function clamp_center(state, bounds, rect, scale)
 
     state.centerX = math_util.clamp(state.centerX, bounds.x + half_view_world_width, bounds.x + bounds.width - half_view_world_width)
     state.centerY = math_util.clamp(state.centerY, bounds.y + half_view_world_height, bounds.y + bounds.height - half_view_world_height)
+end
+
+local function resolve_universe(context)
+	if not context then
+		return nil
+	end
+
+	local universe = context.universe
+	if type(universe) == "table" then
+		return universe
+	end
+
+	if type(context.state) == "table" and type(context.state.universe) == "table" then
+		return context.state.universe
+	end
+
+	return nil
+end
+
+local function get_mode_bounds(context, state)
+	local mode = state and state.mode or "sector"
+	if mode == "galaxy" then
+		local universe = resolve_universe(context)
+		if universe then
+			return Universe.getGalaxyBounds(universe, universe.currentGalaxyId)
+		end
+	elseif mode == "universe" then
+		local universe = resolve_universe(context)
+		if universe then
+			return Universe.getUniverseBounds(universe)
+		end
+	end
+
+	return get_world_bounds(context)
 end
 
 local function get_window_rect(screen_width, screen_height)
@@ -233,6 +275,127 @@ local function draw_legend(rect, fonts, colors)
     end
 end
 
+local function draw_galaxy_view(context, rect, bounds, colors, scale, centerX, centerY)
+	local universe = resolve_universe(context)
+	if not universe then
+		return
+	end
+
+	local galaxy = Universe.getActiveGalaxy(universe, universe.currentGalaxyId)
+	if not galaxy then
+		return
+	end
+
+	local sectors = galaxy.sectors or {}
+	if #sectors == 0 then
+		return
+	end
+
+	local sectorLinkColor = colors.bounds or { 0.46, 0.64, 0.72, 0.8 }
+	love.graphics.setLineWidth(1)
+	love.graphics.setColor(sectorLinkColor)
+
+	for i = 1, #sectors do
+		local sector = sectors[i]
+		local sx, sy = world_to_screen(sector.x, sector.y, rect, scale, centerX, centerY)
+		local links = sector.links or {}
+		for li = 1, #links do
+			local link = links[li]
+			if link and link.targetId then
+				local target = universe.sectorsById and universe.sectorsById[link.targetId]
+				if target and target.galaxyId == galaxy.id then
+					local tx, ty = world_to_screen(target.x, target.y, rect, scale, centerX, centerY)
+					love.graphics.line(sx, sy, tx, ty)
+				end
+			end
+		end
+	end
+
+	local homeSectorId = universe.homeSectorId
+	local currentSectorId = universe.currentSectorId or homeSectorId
+
+	for i = 1, #sectors do
+		local sector = sectors[i]
+		local sx, sy = world_to_screen(sector.x, sector.y, rect, scale, centerX, centerY)
+		local radius = 6
+		local color = colors.station or { 0.32, 0.52, 0.92, 1 }
+
+		if sector.id == currentSectorId then
+			color = colors.player or color
+			radius = 7
+		elseif sector.id == homeSectorId then
+			color = colors.teammate or color
+			radius = 7
+		elseif sector.isGalaxyGate then
+			color = colors.enemy or color
+			radius = 7
+		end
+
+		love.graphics.setColor(color)
+		love.graphics.circle("fill", sx, sy, radius)
+		love.graphics.setColor(colors.border or { 0.22, 0.28, 0.36, 0.9 })
+		love.graphics.setLineWidth(1)
+		love.graphics.circle("line", sx, sy, radius)
+	end
+end
+
+local function draw_universe_view(context, rect, bounds, colors, scale, centerX, centerY)
+	local universe = resolve_universe(context)
+	if not universe then
+		return
+	end
+
+	local galaxies = universe.galaxies or {}
+	if #galaxies == 0 then
+		return
+	end
+
+	love.graphics.setLineWidth(1)
+	love.graphics.setColor(colors.bounds or { 0.46, 0.64, 0.72, 0.8 })
+
+	local byId = universe.galaxiesById or {}
+	for i = 1, #galaxies do
+		local galaxy = galaxies[i]
+		local gx, gy = world_to_screen(galaxy.universeX or 0, galaxy.universeY or 0, rect, scale, centerX, centerY)
+		local links = galaxy.links or {}
+		for li = 1, #links do
+			local link = links[li]
+			local targetId = link and link.galaxyId
+			if targetId then
+				local target = byId[targetId]
+				if target then
+					local tx, ty = world_to_screen(target.universeX or 0, target.universeY or 0, rect, scale, centerX, centerY)
+					love.graphics.line(gx, gy, tx, ty)
+				end
+			end
+		end
+	end
+
+	local homeGalaxyId = universe.homeGalaxyId
+	local currentGalaxyId = universe.currentGalaxyId or homeGalaxyId
+
+	for i = 1, #galaxies do
+		local galaxy = galaxies[i]
+		local gx, gy = world_to_screen(galaxy.universeX or 0, galaxy.universeY or 0, rect, scale, centerX, centerY)
+		local radius = 10
+		local color = colors.station or { 0.32, 0.52, 0.92, 1 }
+
+		if galaxy.id == currentGalaxyId then
+			color = colors.player or color
+			radius = 12
+		elseif galaxy.id == homeGalaxyId then
+			color = colors.teammate or color
+			radius = 11
+		end
+
+		love.graphics.setColor(color)
+		love.graphics.circle("fill", gx, gy, radius)
+		love.graphics.setColor(colors.border or { 0.22, 0.28, 0.36, 0.9 })
+		love.graphics.setLineWidth(1)
+		love.graphics.circle("line", gx, gy, radius)
+	end
+end
+
 local function draw_entities(context, player, rect, bounds, colors, scale, centerX, centerY)
     if not (context and context.world) then
         return
@@ -286,7 +449,7 @@ function map_window.draw(context)
         return false
     end
 
-    local bounds = get_world_bounds(context)
+    local bounds = get_mode_bounds(context, state)
     if not bounds then
         return false
     end
@@ -302,7 +465,7 @@ function map_window.draw(context)
     state.zoom = math_util.clamp(state.zoom or 1, state.min_zoom or 0.35, state.max_zoom or 6)
 
     if state._just_opened or not (state.centerX and state.centerY) then
-        reset_view(state, context, bounds)
+		reset_view(state, context, bounds)
         state._just_opened = false
     end
 
@@ -386,7 +549,7 @@ function map_window.draw(context)
     love.graphics.push()
     love.graphics.setScissor(rect.x, rect.y, rect.width, rect.height)
 
-    if colors.grid then
+    if colors.grid and (state.mode == "sector") then
         love.graphics.setColor(colors.grid)
         love.graphics.setLineWidth(1)
         local gridStep = 500
@@ -411,12 +574,25 @@ function map_window.draw(context)
     local boundsX1, boundsY1 = world_to_screen(bounds.x, bounds.y, rect, scale, state.centerX, state.centerY)
     local boundsX2, boundsY2 = world_to_screen(bounds.x + bounds.width, bounds.y + bounds.height, rect, scale, state.centerX, state.centerY)
 
-    love.graphics.setColor(colors.bounds or { 0.46, 0.64, 0.72, 0.8 })
-    love.graphics.setLineWidth(2)
-    love.graphics.rectangle("line", boundsX1, boundsY1, boundsX2 - boundsX1, boundsY2 - boundsY1)
+	local mode = state.mode or "sector"
+	if mode == "sector" then
+		love.graphics.setColor(colors.bounds or { 0.46, 0.64, 0.72, 0.8 })
+		love.graphics.setLineWidth(2)
+		love.graphics.rectangle("line", boundsX1, boundsY1, boundsX2 - boundsX1, boundsY2 - boundsY1)
 
-    local player = PlayerManager.resolveLocalPlayer(context)
-    draw_entities(context, player, rect, bounds, colors, scale, state.centerX, state.centerY)
+		local player = PlayerManager.resolveLocalPlayer(context)
+		draw_entities(context, player, rect, bounds, colors, scale, state.centerX, state.centerY)
+	elseif mode == "galaxy" then
+		love.graphics.setColor(colors.bounds or { 0.46, 0.64, 0.72, 0.8 })
+		love.graphics.setLineWidth(2)
+		love.graphics.rectangle("line", boundsX1, boundsY1, boundsX2 - boundsX1, boundsY2 - boundsY1)
+		draw_galaxy_view(context, rect, bounds, colors, scale, state.centerX, state.centerY)
+	elseif mode == "universe" then
+		love.graphics.setColor(colors.bounds or { 0.46, 0.64, 0.72, 0.8 })
+		love.graphics.setLineWidth(2)
+		love.graphics.rectangle("line", boundsX1, boundsY1, boundsX2 - boundsX1, boundsY2 - boundsY1)
+		draw_universe_view(context, rect, bounds, colors, scale, state.centerX, state.centerY)
+	end
 
     love.graphics.setScissor()
     love.graphics.pop()
@@ -479,6 +655,29 @@ function map_window.keypressed(context, key)
         UIStateManager.hideMapUI(context)
         return true
     end
+
+	if key == "1" then
+		state.mode = "sector"
+		state.title = "Sector Map"
+		state._just_opened = true
+		return true
+	elseif key == "2" then
+		local universe = resolve_universe(context)
+		if universe then
+			state.mode = "galaxy"
+			state.title = "Galaxy Map"
+			state._just_opened = true
+		end
+		return true
+	elseif key == "3" then
+		local universe = resolve_universe(context)
+		if universe then
+			state.mode = "universe"
+			state.title = "Universe Map"
+			state._just_opened = true
+		end
+		return true
+	end
 
     return true
 end

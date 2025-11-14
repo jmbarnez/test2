@@ -112,7 +112,7 @@ constants.asteroids = {
     },
     chunks = {
         enabled = true,
-        inherit_loot = true,
+        inherit_loot = false,
         max_levels = 2,
         min_radius = 18,
         min_health = 12,
@@ -138,6 +138,13 @@ constants.asteroids = {
             count = { min = 1, max = 2 },
             quantity = { min = 2, max = 4 },
             color = { 0.58, 0.7, 0.86 },
+        },
+        gold_rich = {
+            chance = 0.06,
+            id = "resource:gold",
+            count = { min = 1, max = 1 },
+            quantity = { min = 1, max = 2 },
+            color = { 0.96, 0.82, 0.36 },
         },
     },
 }

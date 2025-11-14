@@ -175,6 +175,7 @@ local function spawn_chunk_loot(state, entity)
     local chunk_config = asteroid_constants.chunks
     local loot_drop = chunk_config and chunk_config.loot_drop
     local metal_config = chunk_config and chunk_config.metal_rich
+    local gold_config = chunk_config and chunk_config.gold_rich
 
     if not (loot_drop and state and state.world and entity and entity.position) then
         return
@@ -188,7 +189,15 @@ local function spawn_chunk_loot(state, entity)
     local drop_count = random_range(loot_drop.count, 0)
     local quantity_spec = loot_drop.quantity
 
-    if metal_config and entity and entity.miningVariant == "metal_rich" then
+    if gold_config and entity and entity.miningVariant == "gold_rich" then
+        drop_id = gold_config.id or drop_id
+        if gold_config.count then
+            drop_count = random_range(gold_config.count, 0)
+        end
+        if gold_config.quantity then
+            quantity_spec = gold_config.quantity
+        end
+    elseif metal_config and entity and entity.miningVariant == "metal_rich" then
         drop_id = metal_config.id or drop_id
         if metal_config.count then
             drop_count = random_range(metal_config.count, 0)
@@ -257,14 +266,17 @@ local function spawn_chunks(entity, destruction_context)
         return
     end
 
-    spawn_chunk_loot(state, entity)
+    local chunk_level = entity.chunkLevel or 0
+
+    -- Only chunks (chunkLevel > 0) should directly drop loot; root asteroids just break into chunks
+    if chunk_level > 0 then
+        spawn_chunk_loot(state, entity)
+    end
 
     local max_levels = chunk_config.max_levels
     if max_levels and max_levels <= 0 then
         return
     end
-
-    local chunk_level = entity.chunkLevel or 0
     if max_levels and chunk_level >= max_levels then
         return
     end
@@ -356,18 +368,27 @@ local function spawn_chunks(entity, destruction_context)
                 chunk_entity.health.showTimer = 0
             end
 
-            if chunk_config.inherit_loot then
-                if entity.loot then
-                    chunk_entity.loot = deep_copy(entity.loot)
-                elseif asteroid_constants.loot then
-                    chunk_entity.loot = deep_copy(asteroid_constants.loot)
-                end
+            if chunk_config.inherit_loot and entity.loot then
+                chunk_entity.loot = deep_copy(entity.loot)
             else
                 chunk_entity.loot = nil
             end
 
             local metal_config = chunk_config.metal_rich
-            if metal_config and metal_config.chance and metal_config.chance > 0 then
+            local gold_config = chunk_config.gold_rich
+
+            if gold_config and gold_config.chance and gold_config.chance > 0 then
+                local roll = love.math.random()
+                if roll < gold_config.chance then
+                    chunk_entity.miningVariant = "gold_rich"
+                    local gold_color = gold_config.color
+                    if gold_color and chunk_entity.drawable then
+                        chunk_entity.drawable.color = gold_color
+                    end
+                end
+            end
+
+            if (not chunk_entity.miningVariant) and metal_config and metal_config.chance and metal_config.chance > 0 then
                 local roll = love.math.random()
                 if roll < metal_config.chance then
                     chunk_entity.miningVariant = "metal_rich"
@@ -459,7 +480,7 @@ function asteroid_factory.instantiate(blueprint, context)
     health_bar.offset = health_bar.offset or radius + health_bar.padding
     entity.healthBar = health_bar
 
-    local loot_config = config.loot or entity.loot or asteroid_constants.loot
+    local loot_config = config.loot or entity.loot
     if loot_config then
         entity.loot = deep_copy(loot_config)
     end

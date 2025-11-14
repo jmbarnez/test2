@@ -31,6 +31,8 @@ return function(context)
             love.graphics.origin()
 
             tooltip.begin_frame()
+            local state = context and context.state
+
             cargo_window.draw(context)
             death_window.draw(context)
             pause_window.draw(context)
@@ -40,6 +42,11 @@ return function(context)
             debug_window.draw(context)
             station_window.draw(context)
             notifications.draw(context)
+
+            if state and state.hudTooltipRequest then
+                tooltip.request(state.hudTooltipRequest)
+                state.hudTooltipRequest = nil
+            end
 
             -- Individual windows are responsible for declaring when they capture input.
             local mouse_x, mouse_y = love.mouse.getPosition()

@@ -12,6 +12,8 @@ local atan2 = math.atan2 or function(y, x) return math.atan(y, x) end
 local SQRT = math.sqrt
 local EPS = 1e-8
 
+local spawn_explosion_effect
+
 local function normalize(x, y)
     x, y = x or 0, y or 0
     local lenSq = x * x + y * y
@@ -294,7 +296,7 @@ local function clone_color(color, defaultAlpha)
     }
 end
 
-local function spawn_explosion_effect(explosionPool, impactPool, x, y, projectile, config)
+spawn_explosion_effect = function(explosionPool, impactPool, x, y, projectile, config)
     if not explosionPool then
         return
     end

@@ -27,6 +27,48 @@ local function resolve_level(entity)
     return nil
 end
 
+local function resolve_range_profile(entity)
+    if not entity then
+        return nil, nil, nil, nil
+    end
+
+    local ai = entity.ai or {}
+    local stats = entity.stats or {}
+    local weapon = entity.weapon
+    local weaponRange = weapon and weapon.maxRange or nil
+
+    local detection = ai.detectionRange
+        or stats.detection_range
+        or ai.engagementRange
+        or stats.max_range
+        or weaponRange
+        or (ai.wanderRadius and ai.wanderRadius * 1.5)
+        or nil
+
+    local engagement = ai.engagementRange
+        or stats.max_range
+        or weaponRange
+        or detection
+
+    if weaponRange then
+        engagement = math.min(engagement or weaponRange, weaponRange)
+        detection = math.max(detection or weaponRange, weaponRange * 1.1)
+    end
+
+    if not detection and engagement then
+        detection = engagement
+    end
+    if not engagement and detection then
+        engagement = detection
+    end
+
+    local preferred = ai.preferredDistance
+        or stats.preferred_distance
+        or (engagement and engagement * 0.85 or nil)
+
+    return detection, engagement, preferred, weaponRange
+end
+
 local function resolve_speed(entity)
     if not entity then
         return 0
@@ -66,6 +108,64 @@ local function format_number(value)
     else
         return string.format("%.1f", value)
     end
+end
+
+local function resolve_behavior_label(target)
+    if not target then
+        return nil
+    end
+
+    local ai = target.ai
+    if type(ai) ~= "table" then
+        return nil
+    end
+
+    local behavior = ai.behavior or ai.mode or ai.pattern
+    if type(behavior) ~= "string" or behavior == "" then
+        return nil
+    end
+
+    behavior = behavior:gsub("_", " ")
+    local first = behavior:sub(1, 1):upper()
+    return first .. behavior:sub(2)
+end
+
+local function resolve_weapon_label(target)
+    if not target then
+        return nil
+    end
+
+    local weapons = target.weapons
+    if type(weapons) == "table" and #weapons > 0 then
+        local weapon = weapons[1]
+        if type(weapon) == "table" then
+            local blueprint = weapon.blueprint
+            if type(blueprint) == "table" then
+                if type(blueprint.name) == "string" and blueprint.name ~= "" then
+                    return blueprint.name
+                end
+                if type(blueprint.id) == "string" and blueprint.id ~= "" then
+                    local idLabel = blueprint.id:gsub("_", " ")
+                    local first = idLabel:sub(1, 1):upper()
+                    return first .. idLabel:sub(2)
+                end
+            end
+        end
+    end
+
+    local component = target.weapon
+    if type(component) == "table" then
+        if type(component.name) == "string" and component.name ~= "" then
+            return component.name
+        end
+        if type(component.constantKey) == "string" and component.constantKey ~= "" then
+            local keyLabel = component.constantKey:gsub("_", " ")
+            local first = keyLabel:sub(1, 1):upper()
+            return first .. keyLabel:sub(2)
+        end
+    end
+
+    return nil
 end
 
 local TargetPanel = {}
@@ -128,10 +228,6 @@ function TargetPanel.draw(context, player)
         return
     end
 
-    local name = target.name
-        or (target.blueprint and (target.blueprint.name or target.blueprint.id))
-        or "Unknown Target"
-
     set_color(hud_colors.status_panel or { 0.05, 0.06, 0.09, 0.95 })
     love.graphics.rectangle("fill", x, y, width, height)
 
@@ -149,18 +245,10 @@ function TargetPanel.draw(context, player)
         local distance = resolve_distance(playerShip, target)
         local speed = resolve_speed(target)
 
-        local name = target.name
-            or (target.blueprint and (target.blueprint.name or target.blueprint.id))
-            or "Unknown Target"
-
-        love.graphics.setFont(fonts.body)
-        set_color(hud_colors.status_text or hud_colors.diagnostics or { 0.82, 0.88, 0.93, 1 })
-        love.graphics.printf(name, text_x, y + padding, text_width, "left")
-
-        local info_y = y + padding + fonts.body:getHeight() + 4
-
         love.graphics.setFont(fonts.small)
         set_color(hud_colors.status_muted or { 0.6, 0.66, 0.72, 1 })
+
+        local info_y = y + padding
 
         local levelText = level and string.format("Lv %d", level) or "Lv --"
         local distanceText = string.format("Dist %s", distance and format_number(distance) or "--")
@@ -209,7 +297,8 @@ function TargetPanel.draw(context, player)
         love.graphics.rectangle("line", text_x + 0.5, bar_y + 0.5, bar_width - 1, bar_height - 1)
 
         local textBottomY = bar_y + bar_height + 5
-        love.graphics.setFont(fonts.tiny or fonts.small)
+        local detailFont = fonts.tiny or fonts.small
+        love.graphics.setFont(detailFont)
         set_color(hud_colors.status_text or { 0.82, 0.88, 0.93, 1 })
 
         local hullText = Util.format_resource(hull_current, hull_max)
@@ -220,9 +309,185 @@ function TargetPanel.draw(context, player)
         love.graphics.print("Hull", text_x, textBottomY)
         love.graphics.printf(hullText, text_x, textBottomY, text_width, "right")
 
-        local shieldLabelY = textBottomY + (fonts.tiny and fonts.tiny:getHeight() or fonts.small:getHeight()) + 2
+        local shieldLabelY = textBottomY + detailFont:getHeight() + 2
         love.graphics.print("Shield", text_x, shieldLabelY)
         love.graphics.printf(shieldText, text_x, shieldLabelY, text_width, "right")
+
+        if isEnemy then
+            local behaviorLabel = resolve_behavior_label(target)
+            local weaponLabel = resolve_weapon_label(target)
+
+            local arrowWidth = 16
+            local arrowHeight = 10
+            local arrowPadding = 6
+            local arrowX = x + width - arrowPadding - arrowWidth
+            local arrowY = y + height - arrowPadding - arrowHeight
+
+            local mouseX, mouseY = love.mouse.getPosition()
+            local arrowHovered = mouseX >= arrowX and mouseX <= arrowX + arrowWidth
+                and mouseY >= arrowY and mouseY <= arrowY + arrowHeight
+
+            if arrowHovered then
+                set_color(hud_colors.status_text or { 0.82, 0.88, 0.93, 1 })
+            else
+                set_color(hud_colors.status_muted or { 0.6, 0.66, 0.72, 1 })
+            end
+
+            local arrowCenterX = arrowX + arrowWidth * 0.5
+            local arrowTopY = arrowY
+            local arrowBottomY = arrowY + arrowHeight
+            love.graphics.polygon(
+                "fill",
+                arrowCenterX - arrowWidth * 0.5, arrowTopY,
+                arrowCenterX + arrowWidth * 0.5, arrowTopY,
+                arrowCenterX, arrowBottomY
+            )
+
+            local profileLabel = "Profile"
+            local labelWidth = detailFont:getWidth(profileLabel)
+            local labelX = arrowX - 4 - labelWidth
+            local labelY = arrowY + (arrowHeight - detailFont:getHeight()) * 0.5
+            love.graphics.print(profileLabel, labelX, labelY)
+
+            if arrowHovered then
+                local ai = target.ai or {}
+                local stats = target.stats or {}
+                local detection, engagement, preferred, weaponRange = resolve_range_profile(target)
+
+                local entries = {}
+
+                local levelValue = resolve_level(target)
+                if levelValue then
+                    entries[#entries + 1] = { "Level", tostring(levelValue) }
+                end
+
+                if behaviorLabel or ai.behavior then
+                    local value = behaviorLabel or tostring(ai.behavior)
+                    if ai.aggression then
+                        value = string.format("%s (Agg %.2f)", value, ai.aggression)
+                    end
+                    entries[#entries + 1] = { "Behavior", value }
+                end
+
+                if ai.targetTag then
+                    entries[#entries + 1] = { "Target Tag", tostring(ai.targetTag) }
+                end
+
+                if weaponLabel then
+                    entries[#entries + 1] = { "Weapon", weaponLabel }
+                end
+
+                local primaryWeapon
+                local weapons = target.weapons
+                if type(weapons) == "table" and #weapons > 0 then
+                    primaryWeapon = weapons[1]
+                elseif type(target.weapon) == "table" then
+                    primaryWeapon = { weapon = target.weapon }
+                end
+
+                local weaponComponent = primaryWeapon and primaryWeapon.weapon
+                if type(weaponComponent) == "table" then
+                    if weaponComponent.fireMode then
+                        entries[#entries + 1] = { "Fire Mode", tostring(weaponComponent.fireMode) }
+                    end
+                    if weaponComponent.damage then
+                        entries[#entries + 1] = { "Damage/Shot", string.format("%.1f", weaponComponent.damage) }
+                    end
+                    if weaponComponent.damagePerSecond then
+                        entries[#entries + 1] = { "Damage/Sec", string.format("%.1f", weaponComponent.damagePerSecond) }
+                    end
+                    if weaponComponent.maxRange or weaponRange then
+                        local wr = weaponComponent.maxRange or weaponRange
+                        entries[#entries + 1] = { "Weapon Range", string.format("%.0f", wr) }
+                    end
+                    if weaponComponent.energyPerShot then
+                        entries[#entries + 1] = { "Energy/Shot", string.format("%.1f", weaponComponent.energyPerShot) }
+                    end
+                    if weaponComponent.energyPerSecond then
+                        entries[#entries + 1] = { "Energy/Sec", string.format("%.1f", weaponComponent.energyPerSecond) }
+                    end
+                end
+
+                if detection or engagement or preferred then
+                    if detection then
+                        entries[#entries + 1] = { "Detect Range", string.format("%.0f", detection) }
+                    end
+                    if engagement then
+                        entries[#entries + 1] = { "Engage Range", string.format("%.0f", engagement) }
+                    end
+                    if preferred then
+                        entries[#entries + 1] = { "Preferred Dist", string.format("%.0f", preferred) }
+                    end
+                end
+
+                if stats.max_speed then
+                    entries[#entries + 1] = { "Max Speed", string.format("%.0f", stats.max_speed) }
+                end
+                if stats.max_acceleration then
+                    entries[#entries + 1] = { "Acceleration", string.format("%.0f", stats.max_acceleration) }
+                end
+                if stats.main_thrust then
+                    entries[#entries + 1] = { "Main Thrust", string.format("%.0f", stats.main_thrust) }
+                end
+                if stats.strafe_thrust then
+                    entries[#entries + 1] = { "Strafe Thrust", string.format("%.0f", stats.strafe_thrust) }
+                end
+                if stats.reverse_thrust then
+                    entries[#entries + 1] = { "Reverse Thrust", string.format("%.0f", stats.reverse_thrust) }
+                end
+
+                if stats.mass then
+                    entries[#entries + 1] = { "Mass", string.format("%.1f", stats.mass) }
+                end
+
+                if target.armorType then
+                    entries[#entries + 1] = { "Armor", tostring(target.armorType) }
+                end
+
+                if hull_max then
+                    entries[#entries + 1] = { "Hull Max", string.format("%.0f", hull_max) }
+                end
+                if shield_max and shield_max > 0 then
+                    entries[#entries + 1] = { "Shield Max", string.format("%.0f", shield_max) }
+                end
+
+                local entryCount = #entries
+                if entryCount > 0 then
+                    local profilePadding = 8
+                    local lineHeight = detailFont:getHeight()
+                    local lineSpacing = 2
+                    local profileHeight = profilePadding * 2
+                        + entryCount * lineHeight
+                        + (entryCount - 1) * lineSpacing
+                    local profileWidth = width
+                    local profileX = x
+                    local profileY = y + height + 6
+
+                    set_color(hud_colors.status_panel or { 0.05, 0.06, 0.09, 0.95 })
+                    love.graphics.rectangle("fill", profileX, profileY, profileWidth, profileHeight)
+
+                    set_color(hud_colors.status_border or { 0.2, 0.26, 0.34, 0.9 })
+                    love.graphics.setLineWidth(1)
+                    love.graphics.rectangle("line", profileX + 0.5, profileY + 0.5, profileWidth - 1, profileHeight - 1)
+
+                    love.graphics.setFont(detailFont)
+                    set_color(hud_colors.status_text or { 0.82, 0.88, 0.93, 1 })
+
+                    local rowX = profileX + profilePadding
+                    local rowY = profileY + profilePadding
+                    local rowWidth = profileWidth - profilePadding * 2
+
+                    for i = 1, entryCount do
+                        local entry = entries[i]
+                        if entry and entry[1] and entry[2] then
+                            love.graphics.print(entry[1], rowX, rowY)
+                            love.graphics.printf(entry[2], rowX, rowY, rowWidth, "right")
+                            rowY = rowY + lineHeight + lineSpacing
+                        end
+                    end
+                end
+            end
+        end
 
         return
     end

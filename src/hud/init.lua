@@ -1,7 +1,7 @@
 local StatusPanel = require("src.hud.status_panel")
 local ExperiencePanel = require("src.hud.experience_panel")
 local Minimap = require("src.hud.minimap")
-local WeaponPanel = require("src.hud.weapon_panel")
+local Hotbar = require("src.hud.hotbar")
 local TargetPanel = require("src.hud.target_panel")
 local AbilityPanel = require("src.hud.ability_panel")
 local StationPrompt = require("src.hud.station_prompt")
@@ -17,7 +17,7 @@ function Hud.draw(context, player)
     if minimap_rect then
         QuestOverlay.draw(context, minimap_rect)
     end
-    WeaponPanel.draw(context, player)
+    Hotbar.draw(context, player)
     AbilityPanel.draw(context, player)
     StationPrompt.draw(context, player)
 end

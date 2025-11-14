@@ -5,7 +5,8 @@ local love = love
 
 local AbilityPanel = {}
 
-local window_colors = theme.colors.window
+local window_colors = theme.colors.window or {}
+local hud_colors = theme.colors.hud or {}
 local spacing = theme.spacing or {}
 local set_color = theme.utils.set_color
 
@@ -39,8 +40,10 @@ function AbilityPanel.draw(context, player)
     local panelHeight = spacing.ability_panel_height or DEFAULT_PANEL_HEIGHT
 
     local screenWidth, screenHeight = love.graphics.getWidth(), love.graphics.getHeight()
-    local baseX = spacing.ability_panel_x or 24
-    local baseY = (spacing.ability_panel_y or (screenHeight - panelHeight - 32))
+    local marginX = spacing.ability_panel_margin_x or spacing.ability_panel_margin or 24
+    local marginY = spacing.ability_panel_margin_y or spacing.ability_panel_margin or 24
+    local baseX = spacing.ability_panel_x or (screenWidth - panelWidth - marginX)
+    local baseY = spacing.ability_panel_y or (screenHeight - panelHeight - marginY)
 
     love.graphics.push("all")
 
@@ -53,10 +56,13 @@ function AbilityPanel.draw(context, player)
         local panelY = baseY - ( #abilityModules - index ) * (panelHeight + gap)
 
         -- Background
-        set_color(window_colors.shadow or { 0, 0, 0, 0.35 })
+        set_color(hud_colors.status_shadow or window_colors.shadow or { 0, 0, 0, 0.35 })
         love.graphics.rectangle("fill", baseX, panelY + 2, panelWidth, panelHeight, 4, 4)
-        set_color(window_colors.background or { 0.02, 0.02, 0.05, 0.92 })
+        set_color(hud_colors.status_panel or window_colors.background or { 0.05, 0.06, 0.09, 0.95 })
         love.graphics.rectangle("fill", baseX, panelY, panelWidth, panelHeight, 4, 4)
+        set_color(hud_colors.status_border or window_colors.border or { 0.22, 0.28, 0.36, 0.88 })
+        love.graphics.setLineWidth(1)
+        love.graphics.rectangle("line", baseX + 0.5, panelY + 0.5, panelWidth - 1, panelHeight - 1)
 
         -- Cooldown fill
         local cooldownDuration = state.cooldownDuration or ability.cooldown or 0
@@ -66,7 +72,7 @@ function AbilityPanel.draw(context, player)
             cooldownFraction = math.min(math.max(cooldown / cooldownDuration, 0), 1)
         end
         if cooldownFraction > 0 then
-            set_color(window_colors.surface_subtle or { 0.15, 0.18, 0.24, 0.75 })
+            set_color(hud_colors.status_bar_background or window_colors.surface_subtle or { 0.15, 0.18, 0.24, 0.75 })
             local fillHeight = panelHeight * cooldownFraction
             love.graphics.rectangle("fill", baseX, panelY + panelHeight - fillHeight, panelWidth, fillHeight, 4, 4)
         end
@@ -76,37 +82,19 @@ function AbilityPanel.draw(context, player)
         local energyCost = ability.energyCost
 
         if fonts.small then love.graphics.setFont(fonts.small) end
-        set_color(window_colors.muted or { 0.6, 0.65, 0.7, 1 })
+        set_color(hud_colors.status_muted or window_colors.muted or { 0.6, 0.65, 0.7, 1 })
         love.graphics.print(hotkeyLabel, baseX + padding, panelY + padding)
 
         if fonts.body then love.graphics.setFont(fonts.body) end
-        set_color(window_colors.text or { 0.85, 0.9, 0.95, 1 })
+        set_color(hud_colors.status_text or window_colors.text or { 0.85, 0.9, 0.95, 1 })
         love.graphics.print(abilityName, baseX + padding, panelY + padding + 20)
 
-        if cooldownDuration and cooldownDuration > 0 then
-            local progress = 1 - cooldownFraction
-            local barWidth = panelWidth - padding * 2
-            local barHeight = 6
-            local barX = baseX + padding
-            local barY = panelY + panelHeight - padding - barHeight - 4
-
-            set_color(window_colors.progress_background or { 0.08, 0.09, 0.12, 0.9 })
-            love.graphics.rectangle("fill", barX, barY, barWidth, barHeight)
-            if progress > 0 then
-                set_color(window_colors.progress_fill or window_colors.accent or { 0.3, 0.6, 0.85, 1 })
-                love.graphics.rectangle("fill", barX, barY, barWidth * progress, barHeight)
-            end
-            set_color(window_colors.border or { 0.22, 0.28, 0.36, 0.88 })
-            love.graphics.setLineWidth(1)
-            love.graphics.rectangle("line", barX, barY, barWidth, barHeight)
-
-            if cooldown > 0 then
-                local timeText = string.format("%.1fs", cooldown)
-                if fonts.small then love.graphics.setFont(fonts.small) end
-                local textWidth = fonts.small and fonts.small:getWidth(timeText) or 0
-                set_color(window_colors.muted or { 0.6, 0.65, 0.7, 1 })
-                love.graphics.print(timeText, baseX + panelWidth - padding - textWidth, panelY + padding)
-            end
+        if cooldownDuration and cooldownDuration > 0 and cooldown > 0 then
+            local timeText = string.format("%.1fs", cooldown)
+            if fonts.small then love.graphics.setFont(fonts.small) end
+            local textWidth = fonts.small and fonts.small:getWidth(timeText) or 0
+            set_color(hud_colors.status_muted or window_colors.muted or { 0.6, 0.65, 0.7, 1 })
+            love.graphics.print(timeText, baseX + panelWidth - padding - textWidth, panelY + padding)
         end
     end
 

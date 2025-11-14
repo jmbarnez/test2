@@ -8,6 +8,7 @@ local moduleByBlueprint = {}
 local builtin_definitions = {
     require("src.items.definitions.resource_stone"),
     require("src.items.definitions.resource_ferrosite_ore"),
+    require("src.items.definitions.resource_gold"),
     require("src.items.definitions.resource_rare_crystal"),
     require("src.items.definitions.resource_hull_scrap"),
 }

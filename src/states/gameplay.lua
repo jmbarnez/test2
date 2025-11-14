@@ -28,6 +28,7 @@ local World = require("src.states.gameplay.world")
 local Entities = require("src.states.gameplay.entities")
 local Systems = require("src.states.gameplay.systems")
 local View = require("src.states.gameplay.view")
+local Universe = require("src.states.gameplay.universe")
 
 -- Effects
 local EngineTrail = require("src.effects.engine_trail")
@@ -518,8 +519,13 @@ function gameplay:enter(_, config)
     local sectorId = resolveSectorId(config)
     self.currentSectorId = sectorId or self.currentSectorId
 
-    -- Initialize subsystems
-    UIStateManager.initialize(self)
+	self.universe = Universe.generate({
+		galaxy_count = 3,
+		sectors_per_galaxy = { min = 10, max = 18 },
+	})
+
+    	-- Initialize subsystems
+	UIStateManager.initialize(self)
     
     self.performanceStatsRecords = {}
     self.performanceStats = {}
@@ -920,6 +926,34 @@ function gameplay:keypressed(key)
     -- Pause toggle
     if key == "escape" then
         UIStateManager.showPauseUI(self)
+        return
+    end
+
+    if key == "1" or key == "2" or key == "3" or key == "4" or key == "5"
+        or key == "6" or key == "7" or key == "8" or key == "9" or key == "0" then
+        if self.uiInput and self.uiInput.keyboardCaptured then
+            return
+        end
+
+        local index
+        if key == "0" then
+            index = 10
+        else
+            index = tonumber(key)
+        end
+
+        if index then
+            local player = PlayerManager.getCurrentShip(self)
+            if player then
+                local slots = PlayerWeapons.getSlots(player, { refresh = true })
+                if slots and slots.list and #slots.list > 0 then
+                    local count = #slots.list
+                    if index >= 1 and index <= count then
+                        PlayerWeapons.selectByIndex(player, index)
+                    end
+                end
+            end
+        end
         return
     end
 
