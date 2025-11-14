@@ -1,6 +1,9 @@
 -- Engine Trail Effect Module
 local math_util = require("src.util.math")
 
+local love = love
+local lg = love and love.graphics
+
 local EngineTrail = {}
 EngineTrail.__index = EngineTrail
 
@@ -44,14 +47,88 @@ local DEFAULT_PARTICLE_COLORS = {
 local DEFAULT_DRAW_COLOR = { 0.95, 1.0, 1.0, 1.0 }
 local DEFAULT_BLEND_MODE = "add"
 
+local TRAIL_SHADER_DEFAULT_LENGTH = 220
+local TRAIL_SHADER_DEFAULT_WIDTH = 42
+
+local trailShader
+do
+    local shaderSource = [[
+        extern vec2 trailOrigin;
+        extern vec2 trailDir;
+        extern float trailWidth;
+        extern float trailLength;
+        extern float intensity;
+        extern float time;
+        extern float glowStrength;
+        extern vec4 innerColor;
+        extern vec4 outerColor;
+
+        float saturate(float value) {
+            return clamp(value, 0.0, 1.0);
+        }
+
+        float hash(vec2 p) {
+            return fract(sin(dot(p, vec2(53.121, 91.742))) * 43758.5453);
+        }
+
+        vec4 effect(vec4 color, Image tex, vec2 texture_coords, vec2 screen_coords) {
+            vec4 texColor = Texel(tex, texture_coords);
+            if (texColor.a <= 0.001) {
+                return vec4(0.0);
+            }
+
+            vec2 rel = screen_coords - trailOrigin;
+            float forward = dot(rel, trailDir);
+            float lengthSafe = max(trailLength, 0.0001);
+            float widthSafe = max(trailWidth, 0.0001);
+            float along = saturate(forward / lengthSafe);
+
+            vec2 perp = vec2(-trailDir.y, trailDir.x);
+            float lateral = dot(rel, perp);
+            float across = saturate(1.0 - abs(lateral) / widthSafe);
+
+            float plume = texColor.a * across;
+            float axial = pow(along, 0.8);
+            float cross = pow(across, 0.9);
+
+            float noise = hash(rel * 0.018 + time * 0.31);
+            float wave = sin(forward * 0.035 + time * 7.5 + noise * 6.28318);
+            float flicker = 0.9 + 0.1 * wave;
+
+            float heat = pow(along, 1.35) * flicker * (0.55 + intensity * 0.65);
+            float veil = saturate(plume * (0.6 + intensity * 0.7));
+
+            vec3 mixColor = mix(outerColor.rgb, innerColor.rgb, saturate(heat * glowStrength + cross * 0.6));
+            float alpha = color.a * texColor.a * outerColor.a;
+            alpha *= (0.35 + cross * 0.4 + axial * 0.25) * (0.7 + intensity * 0.3);
+            alpha = saturate(alpha);
+
+            vec3 base = color.rgb * texColor.rgb;
+            vec3 finalColor = base * mixColor * (0.75 + heat * 0.45);
+
+            return vec4(finalColor, alpha);
+        }
+    ]]
+
+    local ok, compiled = pcall(function()
+        return lg and lg.newShader(shaderSource)
+    end)
+
+    if ok and compiled then
+        trailShader = compiled
+    elseif not ok then
+        print("Failed to load trail shader:", compiled)
+    end
+end
+
 -- Utility function to safely set a graphics canvas
 local function withCanvas(canvas, drawFunc)
-    love.graphics.push("all")
-    love.graphics.setCanvas(canvas)
-    love.graphics.clear(0, 0, 0, 0)
+    lg.push("all")
+    lg.setCanvas(canvas)
+    lg.clear(0, 0, 0, 0)
     drawFunc()
-    love.graphics.setCanvas()
-    love.graphics.pop()
+    lg.setCanvas()
+    lg.pop()
 end
 
 local function normalize_layers(layers)
@@ -64,18 +141,18 @@ end
 local function createTrailTexture(textureSize, layers)
     textureSize = textureSize or DEFAULT_TEXTURE_SIZE
     local radiusCache = normalize_layers(layers)
-    local canvas = love.graphics.newCanvas(textureSize, textureSize)
+    local canvas = lg.newCanvas(textureSize, textureSize)
     withCanvas(canvas, function()
         local cx, cy = textureSize * 0.5, textureSize * 0.5
         for i = 1, #radiusCache do
             local layer = radiusCache[i]
             local color = layer.color or DEFAULT_DRAW_COLOR
-            love.graphics.setColor(color[1] or 1, color[2] or 1, color[3] or 1, color[4] or 1)
-            love.graphics.circle("fill", cx, cy, layer.radius or textureSize * 0.5)
+            lg.setColor(color[1] or 1, color[2] or 1, color[3] or 1, color[4] or 1)
+            lg.circle("fill", cx, cy, layer.radius or textureSize * 0.5)
         end
     end)
     local imageData = canvas:newImageData()
-    local image = love.graphics.newImage(imageData)
+    local image = lg.newImage(imageData)
     image:setFilter("linear", "linear")
     canvas:release()
     return image
@@ -103,7 +180,7 @@ local function createParticleSystem(options)
     end
     local texture = createTrailTexture(options.textureSize, options.textureLayers)
     local maxParticles = options.maxParticles or 600
-    local ps = love.graphics.newParticleSystem(texture, maxParticles)
+    local ps = lg.newParticleSystem(texture, maxParticles)
 
     local lifeMin, lifeMax = unpack_range(options.particleLifetime, 0.5, 1.2)
     ps:setParticleLifetime(lifeMin, lifeMax)
@@ -166,6 +243,9 @@ function EngineTrail.new(options)
     self.blendMode = self.options.blendMode or DEFAULT_BLEND_MODE
     self.defaultParticleColors = copy_array(self.options.particleColors) or copy_array(DEFAULT_PARTICLE_COLORS)
     self._currentParticleColors = copy_array(self.defaultParticleColors)
+    self._forcedActiveTimer = nil
+    self._forcedStrength = nil
+    self._renderStrength = 0
     return self
 end
 
@@ -173,9 +253,27 @@ function EngineTrail:attachPlayer(player)
     self.player = player
 end
 
+function EngineTrail:isForcedActive()
+    return (self._forcedActiveTimer or 0) > 0
+end
+
+function EngineTrail:forceActivate(duration, strength)
+    if not (duration and duration > 0) then
+        return
+    end
+
+    local timer = math.max(duration, self._forcedActiveTimer or 0)
+    self._forcedActiveTimer = timer
+
+    if strength and strength > 0 then
+        local boost = self._forcedStrength or 0
+        self._forcedStrength = math.max(boost, strength)
+    end
+end
+
 function EngineTrail:setActive(active)
     self.active = not not active
-    if self.system and not self.active then
+    if self.system and not self.active and not self:isForcedActive() then
         self.fadeTime = 0.15
         self.stopTimer = 0
         self.system:setEmissionRate(0)
@@ -191,6 +289,8 @@ function EngineTrail:clear()
         self.fadeTime = 0
         self.stopTimer = 0
     end
+    self._forcedActiveTimer = nil
+    self._forcedStrength = nil
 end
 
 -- Align the particle system with the ship's rear and read thrust state
@@ -268,38 +368,69 @@ function EngineTrail:update(dt)
     if not self.system then return end
     if self.player then self:updateFromPlayer() end
 
+    local forcedActive = self:isForcedActive()
+    local effectiveStrength = self.thrustStrength or 0
+    local boost = self._forcedStrength or 0
+
+    if forcedActive and effectiveStrength < boost then
+        effectiveStrength = boost
+    end
+
+    local active = (self.active or forcedActive) and effectiveStrength > 0
     local targetEmissionRate = 0
 
-    if self.active and self.thrustStrength > 0 then
+    if active then
         -- Dramatic emission rate for gorgeous trails
         local baseRate = 250
-        local thrustMultiplier = 0.3 + 0.7 * (self.thrustStrength ^ 1.3)
+        local thrustMultiplier = 0.3 + 0.7 * (effectiveStrength ^ 1.3)
         targetEmissionRate = baseRate * thrustMultiplier
 
         self.system:setDirection(self.direction)
         self.system:setPosition(self.position.x, self.position.y)
 
         -- Dynamic spread for visual interest
-        local spread = math.rad(20 + 20 * (1 - self.thrustStrength))
+        local spread = math.rad(20 + 20 * (1 - effectiveStrength))
         self.system:setSpread(spread)
 
         self.fadeTime = 0
         self.stopTimer = 0
     else
         targetEmissionRate = 0
-        self.stopTimer = self.stopTimer + dt
+        if not forcedActive then
+            self.stopTimer = self.stopTimer + dt
+        end
     end
 
     -- Smooth emission rate transitions
     local lerpFactor = 1 - math.exp(-dt * 25)
     self.lastEmissionRate = self.lastEmissionRate + (targetEmissionRate - self.lastEmissionRate) * lerpFactor
 
-    if self.stopTimer > 0.02 or not self.active then
+    if self.stopTimer > 0.02 or (not self.active and not forcedActive) then
         self.lastEmissionRate = 0
     end
 
     self.system:setEmissionRate(self.lastEmissionRate)
     self.system:update(dt)
+
+    if forcedActive then
+        self._forcedActiveTimer = math.max(0, (self._forcedActiveTimer or 0) - dt)
+        if self._forcedActiveTimer <= 0 then
+            self._forcedActiveTimer = nil
+            self._forcedStrength = nil
+            if not self.active then
+                self.fadeTime = 0.15
+                self.stopTimer = 0
+                self.system:setEmissionRate(0)
+                self.lastEmissionRate = 0
+            end
+        end
+    end
+
+    if active then
+        self._renderStrength = effectiveStrength
+    else
+        self._renderStrength = self.thrustStrength
+    end
 end
 
 -- Enhanced burst emission with size scaling
@@ -318,22 +449,59 @@ end
 function EngineTrail:draw()
     if not self.system then return end
 
-    love.graphics.push("all")
-    love.graphics.setBlendMode(self.blendMode)
+    lg.push("all")
+    lg.setBlendMode(self.blendMode)
 
-    -- Enhanced color modulation with brightness boost
+    local strength = self._renderStrength or self.thrustStrength
     local baseColor = self.drawColor
-    local brightness = 0.9 + 0.1 * self.thrustStrength
-    local shimmer = 0.95 + 0.05 * math.sin(love.timer.getTime() * 8)
+    local timer = love.timer and love.timer.getTime and love.timer.getTime() or 0
+    local brightness = 0.9 + 0.1 * (strength or 0)
+    local shimmer = 0.95 + 0.05 * math.sin(timer * 8)
     local multiplier = brightness * shimmer
     local r = math.min(1, (baseColor[1] or 1) * multiplier)
     local g = math.min(1, (baseColor[2] or 1) * multiplier)
     local b = math.min(1, (baseColor[3] or 1) * multiplier)
     local a = baseColor[4] or 1
-    love.graphics.setColor(r, g, b, a)
-    love.graphics.draw(self.system)
 
-    love.graphics.pop()
+    local shader = trailShader
+    if shader and lg and lg.setShader then
+        local dir = self.direction or 0
+        local dirX, dirY = math.cos(dir), math.sin(dir)
+        local shaderStrength = math.max(0, strength or 0)
+        local width = (self.options and self.options.shaderWidth) or TRAIL_SHADER_DEFAULT_WIDTH
+        local length = (self.options and self.options.shaderLength) or TRAIL_SHADER_DEFAULT_LENGTH
+        width = width * (0.65 + shaderStrength * 1.15)
+        length = length * (0.9 + shaderStrength * 1.45)
+
+        shader:send("trailOrigin", { self.position.x or 0, self.position.y or 0 })
+        shader:send("trailDir", { dirX, dirY })
+        shader:send("trailWidth", width)
+        shader:send("trailLength", length)
+        shader:send("intensity", shaderStrength)
+        shader:send("time", timer)
+        shader:send("glowStrength", 0.75 + shaderStrength * 0.65)
+
+        local innerColor = {
+            math.min(1, r * 0.6 + 0.4),
+            math.min(1, g * 0.6 + 0.4),
+            math.min(1, b * 0.55 + 0.45),
+            math.min(1, a * (0.85 + shaderStrength * 0.15))
+        }
+        local outerColor = { r, g, b, a }
+
+        shader:send("innerColor", innerColor)
+        shader:send("outerColor", outerColor)
+
+        lg.setShader(shader)
+        lg.setColor(1, 1, 1, 1)
+    else
+        lg.setColor(r, g, b, a)
+    end
+
+    lg.draw(self.system)
+    lg.setShader()
+
+    lg.pop()
 end
 
 function EngineTrail:applyColorOverride(particleColors, drawColor)

@@ -104,6 +104,11 @@ ability_handlers.dash = function(context, entity, body, ability, state)
         if engineTrail.applyColorOverride then
             engineTrail:applyColorOverride(DASH_TRAIL_COLORS, DASH_TRAIL_DRAW_COLOR)
         end
+        if engineTrail.forceActivate then
+            local forcedDuration = (ability.trailDuration or ability.duration or 0.2) + (ability.trailFade or 0.08)
+            local forcedStrength = ability.trailStrength or 1.05
+            engineTrail:forceActivate(forcedDuration, forcedStrength)
+        end
     end
 
     state.activeTimer = ability.duration or 0

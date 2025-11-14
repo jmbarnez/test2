@@ -11,7 +11,82 @@ local ship_bar_defaults = constants.ships and constants.ships.health_bar or {}
 ship_renderer.SHIELD_RING_COLOR = { 0.35, 0.95, 1.0, 0.85 }
 ship_renderer.SHIELD_GLOW_COLOR = { 0.18, 0.7, 1.0, 0.9 }
 ship_renderer.SHIELD_IMPACT_COLOR = { 0.82, 0.98, 1.0, 1.0 }
-ship_renderer.HULL_GLOW_COLOR = { 1.0, 0.25, 0.15, 0.9 }
+ship_renderer.HULL_GLOW_COLOR = { 0.85, 0.9, 1.0, 0.85 }
+
+local shieldImpactShader
+do
+    local shaderSource = [[
+        extern vec2 shipCenter;
+        extern mat2 invShipMatrix;
+        extern vec2 impactLocal;
+        extern float shieldRadius;
+        extern float waveRadius;
+        extern float waveThickness;
+        extern float impactIntensity;
+        extern float glowAlpha;
+        extern float waveAlpha;
+        extern float ringAlpha;
+        extern float coreAlpha;
+        extern float progress;
+        extern float time;
+        extern vec4 glowColor;
+        extern vec4 impactColor;
+
+        float saturate(float value) {
+            return clamp(value, 0.0, 1.0);
+        }
+
+        vec4 effect(vec4 color, Image tex, vec2 texture_coords, vec2 screen_coords) {
+            vec2 localPos = invShipMatrix * (screen_coords - shipCenter);
+            float distCenter = length(localPos);
+            float shieldEdgeDist = distCenter - shieldRadius;
+            float shieldScale = max(0.0001, shieldRadius);
+
+            vec2 impactVec = localPos - impactLocal;
+            float impactDist = length(impactVec);
+
+            float rimWidth = max(0.0025 * shieldScale, shieldRadius * 0.15);
+            float rim = exp(-pow(shieldEdgeDist / max(0.0001, rimWidth), 2.0));
+
+            float waveBand = 1.0 - smoothstep(
+                waveRadius - waveThickness,
+                waveRadius + waveThickness,
+                distCenter
+            );
+
+            float directionalFalloff = exp(-pow(impactDist / max(0.0001, shieldScale * 0.9), 2.0));
+            float impactFlash = exp(-pow(impactDist / max(0.0001, shieldScale * 0.35), 2.0));
+
+            float pulseFade = saturate(1.0 - progress * 1.05);
+
+            float glowTerm = glowAlpha * rim;
+            float ringTerm = ringAlpha * rim * (0.45 + directionalFalloff * 0.55);
+            float waveTerm = waveAlpha * waveBand * (0.35 + directionalFalloff * 0.65);
+            float coreTerm = coreAlpha * impactFlash;
+
+            float intensity = glowTerm * 0.45 + ringTerm * 0.85 + waveTerm + coreTerm;
+            intensity *= (0.35 + impactIntensity * 0.8);
+
+            float flicker = 0.9 + 0.1 * sin(dot(localPos, vec2(3.71, 4.23)) + time * 18.0);
+            intensity *= flicker;
+
+            intensity *= pulseFade;
+            intensity = clamp(intensity, 0.0, 1.5);
+
+            vec3 baseColor = mix(glowColor.rgb, impactColor.rgb, saturate(impactIntensity * 1.2));
+            float alpha = saturate(intensity) * impactColor.a;
+
+            return vec4(baseColor * intensity, alpha);
+        }
+    ]]
+
+    local ok, shaderOrError = pcall(love.graphics.newShader, shaderSource)
+    if ok then
+        shieldImpactShader = shaderOrError
+    else
+        print("Failed to load shield impact shader:", shaderOrError)
+    end
+end
 
 local function normalize_angle(angle)
     local wrapped = (angle + math.pi) % TWO_PI
@@ -471,7 +546,7 @@ local function draw_impact_pulses(entity)
     local px = entity.position.x or 0
     local py = entity.position.y or 0
     local rotation = entity.rotation or 0
-    local fallbackRadius = shield.visualRadius
+    local fallbackRadius = (shield and shield.visualRadius)
         or entity.mountRadius
         or resolve_drawable_radius(entity.drawable)
         or entity.radius
@@ -482,6 +557,32 @@ local function draw_impact_pulses(entity)
     love.graphics.rotate(rotation)
     love.graphics.setBlendMode("add")
 
+    local shader = shieldImpactShader
+    local invM11, invM12, invM21, invM22
+    local shipCenterX, shipCenterY = love.graphics.transformPoint(0, 0)
+    local axisXx, axisXy = love.graphics.transformPoint(1, 0)
+    axisXx = axisXx - shipCenterX
+    axisXy = axisXy - shipCenterY
+    local axisYx, axisYy = love.graphics.transformPoint(0, 1)
+    axisYx = axisYx - shipCenterX
+    axisYy = axisYy - shipCenterY
+
+    if shader then
+        local det = axisXx * axisYy - axisXy * axisYx
+        if math.abs(det) > 1e-6 then
+            local invDet = 1 / det
+            invM11 = axisYy * invDet
+            invM12 = -axisXy * invDet
+            invM21 = -axisYx * invDet
+            invM22 = axisXx * invDet
+            shader:send("shipCenter", { shipCenterX, shipCenterY })
+            shader:send("invShipMatrix", { invM11, invM12, invM21, invM22 })
+            shader:send("time", love.timer.getTime())
+        else
+            shader = nil
+        end
+    end
+
     for i = 1, #pulses do
         local pulse = pulses[i]
         local radius = math.max(pulse.radius or fallbackRadius, fallbackRadius)
@@ -491,29 +592,62 @@ local function draw_impact_pulses(entity)
         local ringAlpha = pulse.ringAlpha or 0
         local glowAlpha = pulse.glowAlpha or 0
         local coreAlpha = pulse.coreAlpha or 0
-        local coreRadius = pulse.coreRadius or 4
         local impactX = pulse.impactX or 0
         local impactY = pulse.impactY or 0
+        local intensity = pulse.intensity or 0.4
+        local progress = pulse.progress or 0
 
-        if glowAlpha > 0.01 then
-            local pulseType = pulse.pulseType or "shield"
-            local glowColor = pulseType == "hull" and ship_renderer.HULL_GLOW_COLOR or ship_renderer.SHIELD_GLOW_COLOR
-            
-            love.graphics.setColor(
+        local pulseType = pulse.pulseType or "shield"
+        local impactColor = pulseType == "hull" and ship_renderer.HULL_GLOW_COLOR or ship_renderer.SHIELD_IMPACT_COLOR
+        local glowColor = pulseType == "hull" and ship_renderer.HULL_GLOW_COLOR or ship_renderer.SHIELD_GLOW_COLOR
+
+        if shader then
+            shader:send("impactLocal", { impactX, impactY })
+            shader:send("shieldRadius", radius)
+            shader:send("waveRadius", waveRadius)
+            shader:send("waveThickness", waveThickness)
+            shader:send("impactIntensity", intensity)
+            shader:send("glowAlpha", glowAlpha)
+            shader:send("waveAlpha", waveAlpha)
+            shader:send("ringAlpha", ringAlpha)
+            shader:send("coreAlpha", coreAlpha)
+            shader:send("progress", progress)
+            shader:send("impactColor", {
+                impactColor[1],
+                impactColor[2],
+                impactColor[3],
+                impactColor[4] or 1
+            })
+            shader:send("glowColor", {
                 glowColor[1],
                 glowColor[2],
                 glowColor[3],
-                glowAlpha * 0.35
-            )
-            love.graphics.circle("fill", 0, 0, radius * 1.12)
-            
-            love.graphics.setColor(
-                glowColor[1],
-                glowColor[2],
-                glowColor[3],
-                glowAlpha * 0.2
-            )
-            love.graphics.circle("fill", 0, 0, radius * 1.25)
+                glowColor[4] or 1
+            })
+
+            love.graphics.setShader(shader)
+            love.graphics.setColor(1, 1, 1, 1)
+            local renderRadius = math.max(radius * 1.3, waveRadius + waveThickness * 2.2)
+            love.graphics.circle("fill", 0, 0, renderRadius)
+            love.graphics.setShader()
+        else
+            if glowAlpha > 0.01 then
+                love.graphics.setColor(
+                    glowColor[1],
+                    glowColor[2],
+                    glowColor[3],
+                    glowAlpha * 0.35
+                )
+                love.graphics.circle("fill", 0, 0, radius * 1.12)
+
+                love.graphics.setColor(
+                    glowColor[1],
+                    glowColor[2],
+                    glowColor[3],
+                    glowAlpha * 0.2
+                )
+                love.graphics.circle("fill", 0, 0, radius * 1.25)
+            end
         end
     end
 

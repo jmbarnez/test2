@@ -28,6 +28,22 @@ local function apply_color(color, fallback)
     love.graphics.setColor(r, g, b, a)
 end
 
+local function modulate_color(color, brightness, alphaScale)
+    if type(color) ~= "table" then
+        return nil
+    end
+
+    brightness = brightness or 1
+    alphaScale = alphaScale or 1
+
+    local r = clamp_color_component(color[1] and color[1] * brightness, color[1] or 1)
+    local g = clamp_color_component(color[2] and color[2] * brightness, color[2] or 1)
+    local b = clamp_color_component(color[3] and color[3] * brightness, color[3] or 1)
+    local a = clamp_color_component((color[4] or 1) * alphaScale, color[4] or 1)
+
+    return { r, g, b, a }
+end
+
 local function draw_influence_ring(entity, context)
     local influence = entity and entity.stationInfluence
     if not influence then
@@ -56,6 +72,13 @@ local function draw_influence_ring(entity, context)
     local baseColor = (isActive and influence.activeColor) or influence.color or fallbackColor
     local accentColor = influence.accentColor or baseColor or fallbackColor
 
+    if isActive then
+        local activeBrightness = influence.activeBrightness or 1.35
+        local activeAlpha = influence.activeAlpha or 1.25
+        baseColor = modulate_color(baseColor, activeBrightness, activeAlpha) or baseColor
+        accentColor = modulate_color(accentColor, influence.activeAccentBrightness or 1.15, influence.activeAccentAlpha or 1.1) or accentColor
+    end
+
     love.graphics.push("all")
 
     love.graphics.setLineWidth(lineWidth)
@@ -77,6 +100,36 @@ local function draw_influence_ring(entity, context)
             clamp_color_component(influence.fillAlpha, 0.15),
         }, baseColor or fallbackColor)
         love.graphics.circle("line", position.x, position.y, radius - math.max(1, lineWidth * 1.2))
+    end
+
+    if isActive then
+        local time = love.timer and love.timer.getTime and love.timer.getTime() or 0
+        local pulseSpeed = influence.glowPulseSpeed or 2.6
+        local pulse = 0.78 + 0.22 * math.sin(time * pulseSpeed)
+        local glowAlpha = (influence.glowAlpha or 0.45) * pulse
+        local glowWidth = math.max(lineWidth * 1.8, 4)
+        local glowRadiusOffset = influence.glowRadiusOffset or (accentOffset or lineWidth * 2)
+
+        love.graphics.setBlendMode("add")
+        love.graphics.setLineWidth(glowWidth)
+        apply_color({
+            baseColor[1] or fallbackColor[1],
+            baseColor[2] or fallbackColor[2],
+            baseColor[3] or fallbackColor[3],
+            glowAlpha,
+        }, baseColor or fallbackColor)
+        love.graphics.circle("line", position.x, position.y, radius + glowRadiusOffset * 0.45)
+
+        love.graphics.setLineWidth(glowWidth * 0.7)
+        apply_color({
+            accentColor[1] or fallbackColor[1],
+            accentColor[2] or fallbackColor[2],
+            accentColor[3] or fallbackColor[3],
+            glowAlpha * 0.7,
+        }, accentColor or baseColor)
+        love.graphics.circle("line", position.x, position.y, radius + glowRadiusOffset)
+
+        love.graphics.setBlendMode("alpha")
     end
 
     love.graphics.pop()

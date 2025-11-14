@@ -570,8 +570,6 @@ function Entities.damage(entity, amount, source, context)
             position = impactPosition,
             kind = "hull",
         })
-
-        push_impact_pulse(entity, damageAmount, impactPosition, "hull")
     end
 end
 
