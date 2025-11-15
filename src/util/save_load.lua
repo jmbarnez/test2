@@ -106,6 +106,9 @@ function SaveLoad.serialize(state)
         version = SAVE_VERSION,
         timestamp = os.time(),
         sector = state.currentSectorId or "default_sector",
+        universe = {
+            seed = state.universeSeed,
+        },
         player = {
             ship = serialize_player_ship(player),
             currency = currency or 0,
@@ -327,18 +330,26 @@ function SaveLoad.restoreGameState(state, saveData)
         PlayerCurrency.sync_to_entity(state)
     end
 
+    if saveData.universe and saveData.universe.seed then
+        state.universeSeed = saveData.universe.seed
+    end
+
     print("[SaveLoad] Game state restored successfully")
     return true
 end
 
 --- Loads a saved game into the current state
 ---@param state table The gameplay state
+---@param saveData table|nil Preloaded save data to use instead of reading from disk
 ---@return boolean success
 ---@return string|nil error
-function SaveLoad.loadGame(state)
-    local saveData, loadError = SaveLoad.loadSaveData()
+function SaveLoad.loadGame(state, saveData)
+    local loadError
     if not saveData then
-        return false, loadError
+        saveData, loadError = SaveLoad.loadSaveData()
+        if not saveData then
+            return false, loadError
+        end
     end
 
     -- Clear existing entities before loading

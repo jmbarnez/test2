@@ -10,6 +10,7 @@ local window_colors = theme.colors.window
 local theme_spacing = theme.spacing
 local set_color = theme.utils.set_color
 local HOTBAR_SLOTS = 10
+local SELECTED_OUTLINE_COLOR = { 0.2, 0.85, 0.95, 1 }
 
 local function draw_icon_layer(icon, layer, size)
     love.graphics.push()
@@ -220,12 +221,53 @@ function Hotbar.draw(context, player)
     if love.mouse and love.mouse.getPosition then
         mouseX, mouseY = love.mouse.getPosition()
     end
+
+    local uiInput = context.uiInput
+    local hotbarState
+    if type(state) == "table" then
+        state.hotbarUI = state.hotbarUI or {}
+        hotbarState = state.hotbarUI
+    else
+        Hotbar._fallbackState = Hotbar._fallbackState or {}
+        hotbarState = Hotbar._fallbackState
+    end
+
+    local isMouseDown = false
+    if love.mouse and love.mouse.isDown then
+        isMouseDown = love.mouse.isDown(1) or false
+    end
+
+    local wasMouseDown = hotbarState and hotbarState.wasMouseDown or false
+    local justPressed = isMouseDown and not wasMouseDown
+
     local hoveredIndex = nil
 
     -- Icon
     for i = 1, HOTBAR_SLOTS do
         local entry = slots.list[i]
         local slotX = slotStartX + (i - 1) * (slotSize + gap)
+
+        local isHovered = false
+        if mouseX and mouseY then
+            isHovered = mouseX >= slotX and mouseX <= slotX + slotSize and mouseY >= slotY and mouseY <= slotY + slotSize
+            if isHovered then
+                hoveredIndex = i
+                if uiInput and (isMouseDown or justPressed) then
+                    uiInput.mouseCaptured = true
+                end
+            end
+        end
+
+        if justPressed and isHovered and i <= total then
+            local selectedResult = PlayerWeapons.selectByIndex(player, i, { skipRefresh = true })
+            if selectedResult then
+                selectedIndex = i
+                selectedEntry = selectedResult
+                selectedWeaponInstance = selectedResult.weaponInstance
+                selectedWeaponComponent = (selectedWeaponInstance and selectedWeaponInstance.weapon) or player.weapon
+                selectedDisplayIndex = math.min(selectedIndex, HOTBAR_SLOTS)
+            end
+        end
 
         local isSelected = (i == selectedDisplayIndex)
         if isSelected then
@@ -234,6 +276,14 @@ function Hotbar.draw(context, player)
             set_color(window_colors.surface_subtle or { 0.03, 0.04, 0.07, 0.9 })
         end
         love.graphics.rectangle("fill", slotX, slotY, slotSize, slotSize, 3, 3)
+
+        if isSelected then
+            love.graphics.push("all")
+            set_color(SELECTED_OUTLINE_COLOR)
+            love.graphics.setLineWidth(2)
+            love.graphics.rectangle("line", slotX + 1, slotY + 1, slotSize - 2, slotSize - 2, 3, 3)
+            love.graphics.pop()
+        end
 
         if entry then
             local iconDrawn = draw_item_icon(entry.icon, slotX + 4, slotY + 4, slotSize - 8)
@@ -284,12 +334,6 @@ function Hotbar.draw(context, player)
             end
             love.graphics.print(label, slotX + 4, slotY + slotSize - fonts.small:getHeight() - 2)
         end
-
-        if mouseX and mouseY then
-            if mouseX >= slotX and mouseX <= slotX + slotSize and mouseY >= slotY and mouseY <= slotY + slotSize then
-                hoveredIndex = i
-            end
-        end
     end
 
     if fonts.small then
@@ -303,14 +347,8 @@ function Hotbar.draw(context, player)
         love.graphics.print(countText, countX, countY)
     end
 
-    local swapText = "[1-0] Select Weapons"
-
-    -- Indicators
-    if swapText then
-        local swapWidth = fonts.small:getWidth(swapText)
-        local swapX = x + (barWidth - swapWidth) * 0.5
-        local swapY = y + barHeight + 4
-        love.graphics.print(swapText, swapX, swapY)
+    if hotbarState then
+        hotbarState.wasMouseDown = isMouseDown
     end
 
     if hoveredIndex and hoveredIndex >= 1 and hoveredIndex <= total and state and not state.hudTooltipRequest then
