@@ -54,17 +54,17 @@ do
                 distCenter
             );
 
-            float directionalFalloff = exp(-pow(impactDist / max(0.0001, shieldScale * 0.9), 2.0));
-            float impactFlash = exp(-pow(impactDist / max(0.0001, shieldScale * 0.35), 2.0));
+            float directionalFalloff = exp(-pow(impactDist / max(0.0001, shieldScale * 0.55), 2.0));
+            float impactFlash = exp(-pow(impactDist / max(0.0001, shieldScale * 0.3), 2.0));
 
             float pulseFade = saturate(1.0 - progress * 1.05);
 
-            float glowTerm = glowAlpha * rim;
-            float ringTerm = ringAlpha * rim * (0.45 + directionalFalloff * 0.55);
-            float waveTerm = waveAlpha * waveBand * (0.35 + directionalFalloff * 0.65);
+            float glowTerm = glowAlpha * rim * (0.2 + directionalFalloff * 0.8);
+            float ringTerm = ringAlpha * rim * directionalFalloff;
+            float waveTerm = waveAlpha * waveBand * directionalFalloff;
             float coreTerm = coreAlpha * impactFlash;
 
-            float intensity = glowTerm * 0.45 + ringTerm * 0.85 + waveTerm + coreTerm;
+            float intensity = glowTerm * 0.35 + ringTerm * 0.9 + waveTerm * 1.1 + coreTerm;
             intensity *= (0.35 + impactIntensity * 0.8);
 
             float flicker = 0.9 + 0.1 * sin(dot(localPos, vec2(3.71, 4.23)) + time * 18.0);
