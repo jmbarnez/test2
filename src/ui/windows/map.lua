@@ -11,9 +11,66 @@ local love = love
 
 local map_window = {}
 
+-- ============================================================================
+-- Configuration
+-- ============================================================================
+
+local DEFAULT_MODE = "sector"
+
+local BUTTON_SPACING = 12
+local BUTTON_MIN_WIDTH = 96
+local BUTTON_MAX_WIDTH = 160
+local BUTTON_MIN_HEIGHT = 28
+local BUTTON_MAX_HEIGHT = 36
+
+local DEFAULT_BOUNDS_COLOR = { 0.46, 0.64, 0.72, 0.8 }
+local DEFAULT_OVERLAY_COLOR = { 0, 0, 0, 0.78 }
+local DEFAULT_BACKGROUND_COLOR = { 0.05, 0.06, 0.08, 0.95 }
+local DEFAULT_ACTIVE_BUTTON_COLOR = { 0.32, 0.52, 0.92, 1 }
+
+local MODE_BUTTONS = {
+    { label = "Sector", mode = "sector" },
+    { label = "Galaxy", mode = "galaxy" },
+    { label = "Universe", mode = "universe" },
+    { label = "Reset View", action = "reset" },
+}
+
+local MODE_KEYBINDS = {
+    ["1"] = "sector",
+    ["2"] = "galaxy",
+    ["3"] = "universe",
+}
+
+local VIEW_MODES
+
 local function point_in_rect(px, py, rect)
     return px >= rect.x and px <= rect.x + rect.width
         and py >= rect.y and py <= rect.y + rect.height
+end
+
+--- Resolves the currently active view mode, normalizing invalid states.
+---@param state table|nil
+---@return string mode
+local function resolve_mode(state)
+    local mode = state and state.mode or DEFAULT_MODE
+
+    if not VIEW_MODES or not VIEW_MODES[mode] then
+        mode = DEFAULT_MODE
+        if state then
+            state.mode = mode
+        end
+    elseif state and state.mode ~= mode then
+        state.mode = mode
+    end
+
+    if state and VIEW_MODES then
+        local config = VIEW_MODES[mode]
+        if config and config.title then
+            state.title = config.title
+        end
+    end
+
+    return mode
 end
 
 local function get_world_bounds(context)
@@ -27,12 +84,15 @@ local function get_world_bounds(context)
 end
 
 local function reset_view(state, context, bounds)
+    if not state then
+        return
+    end
+
+    local mode = resolve_mode(state)
     bounds = bounds or get_world_bounds(context)
     if not bounds then
         return
     end
-
-	local mode = state and state.mode or "sector"
 
 	if mode == "sector" then
 		local player = PlayerManager.resolveLocalPlayer(context)
@@ -94,20 +154,65 @@ local function resolve_universe(context)
 end
 
 local function get_mode_bounds(context, state)
-	local mode = state and state.mode or "sector"
-	if mode == "galaxy" then
-		local universe = resolve_universe(context)
-		if universe then
-			return Universe.getGalaxyBounds(universe, universe.currentGalaxyId)
-		end
-	elseif mode == "universe" then
-		local universe = resolve_universe(context)
-		if universe then
-			return Universe.getUniverseBounds(universe)
-		end
-	end
+    local mode = resolve_mode(state)
+    local config = VIEW_MODES and VIEW_MODES[mode]
+    if config and config.get_bounds then
+        local universe = config.requiresUniverse and resolve_universe(context) or nil
+        local bounds = config.get_bounds(context, state, universe)
+        if bounds then
+            return bounds
+        end
+    end
 
-	return get_world_bounds(context)
+    return get_world_bounds(context)
+end
+
+local function get_mode_title(mode)
+    local config = VIEW_MODES and VIEW_MODES[mode]
+    if config and config.title then
+        return config.title
+    end
+
+    local defaultConfig = VIEW_MODES and VIEW_MODES[DEFAULT_MODE]
+    if defaultConfig and defaultConfig.title then
+        return defaultConfig.title
+    end
+
+    return "Sector Map"
+end
+
+local function can_use_mode(context, mode)
+    local config = VIEW_MODES and VIEW_MODES[mode]
+    if not config then
+        return false
+    end
+
+    if not config.requiresUniverse then
+        return true
+    end
+
+    return resolve_universe(context) ~= nil
+end
+
+local function apply_mode(context, state, mode)
+    if not (state and mode) then
+        return false
+    end
+
+    local config = VIEW_MODES and VIEW_MODES[mode]
+    if not config then
+        return false
+    end
+
+    if config.requiresUniverse and not resolve_universe(context) then
+        return false
+    end
+
+    state.mode = mode
+    state.title = config.title or get_mode_title(mode)
+    state._just_opened = true
+
+    return true
 end
 
 local function get_window_rect(screen_width, screen_height)
@@ -274,6 +379,47 @@ local function draw_legend(rect, fonts, colors)
         end
     end
 end
+
+-- ============================================================================
+-- View mode metadata
+-- ============================================================================
+
+VIEW_MODES = {
+    sector = {
+        title = "Sector Map",
+        get_bounds = function(context)
+            return get_world_bounds(context)
+        end,
+        draw = function(context, state, rect, bounds, colors, scale)
+            local player = PlayerManager.resolveLocalPlayer(context)
+            draw_entities(context, player, rect, bounds, colors, scale, state.centerX, state.centerY)
+        end,
+    },
+    galaxy = {
+        title = "Galaxy Map",
+        requiresUniverse = true,
+        get_bounds = function(_, _, universe)
+            if universe then
+                return Universe.getGalaxyBounds(universe, universe.currentGalaxyId)
+            end
+        end,
+        draw = function(context, state, rect, bounds, colors, scale)
+            draw_galaxy_view(context, rect, bounds, colors, scale, state.centerX, state.centerY)
+        end,
+    },
+    universe = {
+        title = "Universe Map",
+        requiresUniverse = true,
+        get_bounds = function(_, _, universe)
+            if universe then
+                return Universe.getUniverseBounds(universe)
+            end
+        end,
+        draw = function(context, state, rect, bounds, colors, scale)
+            draw_universe_view(context, rect, bounds, colors, scale, state.centerX, state.centerY)
+        end,
+    },
+}
 
 local function draw_galaxy_view(context, rect, bounds, colors, scale, centerX, centerY)
 	local universe = resolve_universe(context)
@@ -449,6 +595,7 @@ function map_window.draw(context)
         return false
     end
 
+    local mode = resolve_mode(state)
     local bounds = get_mode_bounds(context, state)
     if not bounds then
         return false
@@ -465,7 +612,7 @@ function map_window.draw(context)
     state.zoom = math_util.clamp(state.zoom or 1, state.min_zoom or 0.35, state.max_zoom or 6)
 
     if state._just_opened or not (state.centerX and state.centerY) then
-		reset_view(state, context, bounds)
+        reset_view(state, context, bounds)
         state._just_opened = false
     end
 
@@ -476,7 +623,7 @@ function map_window.draw(context)
     love.graphics.push("all")
     love.graphics.origin()
 
-    love.graphics.setColor(colors.overlay or { 0, 0, 0, 0.78 })
+    love.graphics.setColor(colors.overlay or DEFAULT_OVERLAY_COLOR)
     love.graphics.rectangle("fill", 0, 0, screenWidth, screenHeight)
 
     local frame = window.draw_frame {
@@ -484,7 +631,7 @@ function map_window.draw(context)
         y = windowRect.y,
         width = windowRect.width,
         height = windowRect.height,
-        title = state.title or "Sector Map",
+        title = state.title or get_mode_title(mode),
         fonts = fonts,
         state = state,
         input = {
@@ -537,7 +684,7 @@ function map_window.draw(context)
 
     state._was_mouse_down = isMouseDown
 
-    love.graphics.setColor(colors.background or theme.palette.surface_subtle or { 0.05, 0.06, 0.08, 0.95 })
+    love.graphics.setColor(colors.background or theme.palette.surface_subtle or DEFAULT_BACKGROUND_COLOR)
     love.graphics.rectangle("fill", rect.x, rect.y, rect.width, rect.height)
 
     if colors.border then
@@ -549,7 +696,7 @@ function map_window.draw(context)
     love.graphics.push()
     love.graphics.setScissor(rect.x, rect.y, rect.width, rect.height)
 
-    if colors.grid and (state.mode == "sector") then
+    if colors.grid and mode == "sector" then
         love.graphics.setColor(colors.grid)
         love.graphics.setLineWidth(1)
         local gridStep = 500
@@ -574,25 +721,15 @@ function map_window.draw(context)
     local boundsX1, boundsY1 = world_to_screen(bounds.x, bounds.y, rect, scale, state.centerX, state.centerY)
     local boundsX2, boundsY2 = world_to_screen(bounds.x + bounds.width, bounds.y + bounds.height, rect, scale, state.centerX, state.centerY)
 
-	local mode = state.mode or "sector"
-	if mode == "sector" then
-		love.graphics.setColor(colors.bounds or { 0.46, 0.64, 0.72, 0.8 })
-		love.graphics.setLineWidth(2)
-		love.graphics.rectangle("line", boundsX1, boundsY1, boundsX2 - boundsX1, boundsY2 - boundsY1)
+    local boundsColor = colors.bounds or DEFAULT_BOUNDS_COLOR
+    love.graphics.setColor(boundsColor)
+    love.graphics.setLineWidth(2)
+    love.graphics.rectangle("line", boundsX1, boundsY1, boundsX2 - boundsX1, boundsY2 - boundsY1)
 
-		local player = PlayerManager.resolveLocalPlayer(context)
-		draw_entities(context, player, rect, bounds, colors, scale, state.centerX, state.centerY)
-	elseif mode == "galaxy" then
-		love.graphics.setColor(colors.bounds or { 0.46, 0.64, 0.72, 0.8 })
-		love.graphics.setLineWidth(2)
-		love.graphics.rectangle("line", boundsX1, boundsY1, boundsX2 - boundsX1, boundsY2 - boundsY1)
-		draw_galaxy_view(context, rect, bounds, colors, scale, state.centerX, state.centerY)
-	elseif mode == "universe" then
-		love.graphics.setColor(colors.bounds or { 0.46, 0.64, 0.72, 0.8 })
-		love.graphics.setLineWidth(2)
-		love.graphics.rectangle("line", boundsX1, boundsY1, boundsX2 - boundsX1, boundsY2 - boundsY1)
-		draw_universe_view(context, rect, bounds, colors, scale, state.centerX, state.centerY)
-	end
+    local modeConfig = VIEW_MODES and VIEW_MODES[mode]
+    if modeConfig and modeConfig.draw then
+        modeConfig.draw(context, state, rect, bounds, colors, scale)
+    end
 
     love.graphics.setScissor()
     love.graphics.pop()
@@ -601,31 +738,71 @@ function map_window.draw(context)
 
     if bottomBar and bottomBar.inner then
         local bar = bottomBar.inner
-        local buttonWidth = math.max(120, math.min(160, bar.width * 0.3))
-        local buttonHeight = math.min(36, math.max(28, bar.height - 8))
-        local buttonRect = {
-            x = bar.x + bar.width - buttonWidth,
-            y = bar.y + (bar.height - buttonHeight) * 0.5,
-            width = buttonWidth,
-            height = buttonHeight,
+        local totalButtons = #MODE_BUTTONS
+        local buttonHeight = math.min(BUTTON_MAX_HEIGHT, math.max(BUTTON_MIN_HEIGHT, bar.height - 8))
+        local buttonWidth = math.max(
+            BUTTON_MIN_WIDTH,
+            math.min(BUTTON_MAX_WIDTH, (bar.width - BUTTON_SPACING * (totalButtons + 1)) / totalButtons)
+        )
+
+        local palette = theme.palette or {}
+        local activeFillColor = colors.mode_button_active or palette.accent or palette.primary or DEFAULT_ACTIVE_BUTTON_COLOR
+
+        local cursorX = bar.x + BUTTON_SPACING
+        local input = {
+            x = mouseX,
+            y = mouseY,
+            is_down = isMouseDown,
+            just_pressed = justPressed,
         }
 
-        local buttonResult = UIButton.render {
-            rect = buttonRect,
-            label = "Reset View",
-            fonts = fonts,
-            font = fonts.body,
-            input = {
-                x = mouseX,
-                y = mouseY,
-                is_down = isMouseDown,
-                just_pressed = justPressed,
-            },
-        }
+        for i = 1, totalButtons do
+            local button = MODE_BUTTONS[i]
+            local isModeButton = button.mode ~= nil
+            local isActive = isModeButton and mode == button.mode
 
-        if buttonResult.clicked then
-            reset_view(state, context, bounds)
-            clamp_center(state, bounds, rect, baseScale * state.zoom)
+            local buttonRect = {
+                x = cursorX,
+                y = bar.y + (bar.height - buttonHeight) * 0.5,
+                width = buttonWidth,
+                height = buttonHeight,
+            }
+
+            local result = UIButton.render {
+                rect = buttonRect,
+                label = button.label,
+                fonts = fonts,
+                font = fonts.body,
+                input = input,
+                disabled = isModeButton and not can_use_mode(context, button.mode),
+                fill_color = isActive and activeFillColor or nil,
+                hover_color = nil,
+                active_color = isActive and activeFillColor or nil,
+            }
+
+            if result.clicked then
+                if button.action == "reset" then
+                    reset_view(state, context, bounds)
+                    state._just_opened = false
+                    clamp_center(state, bounds, rect, scale)
+                elseif button.mode then
+                    if apply_mode(context, state, button.mode) then
+                        mode = resolve_mode(state)
+                        local modeBounds = get_mode_bounds(context, state)
+                        if modeBounds then
+                            bounds = modeBounds
+                            baseScale = math.min(rect.width / bounds.width, rect.height / bounds.height)
+                            scale = baseScale * state.zoom
+                            reset_view(state, context, bounds)
+                            state._just_opened = false
+                            clamp_center(state, bounds, rect, scale)
+                            boundsColor = colors.bounds or DEFAULT_BOUNDS_COLOR
+                        end
+                    end
+                end
+            end
+
+            cursorX = cursorX + buttonWidth + BUTTON_SPACING
         end
     end
 
@@ -656,28 +833,10 @@ function map_window.keypressed(context, key)
         return true
     end
 
-	if key == "1" then
-		state.mode = "sector"
-		state.title = "Sector Map"
-		state._just_opened = true
-		return true
-	elseif key == "2" then
-		local universe = resolve_universe(context)
-		if universe then
-			state.mode = "galaxy"
-			state.title = "Galaxy Map"
-			state._just_opened = true
-		end
-		return true
-	elseif key == "3" then
-		local universe = resolve_universe(context)
-		if universe then
-			state.mode = "universe"
-			state.title = "Universe Map"
-			state._just_opened = true
-		end
-		return true
-	end
+    local targetMode = MODE_KEYBINDS[key]
+    if targetMode then
+        return apply_mode(context, state, targetMode)
+    end
 
     return true
 end

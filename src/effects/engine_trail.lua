@@ -302,6 +302,11 @@ function EngineTrail:update(dt)
     local active = (self.active or forcedActive) and effectiveStrength > 0
     local targetEmissionRate = 0
 
+    local posX = (self.position and self.position.x) or 0
+    local posY = (self.position and self.position.y) or 0
+    self.system:setDirection(self.direction or 0)
+    self.system:setPosition(posX, posY)
+
     if active then
         -- Dramatic emission rate for gorgeous trails
         local baseRate = 250
