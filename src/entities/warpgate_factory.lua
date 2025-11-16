@@ -3,6 +3,48 @@ local loader = require("src.blueprints.loader")
 
 local warpgate_factory = {}
 
+local function compute_polygon_radius(points)
+    local maxRadius = 0
+    if type(points) ~= "table" then
+        return maxRadius
+    end
+
+    for i = 1, #points, 2 do
+        local x = points[i] or 0
+        local y = points[i + 1] or 0
+        local radius = math.sqrt(x * x + y * y)
+        if radius > maxRadius then
+            maxRadius = radius
+        end
+    end
+
+    return maxRadius
+end
+
+local function resolve_base_polygon(drawable)
+    if type(drawable) ~= "table" then
+        return nil
+    end
+
+    if type(drawable.polygon) == "table" and #drawable.polygon >= 6 then
+        return drawable.polygon
+    end
+
+    local parts = drawable.parts
+    if type(parts) ~= "table" then
+        return nil
+    end
+
+    for i = 1, #parts do
+        local part = parts[i]
+        if part and (part.type == nil or part.type == "polygon") and type(part.points) == "table" and #part.points >= 6 then
+            return part.points
+        end
+    end
+
+    return nil
+end
+
 local function clone_vector(vec)
     if type(vec) ~= "table" then
         return { x = 0, y = 0 }
@@ -84,6 +126,30 @@ function warpgate_factory.instantiate(blueprint, context)
     entity.velocity = clone_vector(entity.velocity)
     entity.rotation = entity.rotation or 0
 
+    local health = entity.health
+    if type(health) ~= "table" then
+        health = {
+            current = math.huge,
+            max = math.huge,
+            showTimer = 0,
+        }
+        entity.health = health
+    else
+        health.current = health.current or health.max or math.huge
+        health.max = health.max or math.huge
+        health.showTimer = health.showTimer or 0
+    end
+
+    if type(health.shield) ~= "table" then
+        health.shield = {
+            current = 0,
+            max = 0,
+        }
+    else
+        health.shield.current = health.shield.current or 0
+        health.shield.max = health.shield.max or 0
+    end
+
     apply_blueprint_overrides(entity, context)
     apply_context_overrides(entity, context)
 
@@ -99,6 +165,15 @@ function warpgate_factory.instantiate(blueprint, context)
     entity.mountRadius = radius
     entity.hoverRadius = entity.hoverRadius or radius
     entity.targetRadius = entity.targetRadius or radius
+    local basePolygon = resolve_base_polygon(entity.drawable)
+    if basePolygon then
+        entity.drawable.polygon = entity.drawable.polygon or basePolygon
+        local polygonRadius = compute_polygon_radius(basePolygon)
+        if polygonRadius and polygonRadius > 0 then
+            entity.targetRadius = math.max(entity.targetRadius or 0, polygonRadius)
+            entity.hoverRadius = math.max(entity.hoverRadius or 0, polygonRadius)
+        end
+    end
     entity.cullRadius = entity.cullRadius or radius * 1.4
 
     entity.disableRenderCulling = entity.disableRenderCulling ~= false and true

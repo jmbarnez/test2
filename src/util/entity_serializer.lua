@@ -54,22 +54,29 @@ local function copy_serializable(value, seen)
     return result
 end
 
-local function prune_empty(tbl)
+local function prune_empty(tbl, seen)
     if type(tbl) ~= "table" then
         return tbl
     end
+
+    seen = seen or {}
+    if seen[tbl] then
+        return tbl
+    end
+    seen[tbl] = true
 
     for key, value in pairs(tbl) do
         if value == nil then
             tbl[key] = nil
         elseif type(value) == "table" then
-            prune_empty(value)
+            prune_empty(value, seen)
             if next(value) == nil then
                 tbl[key] = nil
             end
         end
     end
 
+    seen[tbl] = nil
     return tbl
 end
 
