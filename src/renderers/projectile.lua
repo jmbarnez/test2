@@ -102,6 +102,74 @@ function projectile_renderer.draw(entity)
         love.graphics.setColor(highlightColor[1], highlightColor[2], highlightColor[3], highlightAlpha)
         love.graphics.rectangle("fill", -halfLength, -highlightWidth * 0.5, length, highlightWidth)
 
+    elseif shape == "flame" then
+        local vx = entity.velocity and entity.velocity.x or 0
+        local vy = entity.velocity and entity.velocity.y or 0
+        local angle
+        if vx ~= 0 or vy ~= 0 then
+            angle = math.atan2(vy, vx)
+        else
+            angle = (entity.rotation or 0) - math.pi * 0.5
+        end
+
+        local length = drawable.length or size * 5.2
+        local width = drawable.width or size * 1.6
+        local innerLength = drawable.innerLength or length * 0.85
+        local coreLength = drawable.coreLength or length * 0.65
+        local highlightLength = drawable.highlightLength or length * 0.5
+        local tailLength = drawable.tailLength or length * 0.28
+        local tipScale = drawable.tipScale or 0.22
+        local wobbleScale = drawable.wobbleScale or 0.3
+        local flickerSpeed = drawable.flickerSpeed or 13.0
+        local flickerAmount = drawable.flickerAmount or 0.18
+
+        local seed = entity._flameSeed
+        if not seed then
+            if love and love.math and love.math.random then
+                seed = love.math.random() * math.pi * 2
+            else
+                seed = math.random() * math.pi * 2
+            end
+            entity._flameSeed = seed
+        end
+
+        local time = love.timer and love.timer.getTime and love.timer.getTime() or 0
+        local flicker = math.sin(time * flickerSpeed + seed) * flickerAmount
+
+        local outerWidth = width
+        local innerWidth = drawable.innerWidth or width * 0.72
+        local coreWidth = drawable.coreWidth or width * 0.42
+        local highlightWidth = drawable.highlightWidth or width * 0.24
+
+        love.graphics.translate(x, y)
+        love.graphics.rotate(angle)
+
+        local function draw_flame_layer(layerLength, baseWidth, colorVec, alpha, tipFactor)
+            if not colorVec then
+                return
+            end
+            local wobble = 1 + flicker * wobbleScale
+            local tipWidth = math.max(baseWidth * (tipFactor or tipScale), baseWidth * 0.08)
+            local forward = layerLength
+            local mid = forward * 0.6
+            local tail = -tailLength
+
+            love.graphics.setColor(colorVec[1], colorVec[2], colorVec[3], alpha)
+            love.graphics.polygon("fill",
+                tail, 0,
+                0, -baseWidth * wobble * 0.52,
+                mid, -tipWidth * (1 + flicker * 0.35),
+                forward, 0,
+                mid, tipWidth * (1 + flicker * 0.35),
+                0, baseWidth * wobble * 0.52
+            )
+        end
+
+        draw_flame_layer(length, outerWidth, glowColor, outerAlpha, drawable.tipScale)
+        draw_flame_layer(innerLength, innerWidth, glowColor, innerAlpha, (drawable.innerTipScale or tipScale * 0.9))
+        draw_flame_layer(coreLength, coreWidth, coreColor, coreAlpha, (drawable.coreTipScale or tipScale * 0.7))
+        draw_flame_layer(highlightLength, highlightWidth, highlightColor, highlightAlpha, (drawable.highlightTipScale or tipScale * 0.55))
+
     elseif shape == "missile" then
         local length = drawable.length or size * 4.2
         local width = drawable.width or size * 0.9

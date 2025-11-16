@@ -168,6 +168,7 @@ constants.enemies = {
         enemy_scout = 60,
         enemy_drone = 45,
         enemy_boss = 500,
+        enemy_ram_tiny = 80,
     },
     xp_rewards = {
         enemy_scout = {
@@ -182,6 +183,11 @@ constants.enemies = {
         },
         enemy_boss = {
             amount = 150,
+            category = "combat",
+            skill = "weapons",
+        },
+        enemy_ram_tiny = {
+            amount = 32,
             category = "combat",
             skill = "weapons",
         },

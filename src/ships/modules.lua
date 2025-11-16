@@ -190,6 +190,16 @@ local function apply_module_effects(entity)
                     key = key,
                 }
                 abilityLookup[key] = true
+            else
+                -- Debug: log when ability module is missing ability component
+                if item then
+                    print(string.format("[DEBUG] Ability slot %d has item '%s' but no module.ability component", i, item.id or "unknown"))
+                    if item.module then
+                        print("  - item.module exists but no ability field")
+                    else
+                        print("  - item.module is nil")
+                    end
+                end
             end
         end
     end

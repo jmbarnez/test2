@@ -1,6 +1,7 @@
 local loader = require("src.blueprints.loader")
 local Items = require("src.items.registry")
 local ship_util = require("src.ships.util")
+local table_util = require("src.util.table")
 
 local cargo = {}
 
@@ -130,6 +131,64 @@ local function can_fit(cargoComponent, additionalVolume)
     local capacity = ship_util.sanitize_positive_number(cargoComponent.capacity)
     local used = ship_util.sanitize_positive_number(cargoComponent.used)
     return volume <= math.max(0, capacity - used)
+end
+
+function cargo.add_item_instance(cargoComponent, instance, quantity)
+    if type(cargoComponent) ~= "table" or type(instance) ~= "table" then
+        return false, "invalid_instance"
+    end
+
+    local qty = sanitize_quantity(quantity or instance.quantity or 1)
+    if qty <= 0 then
+        qty = 1
+    end
+
+    local perVolume = ship_util.sanitize_positive_number(instance.volume or instance.unitVolume)
+    if perVolume <= 0 then
+        perVolume = 1
+    end
+
+    if not can_fit(cargoComponent, perVolume * qty) then
+        return false, "insufficient_capacity"
+    end
+
+    local items = ensure_items_table(cargoComponent)
+
+    if instance.stackable then
+        local existing = find_existing_item(items, instance.id)
+        if existing then
+            existing.quantity = sanitize_quantity((existing.quantity or 0) + qty)
+            existing.volume = ship_util.sanitize_positive_number(existing.volume or perVolume)
+
+            local deltaVolume = perVolume * qty
+            cargoComponent.used = ship_util.sanitize_positive_number(cargoComponent.used) + deltaVolume
+            cargoComponent.capacity = ship_util.sanitize_positive_number(cargoComponent.capacity)
+            cargoComponent.available = math.max(0, cargoComponent.capacity - cargoComponent.used)
+            cargoComponent.dirty = true
+            return true
+        end
+    end
+
+    local deltaVolume = perVolume * qty
+    if instance.stackable then
+        local copy = table_util.deep_copy(instance)
+        copy.quantity = qty
+        copy.volume = perVolume
+        items[#items + 1] = copy
+    else
+        for _ = 1, qty do
+            local copy = table_util.deep_copy(instance)
+            copy.quantity = 1
+            copy.volume = perVolume
+            items[#items + 1] = copy
+        end
+    end
+
+    cargoComponent.used = ship_util.sanitize_positive_number(cargoComponent.used) + deltaVolume
+    cargoComponent.capacity = ship_util.sanitize_positive_number(cargoComponent.capacity)
+    cargoComponent.available = math.max(0, cargoComponent.capacity - cargoComponent.used)
+    cargoComponent.dirty = true
+    return true
 end
 
 function cargo.try_add_item(cargoComponent, descriptor, quantity)

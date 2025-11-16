@@ -7,6 +7,168 @@ local love = love
 local graphics = love and love.graphics
 local timer = love and love.timer
 
+local plasmaShader
+local plasmaShaderFailed
+local flameShader
+local flameShaderFailed
+
+local function get_plasma_shader()
+    if plasmaShaderFailed then
+        return nil
+    end
+    if plasmaShader then
+        return plasmaShader
+    end
+
+    if not (graphics and graphics.newShader) then
+        plasmaShaderFailed = true
+        return nil
+    end
+
+    local shaderSource = [[
+        extern vec2 beamOrigin;
+        extern mat2 invBeamMatrix;
+        extern float beamLength;
+        extern float beamHalfWidth;
+        extern float time;
+        extern vec4 beamColor;
+        extern vec4 glowColor;
+
+        float saturate(float v) {
+            return clamp(v, 0.0, 1.0);
+        }
+
+        float plasma_noise(vec2 p, float t) {
+            float n = sin(p.x * 5.1 + t * 6.2);
+            n += sin(p.y * 8.4 - t * 3.6) * 0.6;
+            n += sin(p.x * 11.7 + p.y * 4.3 + t * 4.8) * 0.35;
+            n += sin((p.x - p.y) * 3.7 - t * 7.9) * 0.22;
+            return n;
+        }
+
+        vec4 effect(vec4 color, Image tex, vec2 texture_coords, vec2 screen_coords) {
+            vec2 localPos = invBeamMatrix * (screen_coords - beamOrigin);
+
+            float lengthSafe = max(beamLength, 0.0001);
+            float halfWidth = max(beamHalfWidth, 0.0001);
+
+            float along = saturate(localPos.x / lengthSafe);
+            float head = smoothstep(0.0, 0.08, along);
+            float tail = 1.0 - smoothstep(0.72, 1.02, along);
+            float axial = head * tail;
+
+            float radial = abs(localPos.y) / halfWidth;
+            float core = exp(-pow(radial * 1.45, 2.2));
+            float shell = exp(-pow((radial - 0.55) * 2.6, 2.4));
+
+            vec2 noisePos = vec2(localPos.x / max(halfWidth * 2.0, 0.001), localPos.y / max(halfWidth, 0.001));
+            float turbulence = plasma_noise(noisePos, time);
+            float flicker = 0.68 + 0.32 * sin(time * 9.7 + localPos.x * 0.12 + sin(localPos.y * 3.1 + time * 4.2));
+
+            float intensity = (core * 1.05 + shell * (0.55 + turbulence * 0.38));
+            intensity *= axial;
+            intensity *= flicker;
+
+            float outerGlow = saturate(1.0 - smoothstep(0.95, 1.1, radial));
+            float glowFactor = outerGlow * (0.45 + 0.35 * turbulence);
+
+            vec3 colorOut = mix(glowColor.rgb, beamColor.rgb, saturate(core * 0.8 + shell * 0.6));
+            vec3 plasma = colorOut * intensity + glowColor.rgb * glowFactor * 0.85;
+
+            float alpha = saturate(intensity * 1.15 + glowFactor * 0.65);
+            return vec4(plasma, alpha);
+        }
+    ]]
+
+    local ok, shaderOrError = pcall(graphics.newShader, shaderSource)
+    if not ok then
+        plasmaShaderFailed = true
+        print("Failed to load plasma beam shader:", shaderOrError)
+        return nil
+    end
+
+    plasmaShader = shaderOrError
+    return plasmaShader
+end
+
+local function get_flame_shader()
+    if flameShaderFailed then
+        return nil
+    end
+    if flameShader then
+        return flameShader
+    end
+
+    if not (graphics and graphics.newShader) then
+        flameShaderFailed = true
+        return nil
+    end
+
+    local shaderSource = [[
+        extern vec2 beamOrigin;
+        extern mat2 invBeamMatrix;
+        extern float beamLength;
+        extern float beamHalfWidth;
+        extern float time;
+        extern vec4 beamColor;
+        extern vec4 glowColor;
+
+        float saturate(float v) {
+            return clamp(v, 0.0, 1.0);
+        }
+
+        float flame_noise(vec2 p, float t) {
+            float n = sin(p.x * 3.2 - t * 5.8);
+            n += sin(p.y * 7.6 + t * 3.4) * 0.6;
+            n += sin((p.x + p.y) * 5.1 + t * 6.2) * 0.45;
+            n += sin(p.y * 11.3 - t * 7.1) * 0.25;
+            return n;
+        }
+
+        vec4 effect(vec4 color, Image tex, vec2 texture_coords, vec2 screen_coords) {
+            vec2 localPos = invBeamMatrix * (screen_coords - beamOrigin);
+
+            float safeLength = max(beamLength, 0.0001);
+            float halfWidth = max(beamHalfWidth, 0.0001);
+
+            float along = saturate(localPos.x / safeLength);
+            float ignite = smoothstep(0.0, 0.1, along);
+            float cool = 1.0 - smoothstep(0.6, 1.05, along);
+            float axial = ignite * cool;
+
+            float radial = abs(localPos.y) / halfWidth;
+            float core = exp(-pow(radial * 1.6, 2.6));
+            float mantle = exp(-pow((radial - 0.45) * 3.3, 2.3));
+
+            vec2 noiseCoord = vec2(localPos.x / max(halfWidth * 1.8, 0.001), localPos.y / max(halfWidth, 0.001));
+            float turbulence = flame_noise(noiseCoord, time);
+            float flicker = 0.7 + 0.3 * sin(time * 12.0 + localPos.x * 0.18 + sin(localPos.y * 2.8 - time * 4.7));
+
+            float intensity = (core * 1.05 + mantle * (0.4 + turbulence * 0.35));
+            intensity *= axial * flicker;
+
+            float plume = saturate(1.0 - smoothstep(0.85, 1.02, radial));
+            float glow = plume * (0.4 + 0.3 * turbulence);
+
+            vec3 tint = mix(glowColor.rgb, beamColor.rgb, saturate(core * 0.9 + mantle * 0.55));
+            vec3 result = tint * intensity + glowColor.rgb * glow * 0.9;
+
+            float alpha = saturate(intensity * 1.1 + glow * 0.72);
+            return vec4(result, alpha);
+        }
+    ]]
+
+    local ok, shaderOrError = pcall(graphics.newShader, shaderSource)
+    if not ok then
+        flameShaderFailed = true
+        print("Failed to load flame beam shader:", shaderOrError)
+        return nil
+    end
+
+    flameShader = shaderOrError
+    return flameShader
+end
+
 local SPARK_VELOCITY_DAMPING = 0.88
 
 ---@class WeaponBeamVFXContext
@@ -184,6 +346,144 @@ return function(context)
                                 graphics.line(branch.x, branch.y, branchEndX, branchEndY)
                             end
                         end
+                    end
+                elseif beamStyle == "plasma" then
+                    local shader = get_plasma_shader()
+                    if shader then
+                        local startWorldX, startWorldY = graphics.transformPoint(0, 0)
+                        local axisXx, axisXy = graphics.transformPoint(1, 0)
+                        axisXx = axisXx - startWorldX
+                        axisXy = axisXy - startWorldY
+                        local axisYx, axisYy = graphics.transformPoint(0, 1)
+                        axisYx = axisYx - startWorldX
+                        axisYy = axisYy - startWorldY
+
+                        local det = axisXx * axisYy - axisXy * axisYx
+                        if math.abs(det) > 1e-6 then
+                            local invDet = 1 / det
+                            local invM11 = axisYy * invDet
+                            local invM12 = -axisXy * invDet
+                            local invM21 = -axisYx * invDet
+                            local invM22 = axisXx * invDet
+
+                            shader:send("beamOrigin", { startWorldX, startWorldY })
+                            shader:send("invBeamMatrix", { invM11, invM12, invM21, invM22 })
+                            shader:send("beamLength", length)
+
+                            local halfWidth = math.max(baseWidth * 0.6, 0.75)
+                            shader:send("beamHalfWidth", halfWidth)
+
+                            local t = timer and timer.getTime and timer.getTime() or 0
+                            shader:send("time", t)
+
+                            shader:send("beamColor", {
+                                color[1] or 1,
+                                color[2] or 1,
+                                color[3] or 1,
+                                color[4] or 1,
+                            })
+                            shader:send("glowColor", {
+                                glow[1] or 1,
+                                glow[2] or 1,
+                                glow[3] or 1,
+                                glow[4] or 1,
+                            })
+
+                            graphics.setShader(shader)
+                            graphics.setColor(1.0, 1.0, 1.0, 1.0)
+                            graphics.rectangle("fill", 0, -halfWidth, length, halfWidth * 2)
+                            graphics.setShader()
+                        else
+                            shader = nil
+                        end
+                    end
+
+                    if not shader then
+                        local glowWidth = math.max(baseWidth * 1.5, baseWidth + 1.2)
+                        local coreWidth = math.max(baseWidth * 0.55, 0.45)
+                        local highlightWidth = math.max(coreWidth * 0.45, 0.22)
+
+                        local halfGlow = glowWidth * 0.5
+                        local halfCore = coreWidth * 0.5
+                        local halfHighlight = highlightWidth * 0.5
+
+                        graphics.setColor(glow[1], glow[2], glow[3], 0.28)
+                        graphics.rectangle("fill", 0, -halfGlow, length, glowWidth)
+
+                        graphics.setColor(color[1], color[2], color[3], 0.95)
+                        graphics.rectangle("fill", 0, -halfCore, length, coreWidth)
+
+                        graphics.setColor(1.0, 1.0, 1.0, 0.6)
+                        graphics.rectangle("fill", 0, -halfHighlight, length, highlightWidth)
+                    end
+                elseif beamStyle == "flame" then
+                    local shader = get_flame_shader()
+                    if shader then
+                        local startWorldX, startWorldY = graphics.transformPoint(0, 0)
+                        local axisXx, axisXy = graphics.transformPoint(1, 0)
+                        axisXx = axisXx - startWorldX
+                        axisXy = axisXy - startWorldY
+                        local axisYx, axisYy = graphics.transformPoint(0, 1)
+                        axisYx = axisYx - startWorldX
+                        axisYy = axisYy - startWorldY
+
+                        local det = axisXx * axisYy - axisXy * axisYx
+                        if math.abs(det) > 1e-6 then
+                            local invDet = 1 / det
+                            local invM11 = axisYy * invDet
+                            local invM12 = -axisXy * invDet
+                            local invM21 = -axisYx * invDet
+                            local invM22 = axisXx * invDet
+
+                            shader:send("beamOrigin", { startWorldX, startWorldY })
+                            shader:send("invBeamMatrix", { invM11, invM12, invM21, invM22 })
+                            shader:send("beamLength", length)
+
+                            local halfWidth = math.max(baseWidth * 0.65, 1.1)
+                            shader:send("beamHalfWidth", halfWidth)
+
+                            local t = timer and timer.getTime and timer.getTime() or 0
+                            shader:send("time", t)
+
+                            shader:send("beamColor", {
+                                color[1] or 1,
+                                color[2] or 1,
+                                color[3] or 1,
+                                color[4] or 1,
+                            })
+                            shader:send("glowColor", {
+                                glow[1] or 1,
+                                glow[2] or 1,
+                                glow[3] or 1,
+                                glow[4] or 1,
+                            })
+
+                            graphics.setShader(shader)
+                            graphics.setColor(1.0, 1.0, 1.0, 1.0)
+                            graphics.rectangle("fill", 0, -halfWidth, length, halfWidth * 2)
+                            graphics.setShader()
+                        else
+                            shader = nil
+                        end
+                    end
+
+                    if not shader then
+                        local glowWidth = math.max(baseWidth * 2.2, baseWidth + 1.8)
+                        local coreWidth = math.max(baseWidth * 0.7, 0.9)
+                        local highlightWidth = math.max(coreWidth * 0.55, 0.4)
+
+                        local halfGlow = glowWidth * 0.5
+                        local halfCore = coreWidth * 0.5
+                        local halfHighlight = highlightWidth * 0.5
+
+                        graphics.setColor(glow[1], glow[2], glow[3], 0.32)
+                        graphics.rectangle("fill", 0, -halfGlow, length, glowWidth)
+
+                        graphics.setColor(color[1], color[2], color[3], 0.95)
+                        graphics.rectangle("fill", 0, -halfCore, length, coreWidth)
+
+                        graphics.setColor(1.0, 1.0, 1.0, 0.75)
+                        graphics.rectangle("fill", 0, -halfHighlight, length, highlightWidth)
                     end
                 else
                     local glowWidth = math.max(baseWidth * 1.5, baseWidth + 1.2)

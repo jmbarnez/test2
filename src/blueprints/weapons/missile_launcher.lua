@@ -72,6 +72,7 @@ return {
                 acceleration = 720,
                 minSpeed = 140,
                 maxSpeed = 520,
+                usePhysicsSteering = true,
                 faceTarget = true,
                 hitRadius = 14,
                 explosion = {

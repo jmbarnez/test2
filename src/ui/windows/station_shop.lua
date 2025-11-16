@@ -5,6 +5,7 @@ local ShipCargo = require("src.ships.cargo")
 local PlayerManager = require("src.player.manager")
 local CargoRendering = require("src.ui.windows.cargo.rendering")
 local CargoData = require("src.ui.windows.cargo.data")
+local loader = require("src.blueprints.loader")
 
 ---@diagnostic disable-next-line: undefined-global
 local love = love
@@ -108,6 +109,19 @@ end
 local function ensure_shop_items(state)
     if state._shopItems then
         return state._shopItems
+    end
+
+    -- Pre-register module blueprints for the shop
+    local modules_to_stock = {
+        "ability_dash",
+        "ability_afterburner",
+        "shield_t1",
+    }
+    for _, moduleId in ipairs(modules_to_stock) do
+        local ok, blueprint = pcall(loader.load, "modules", moduleId)
+        if ok and blueprint then
+            Items.registerModuleBlueprint(blueprint)
+        end
     end
 
     local items = {}
@@ -254,8 +268,8 @@ function station_shop.draw(context, params)
 
         if just_pressed then
             if buyHovered and not buyDisabled then
-                local descriptor = definition or { id = itemId, name = item.name, volume = item.volume, unitVolume = item.unitVolume }
-                local added = ShipCargo.try_add_item(cargoComponent, descriptor, currentQty)
+                local instance = Items.instantiate(itemId)
+                local added = instance and ShipCargo.add_item_instance(cargoComponent, instance, currentQty)
                 if added then
                     PlayerManager.adjustCurrency(context, -totalCost)
                 end

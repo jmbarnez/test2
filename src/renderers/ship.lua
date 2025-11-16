@@ -8,6 +8,8 @@
 local constants = require("src.constants.game")
 local vector = require("src.util.vector")
 local drawable_helpers = require("src.renderers.drawable_helpers")
+local shield_renderer = require("src.renderers.shield_renderer")
+local hud_health_bar = require("src.renderers.hud_health_bar")
 
 local normalise_color = drawable_helpers.normalise_color
 
@@ -137,23 +139,6 @@ local function draw_wrapped_arc(radius, startAngle, endAngle, lineWidth)
         love.graphics.arc("line", "open", 0, 0, radius, segmentStart, segmentEnd)
         currentStart = currentEnd
     end
-end
-
-local function resolve_shield(entity)
-    if not entity then
-        return nil
-    end
-
-    local shield = entity.shield
-    if type(shield) == "table" then
-        return shield
-    end
-
-    if entity.health and type(entity.health.shield) == "table" then
-        return entity.health.shield
-    end
-
-    return nil
 end
 
 local function resolve_entity_level(entity)
@@ -377,10 +362,10 @@ local function draw_ship_generic(entity, context)
 
     ensure_palette(drawable, entity)
     local palette = drawable.colors
-    
+
     local default_fill = normalise_color(palette.hull or { 0.2, 0.3, 0.5, 1 })
     local default_stroke = normalise_color(palette.outline or { 0.1, 0.15, 0.3, 1 })
-    
+
     local defaults = {
         fill = default_fill,
         stroke = default_stroke,
@@ -392,246 +377,44 @@ local function draw_ship_generic(entity, context)
     local radius = resolve_drawable_radius(drawable)
 
     ensure_base_polygon(drawable)
-
     love.graphics.push("all")
 
     love.graphics.translate(entity.position.x, entity.position.y)
     love.graphics.rotate(entity.rotation or 0)
 
-    drawable_helpers.draw_parts(parts, palette, defaults)
+    local dispatcher = drawable._partDispatcher
+    if not dispatcher then
+        dispatcher = {
+            polygon = function(part, pal, def)
+                drawable_helpers.draw_polygon_part(part, pal, def)
+
+                local mirror = part.mirror or part.mirrorX or part.mirrorHorizontal
+                if not mirror then
+                    return true
+                end
+
+                local mirrored = drawable_helpers.clone_part(part)
+                mirrored.points = drawable_helpers.mirror_points(part.points)
+                mirrored.mirror = nil
+                mirrored.mirrorX = nil
+                mirrored.mirrorHorizontal = nil
+                drawable_helpers.draw_polygon_part(mirrored, pal, def)
+
+                return true
+            end,
+            ellipse = function(part, pal, def)
+                drawable_helpers.draw_ellipse_part(part, pal, def)
+                return true
+            end,
+        }
+        drawable._partDispatcher = dispatcher
+    end
+
+    drawable_helpers.draw_parts_with_dispatcher(parts, palette, defaults, dispatcher, context)
 
     love.graphics.pop()
 
     return true
-end
-
---- Draw shield/hull impact pulses. Pulses are read from `entity.impactPulses`
--- and each entry should contain position/direction/intensity metadata.
--- This function attempts to use a shader to render directional shield
--- impacts and falls back to a simple radial glow for older/unsupported platforms.
-local function draw_impact_pulses(entity)
-    if not entity or not entity.position then
-        return
-    end
-
-    local pulses = entity.impactPulses
-    if type(pulses) ~= "table" or #pulses == 0 then
-        return
-    end
-
-    local shield = resolve_shield(entity)
-
-    local px = entity.position.x or 0
-    local py = entity.position.y or 0
-    local fallbackRadius = (shield and shield.visualRadius)
-        or entity.mountRadius
-        or resolve_drawable_radius(entity.drawable)
-        or entity.radius
-        or 48
-
-    love.graphics.push("all")
-    love.graphics.translate(px, py)
-    love.graphics.setBlendMode("add")
-
-    local rotation = entity.rotation or 0
-    local cosRotation
-    local sinRotation
-    if rotation ~= 0 then
-        cosRotation = math.cos(rotation)
-        sinRotation = math.sin(rotation)
-    end
-
-    ---@type love.Shader|nil
-    local shader = shieldImpactShader
-    local invM11, invM12, invM21, invM22
-    local shipCenterX, shipCenterY = love.graphics.transformPoint(0, 0)
-    local axisXx, axisXy = love.graphics.transformPoint(1, 0)
-    axisXx = axisXx - shipCenterX
-    axisXy = axisXy - shipCenterY
-    local axisYx, axisYy = love.graphics.transformPoint(0, 1)
-    axisYx = axisYx - shipCenterX
-    axisYy = axisYy - shipCenterY
-
-    if shader then
-        local det = axisXx * axisYy - axisXy * axisYx
-        if math.abs(det) > 1e-6 then
-            local invDet = 1 / det
-            invM11 = axisYy * invDet
-            invM12 = -axisXy * invDet
-            invM21 = -axisYx * invDet
-            invM22 = axisXx * invDet
-            shader:send("shipCenter", { shipCenterX, shipCenterY })
-            shader:send("invShipMatrix", { invM11, invM12, invM21, invM22 })
-            shader:send("time", love.timer.getTime())
-        else
-            shader = nil
-        end
-    end
-
-    for i = 1, #pulses do
-        local pulse = pulses[i]
-        local radius = math.max(pulse.radius or fallbackRadius, fallbackRadius)
-        local waveRadius = pulse.waveRadius or radius
-        local waveThickness = pulse.waveThickness or 3
-        local waveAlpha = pulse.waveAlpha or 0
-        local ringAlpha = pulse.ringAlpha or 0
-        local glowAlpha = pulse.glowAlpha or 0
-        local coreAlpha = pulse.coreAlpha or 0
-        local impactX = pulse.impactWorldX
-        local impactY = pulse.impactWorldY
-
-        if not (impactX and impactY) then
-            local legacyX = pulse.impactX or 0
-            local legacyY = pulse.impactY or 0
-
-            if cosRotation and sinRotation then
-                impactX = legacyX * cosRotation - legacyY * sinRotation
-                impactY = legacyX * sinRotation + legacyY * cosRotation
-            else
-                impactX = legacyX
-                impactY = legacyY
-            end
-        end
-        local intensity = pulse.intensity or 0.4
-        local progress = pulse.progress or 0
-
-        local pulseType = pulse.pulseType or "shield"
-        local impactColor = pulseType == "hull" and ship_renderer.HULL_GLOW_COLOR or ship_renderer.SHIELD_IMPACT_COLOR
-        local glowColor = pulseType == "hull" and ship_renderer.HULL_GLOW_COLOR or ship_renderer.SHIELD_GLOW_COLOR
-
-        if shader then
-            shader:send("impactLocal", { impactX, impactY })
-            shader:send("shieldRadius", radius)
-            shader:send("waveRadius", waveRadius)
-            shader:send("waveThickness", waveThickness)
-            shader:send("impactIntensity", intensity)
-            shader:send("glowAlpha", glowAlpha)
-            shader:send("waveAlpha", waveAlpha)
-            shader:send("ringAlpha", ringAlpha)
-            shader:send("coreAlpha", coreAlpha)
-            shader:send("progress", progress)
-            shader:send("impactColor", {
-                impactColor[1],
-                impactColor[2],
-                impactColor[3],
-                impactColor[4] or 1
-            })
-            shader:send("glowColor", {
-                glowColor[1],
-                glowColor[2],
-                glowColor[3],
-                glowColor[4] or 1
-            })
-
-            love.graphics.setShader(shader)
-            love.graphics.setColor(1, 1, 1, 1)
-            local renderRadius = math.max(radius * 1.3, waveRadius + waveThickness * 2.2)
-            love.graphics.circle("fill", 0, 0, renderRadius)
-            love.graphics.setShader()
-        else
-            if glowAlpha > 0.01 then
-                love.graphics.setColor(
-                    glowColor[1],
-                    glowColor[2],
-                    glowColor[3],
-                    glowAlpha * 0.35
-                )
-                love.graphics.circle("fill", 0, 0, radius * 1.12)
-
-                love.graphics.setColor(
-                    glowColor[1],
-                    glowColor[2],
-                    glowColor[3],
-                    glowAlpha * 0.2
-                )
-                love.graphics.circle("fill", 0, 0, radius * 1.25)
-            end
-        end
-    end
-
-    love.graphics.setBlendMode("alpha")
-    love.graphics.pop()
-end
-
-ship_renderer.draw_shield_pulses = draw_impact_pulses
-
---- Draws the entity's health bar above the entity if configured.
--- This function reads from `entity.health` and `entity.healthBar`.
-local function draw_health_bar(entity)
-    local health = entity.health
-    if not (health and health.max and health.max > 0) then
-        return
-    end
-
-    local bar = entity.healthBar or ship_bar_defaults
-    if not bar or entity.player then
-        return
-    end
-
-    local showTimer = health.showTimer or 0
-    local showDuration = bar.showDuration or ship_bar_defaults.show_duration or 0
-    if showDuration > 0 then
-        if showTimer <= 0 then
-            return
-        end
-    end
-
-    local pct = math.max(0, math.min(1, (health.current or 0) / health.max))
-    local baseWidth = bar.width or ship_bar_defaults.width or 60
-    local width = baseWidth * 0.5
-    local height = bar.height or ship_bar_defaults.height or 5
-    local offset = math.abs(bar.offset or ship_bar_defaults.offset or 32)
-    local halfWidth = width * 0.5
-
-    local alpha
-    if showDuration > 0 then
-        alpha = math.min(1, showTimer / showDuration)
-    else
-        alpha = 1
-    end
-
-    if alpha <= 0 then
-        return
-    end
-
-    love.graphics.push()
-    love.graphics.translate(entity.position.x, entity.position.y - offset)
-
-    love.graphics.setColor(0, 0, 0, 0.55 * alpha)
-    love.graphics.rectangle("fill", -halfWidth, -height * 0.5, width, height)
-
-    if pct > 0 then
-        love.graphics.setColor(0.35, 1, 0.6, alpha)
-        love.graphics.rectangle("fill", -halfWidth, -height * 0.5, width * pct, height)
-    end
-
-    love.graphics.setColor(0, 0, 0, 0.9 * alpha)
-    love.graphics.setLineWidth(1)
-    love.graphics.rectangle("line", -halfWidth, -height * 0.5, width, height)
-
-    local level = resolve_entity_level(entity)
-    if level then
-        local font = love.graphics.getFont()
-        local text = tostring(level)
-        local paddingX, paddingY = 3, 2
-        local textWidth = font and font:getWidth(text) or (#text * 6)
-        local textHeight = font and font:getHeight() or 10
-        local badgeWidth = textWidth + paddingX * 2
-        local badgeHeight = math.max(textHeight + paddingY * 2, height)
-        local badgeX = halfWidth + 6
-        local badgeY = -badgeHeight * 0.5
-
-        love.graphics.setColor(0, 0, 0, 0.55 * alpha)
-        love.graphics.rectangle("fill", badgeX, badgeY, badgeWidth, badgeHeight)
-
-        love.graphics.setColor(0, 0, 0, 0.9 * alpha)
-        love.graphics.rectangle("line", badgeX, badgeY, badgeWidth, badgeHeight)
-
-        love.graphics.setColor(0.82, 0.88, 0.93, alpha)
-        love.graphics.print(text, badgeX + paddingX, badgeY + paddingY)
-    end
-
-    love.graphics.pop()
 end
 
 function ship_renderer.draw_body(entity, context)
@@ -648,10 +431,37 @@ function ship_renderer.draw(entity, context)
         return
     end
 
-    draw_impact_pulses(entity)
-    draw_health_bar(entity)
+    ship_renderer.draw_shield_pulses(entity)
+    ship_renderer.draw_health_bar(entity)
 end
 
+local function draw_shield_pulses(entity)
+    shield_renderer.draw(entity, {
+        shader = shieldImpactShader,
+        resolveDrawableRadius = function(_, drawable)
+            return resolve_drawable_radius(drawable)
+        end,
+        hullGlowColor = ship_renderer.HULL_GLOW_COLOR,
+        shieldGlowColor = ship_renderer.SHIELD_GLOW_COLOR,
+        shieldImpactColor = ship_renderer.SHIELD_IMPACT_COLOR,
+    })
+end
+
+local function draw_health_bar(entity)
+    hud_health_bar.draw(entity, {
+        defaults = {
+            width = ship_bar_defaults.width or 60,
+            height = ship_bar_defaults.height or 5,
+            offset = math.abs(ship_bar_defaults.offset or 32),
+            showDuration = ship_bar_defaults.show_duration or 0,
+            backgroundColor = { 0, 0, 0, 0.55 },
+            fillColor = { 0.35, 1, 0.6, 1 },
+            borderColor = { 0, 0, 0, 0.9 },
+        },
+    })
+end
+
+ship_renderer.draw_shield_pulses = draw_shield_pulses
 ship_renderer.draw_health_bar = draw_health_bar
 
 return ship_renderer

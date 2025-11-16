@@ -10,17 +10,27 @@ local love = love
 
 local ship_factory = {}
 
-
 local function apply_body_settings(body, body_config, stats)
-    if body_config.damping then
-        body:setLinearDamping(body_config.damping)
+    if not body_config then
+        return
     end
+
+    if body_config.damping or body_config.linearDamping then
+        body:setLinearDamping(body_config.damping or body_config.linearDamping)
+    elseif stats and stats.linear_damping then
+        body:setLinearDamping(stats.linear_damping)
+    end
+
     if body_config.angularDamping then
         body:setAngularDamping(body_config.angularDamping)
+    elseif stats and stats.angular_damping then
+        body:setAngularDamping(stats.angular_damping)
     end
-    if body_config.fixedRotation then
+
+    if body_config.fixedRotation ~= nil then
         body:setFixedRotation(body_config.fixedRotation)
     end
+
     if body_config.gravityScale then
         body:setGravityScale(body_config.gravityScale)
     end
@@ -30,14 +40,14 @@ local function apply_fixture_settings(fixture, fixture_config)
     if not fixture_config then
         return
     end
-    
+
     if fixture_config.friction then
         fixture:setFriction(fixture_config.friction)
     end
     if fixture_config.restitution then
         fixture:setRestitution(fixture_config.restitution)
     end
-    if fixture_config.sensor then
+    if fixture_config.sensor ~= nil then
         fixture:setSensor(fixture_config.sensor)
     end
 end
@@ -114,8 +124,76 @@ local function resolve_spawn(spawn, context, entity)
     return x, y
 end
 
+local function create_physics_body(entity, blueprint, context, spawn_x, spawn_y)
+    local physics = blueprint.physics or {}
+    local body_config = physics.body or {}
+    local body_type = body_config.type or "dynamic"
+
+    local body = love.physics.newBody(context.physicsWorld, spawn_x, spawn_y, body_type)
+    body:setAngle(entity.rotation)
+    body:setUserData(entity)
+
+    apply_body_settings(body, body_config, entity.stats)
+
+    -- Ships have fixed rotation by default unless explicitly configured otherwise
+    if body_config.fixedRotation == nil then
+        body:setFixedRotation(true)
+    end
+
+    return body
+end
+
+local function calculate_density(collider, base_density, density_source, total_shape_count)
+    if collider.density then
+        return collider.density
+    end
+
+    if density_source == "mass" then
+        return base_density / total_shape_count
+    end
+
+    return base_density
+end
+
+local function create_fixtures(entity, body, collider_defs, collider_shapes, physics, base_density, density_source, total_shape_count)
+    local shapes = {}
+    local fixtures = {}
+    local shape_index = 1
+
+    for index = 1, #collider_defs do
+        local collider = collider_defs[index]
+        local shapes_for_collider = collider_shapes[index]
+
+        for s = 1, #shapes_for_collider do
+            local shape = shapes_for_collider[s]
+            local density = calculate_density(collider, base_density, density_source, total_shape_count)
+
+            local fixture = love.physics.newFixture(body, shape, density)
+            apply_fixture_settings(fixture, collider.fixture or physics.fixture)
+            fixture:setUserData({
+                type = collider.name or collider.type or "ship",
+                entity = entity,
+                collider = collider.name,
+            })
+
+            shapes[shape_index] = shape
+            fixtures[shape_index] = fixture
+            shape_index = shape_index + 1
+        end
+    end
+
+    entity.body = body
+    entity.shape = shapes[1]
+    entity.fixture = fixtures[1]
+    entity.shapes = shapes
+    entity.fixtures = fixtures
+    entity.collider = nil
+end
+
 function ship_factory.instantiate(blueprint, context)
     assert(type(blueprint) == "table", "instantiate requires a blueprint table")
+    assert(context and context.physicsWorld, "Ship instantiation requires a physicsWorld in context")
+
     context = context or {}
 
     local entity = ShipRuntime.create_entity(blueprint.components or {})
@@ -137,52 +215,8 @@ function ship_factory.instantiate(blueprint, context)
     -- Initialize ship runtime state (health, cargo, etc.)
     ShipRuntime.initialize(entity, constants, context)
 
-    -- Initialize ability modules for enemies (if defined in blueprint)
-    if entity.abilityModules and type(entity.abilityModules) == "table" then
-        local abilityState = {}
-        for i = 1, #entity.abilityModules do
-            local entry = entity.abilityModules[i]
-            if entry.ability and entry.key then
-                abilityState[entry.key] = {
-                    cooldown = 0,
-                    cooldownDuration = entry.ability.cooldown or 0,
-                    activeTimer = 0,
-                    wasDown = false,
-                }
-            end
-        end
-        if next(abilityState) then
-            entity._abilityState = abilityState
-        end
-    end
-
     -- Create physics body
-    if not context.physicsWorld then
-        error("Ship instantiation requires a physicsWorld in context", 2)
-    end
-
-    local physics = blueprint.physics or {}
-    local body_config = physics.body or {}
-    local body_type = body_config.type or "dynamic"
-
-    local body = love.physics.newBody(context.physicsWorld, spawn_x, spawn_y, body_type)
-    body:setAngle(entity.rotation)
-    apply_body_settings(body, body_config, entity.stats)
-
-    local stats = entity.stats
-    if stats then
-        if stats.linear_damping then
-            body:setLinearDamping(stats.linear_damping)
-        end
-        if stats.angular_damping then
-            body:setAngularDamping(stats.angular_damping)
-        end
-    end
-    
-    -- Lock rotation - ships only rotate via player input, not collisions
-    body:setFixedRotation(true)
-    
-    body:setUserData(entity)
+    local body = create_physics_body(entity, blueprint, context, spawn_x, spawn_y)
 
     -- Setup colliders
     local collider_defs = entity.colliders
@@ -194,6 +228,7 @@ function ship_factory.instantiate(blueprint, context)
         end
     end
 
+    local physics = blueprint.physics or {}
     local base_density = physics.fixture and physics.fixture.density
     local density_source = "explicit"
     if not base_density then
@@ -216,42 +251,7 @@ function ship_factory.instantiate(blueprint, context)
     end
 
     -- Create fixtures
-    local shapes = {}
-    local fixtures = {}
-    local shape_index = 1
-
-    for index = 1, #collider_defs do
-        local collider = collider_defs[index]
-        local shapes_for_collider = collider_shapes[index]
-
-        for s = 1, #shapes_for_collider do
-            local shape = shapes_for_collider[s]
-
-            local density = collider.density or base_density
-            if density_source == "mass" and not collider.density then
-                density = base_density / total_shape_count
-            end
-
-            local fixture = love.physics.newFixture(body, shape, density)
-            apply_fixture_settings(fixture, collider.fixture or physics.fixture)
-            fixture:setUserData({
-                type = collider.name or collider.type or "ship",
-                entity = entity,
-                collider = collider.name,
-            })
-
-            shapes[shape_index] = shape
-            fixtures[shape_index] = fixture
-            shape_index = shape_index + 1
-        end
-    end
-
-    entity.body = body
-    entity.shape = shapes[1]
-    entity.fixture = fixtures[1]
-    entity.shapes = shapes
-    entity.fixtures = fixtures
-    entity.collider = nil
+    create_fixtures(entity, body, collider_defs, collider_shapes, physics, base_density, density_source, total_shape_count)
 
     entity.mountRadius = ShipRuntime.compute_drawable_radius(entity.drawable)
     if not entity.cullRadius then
@@ -270,13 +270,13 @@ function ship_factory.instantiate(blueprint, context)
     local previous_on_destroyed = entity.onDestroyed
     entity.onDestroyed = function(self, destruction_context)
         WreckageFactory.spawn(self, destruction_context)
-        
+
         -- Track quest progress for hunting enemies
         if self.enemy and self.lastDamagePlayerId and destruction_context then
             local QuestTracker = require("src.quests.tracker")
             QuestTracker.onEnemyDestroyed(destruction_context)
         end
-        
+
         if type(previous_on_destroyed) == "function" then
             previous_on_destroyed(self, destruction_context)
         end

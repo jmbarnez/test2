@@ -102,13 +102,13 @@ local function apply_homing(entity, dt, damageEntity, system)
     end
 
     local vx, vy = body:getLinearVelocity()
-    local speed = math.sqrt(vx * vx + vy * vy)
+    local currentSpeed = math.sqrt(vx * vx + vy * vy)
     local currentAngle
-    if speed > EPS then
+    if currentSpeed > EPS then
         currentAngle = atan2(vy, vx)
     else
         currentAngle = (body:getAngle() or 0) - math.pi * 0.5
-        speed = homing.initialSpeed or homing.speed or 0
+        currentSpeed = homing.initialSpeed or homing.speed or 0
     end
 
     if not desiredAngle then
@@ -124,37 +124,85 @@ local function apply_homing(entity, dt, damageEntity, system)
         delta = -maxTurn
     end
 
-    local newAngle = currentAngle + delta
+    local limitedAngle = currentAngle + delta
 
+    local desiredSpeed = currentSpeed
     local acceleration = homing.acceleration or homing.accel
     if acceleration and acceleration ~= 0 then
-        -- Accelerate toward maxSpeed if set, otherwise toward homing.speed
-        local targetSpeed = homing.maxSpeed or homing.speed or speed
-        if targetSpeed > speed then
-            speed = speed + acceleration * dt
-        elseif homing.speed and homing.speed < speed then
-            -- Decelerate toward homing.speed if it's lower than current speed
-            speed = math.max(homing.speed, speed - math.abs(acceleration) * dt)
+        local targetSpeed = homing.maxSpeed or homing.speed or desiredSpeed
+        if targetSpeed > desiredSpeed then
+            desiredSpeed = math.min(targetSpeed, desiredSpeed + acceleration * dt)
+        elseif homing.speed and homing.speed < desiredSpeed then
+            desiredSpeed = math.max(homing.speed, desiredSpeed - math.abs(acceleration) * dt)
         end
     elseif homing.speed then
-        speed = homing.speed
+        desiredSpeed = homing.speed
     end
 
     if homing.maxSpeed then
-        speed = math.min(speed, homing.maxSpeed)
+        desiredSpeed = math.min(desiredSpeed, homing.maxSpeed)
     end
     if homing.minSpeed then
-        speed = math.max(speed, homing.minSpeed)
+        desiredSpeed = math.max(desiredSpeed, homing.minSpeed)
     end
 
-    if speed <= EPS then
-        speed = EPS
+    if desiredSpeed <= EPS then
+        desiredSpeed = EPS
     end
 
-    local newVelX = math.cos(newAngle) * speed
-    local newVelY = math.sin(newAngle) * speed
+    local targetVelX = math.cos(limitedAngle) * desiredSpeed
+    local targetVelY = math.sin(limitedAngle) * desiredSpeed
+
+    local steeringAccel = homing.steeringAcceleration
+    if not steeringAccel and homing.usePhysicsSteering then
+        local referenceSpeed = math.max(desiredSpeed, homing.initialSpeed or 0, homing.speed or 0, homing.maxSpeed or 0)
+        steeringAccel = referenceSpeed * turnRate
+    end
+
+    local newVelX
+    local newVelY
+
+    if steeringAccel and steeringAccel > 0 then
+        local deltaVelX = targetVelX - vx
+        local deltaVelY = targetVelY - vy
+        local deltaVelMag = math.sqrt(deltaVelX * deltaVelX + deltaVelY * deltaVelY)
+        local maxDelta = steeringAccel * dt
+        if deltaVelMag > maxDelta then
+            local scale = maxDelta / deltaVelMag
+            deltaVelX = deltaVelX * scale
+            deltaVelY = deltaVelY * scale
+        end
+
+        newVelX = vx + deltaVelX
+        newVelY = vy + deltaVelY
+
+        local newSpeed = math.sqrt(newVelX * newVelX + newVelY * newVelY)
+        if newSpeed > desiredSpeed and newSpeed > EPS then
+            local scale = desiredSpeed / newSpeed
+            newVelX = newVelX * scale
+            newVelY = newVelY * scale
+            newSpeed = desiredSpeed
+        end
+
+        if homing.minSpeed and newSpeed < homing.minSpeed and newSpeed > EPS then
+            local scale = homing.minSpeed / newSpeed
+            newVelX = newVelX * scale
+            newVelY = newVelY * scale
+        end
+    else
+        newVelX = targetVelX
+        newVelY = targetVelY
+    end
+
     body:setLinearVelocity(newVelX, newVelY)
-    body:setAngle(newAngle + math.pi * 0.5)
+
+    local visualAngle
+    if math.abs(newVelX) > EPS or math.abs(newVelY) > EPS then
+        visualAngle = atan2(newVelY, newVelX)
+    else
+        visualAngle = limitedAngle
+    end
+    body:setAngle(visualAngle + math.pi * 0.5)
 
     if entity.velocity then
         entity.velocity.x = newVelX
@@ -162,7 +210,7 @@ local function apply_homing(entity, dt, damageEntity, system)
     end
 
     if homing.faceTarget then
-        entity.rotation = newAngle + math.pi * 0.5
+        entity.rotation = visualAngle + math.pi * 0.5
     end
 
     if homing.hitRadius and target and tx and ty then

@@ -11,7 +11,7 @@ return {
             { id = "enemy_drone", weight = 3 },
             { id = "enemy_scout", weight = 2 },
             { id = "enemy_boss", weight = 3 },
-            { id = "enemy_dasher", weight = 2 },
+            { id = "enemy_ram_tiny", weight = 4 },
         },
         spawn_radius = 1500,
         spawn_safe_radius = 900,

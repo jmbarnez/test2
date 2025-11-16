@@ -240,7 +240,9 @@ local mapVisibilityController = create_visibility_handlers("mapUI", {
         window_state._just_opened = visible
 
         if visible then
-            capture_input(state)
+            if state.uiInput then
+                state.uiInput.mouseCaptured = true
+            end
         else
             window_state._was_mouse_down = is_primary_mouse_down()
             release_input(state, true)

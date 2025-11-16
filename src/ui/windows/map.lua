@@ -671,7 +671,6 @@ function map_window.draw(context)
         if frame.dragging or state.mapDragging then
             context.uiInput.mouseCaptured = true
         end
-        context.uiInput.keyboardCaptured = true
     end
 
     local baseScale = math.min(rect.width / bounds.width, rect.height / bounds.height)

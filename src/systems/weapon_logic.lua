@@ -152,7 +152,17 @@ return function(context)
             end
 
             local dirX, dirY
-            if targetX and targetY then
+            local hasTarget = targetX and targetY
+            local preferForwardLaunch = weapon.preferForwardLaunch
+            if preferForwardLaunch == nil then
+                if weapon.projectileHoming or weapon.homing then
+                    preferForwardLaunch = true
+                else
+                    preferForwardLaunch = false
+                end
+            end
+            local launchForward = preferForwardLaunch and hasTarget and activeTarget
+            if hasTarget and not launchForward then
                 dirX = targetX - startX
                 dirY = targetY - startY
             else
