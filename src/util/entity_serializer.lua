@@ -1,5 +1,6 @@
 local table_util = require("src.util.table")
 local ShipRuntime = require("src.ships.runtime")
+local ComponentRegistry = require("src.util.component_registry")
 
 ---@diagnostic disable-next-line: undefined-global
 local love = love
@@ -242,30 +243,9 @@ local function serialize_pickup(entity)
 end
 
 local function serialize_generic_entity(entity)
-    local data = {
-        position = copy_position(entity),
-        rotation = entity.rotation,
-        velocity = copy_velocity(entity),
-        angularVelocity = copy_angular_velocity(entity),
-        health = copy_health(entity),
-        shield = copy_shield(entity),
-        energy = copy_energy(entity),
-        thrust = copy_thrust(entity),
-        stats = copy_serializable(entity.stats),
-        ai = copy_serializable(entity.ai),
-        loot = copy_serializable(entity.loot),
-        cargo = copy_serializable(entity.cargo),
-        quest = copy_serializable(entity.quest),
-        spawner = copy_serializable(entity.spawner),
-        chunkLevel = entity.chunkLevel,
-        miningVariant = entity.miningVariant,
-        faction = entity.faction,
-        enemy = entity.enemy,
-        station = entity.station,
-        asteroid = entity.asteroid,
-    }
-
-    return prune_empty(data)
+    -- Use component registry for generic serialization
+    -- This eliminates the need to manually list every component
+    return ComponentRegistry.serializeEntity(entity)
 end
 
 local function should_skip_entity(entity)

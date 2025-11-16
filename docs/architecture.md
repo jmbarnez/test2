@@ -1,131 +1,125 @@
-# Novus Architecture Overview
+# Architecture Overview
 
-This document provides a quick reference to the major architectural systems in **Novus** for both human developers and AI assistants. It outlines how the game boots, how gameplay state is orchestrated, and where to extend key gameplay loops.
+Novus is a top-down space action prototype built on **LÖVE 11.5** with a **tiny-ecs** entity-component-system. This document summarizes the runtime flow, major modules, and how data moves through the simulation.
 
----
+## High-Level Flow
 
-## Core Runtime Loop
+```mermaid
+graph TD
+    A[love.run] -->|calls| B[love.load]
+    B --> C[Gamestate.manage]
+    C --> D[start_menu]
+    D -->|switch| E[gameplay]
+    E --> F[World.initialize]
+    F --> G[tiny.world]
+    E --> H[Systems.initialize]
+    H --> I[System Update Loop]
+    I -->|per frame| J[tiny.world:update]
+```
 
-- **Entry Point (`main.lua`)** – Initializes window configuration, physics meters, audio, and switches to the start menu state using `hump.gamestate`. The custom `love.run` implements an optional manual frame limiter when VSYNC is off.
-- **States (`src/states/`)** – Game flow is driven by HUMP state objects. Key states are:
-  - `start_menu` – Handles the front-end menu.
-  - `gameplay` – Owns the active world, ECS, UI, and camera logic.
+1. `main.lua` sets up window/physics defaults, registers frame limiting, and hands control to **hump.gamestate**.
+2. `start_menu` handles title UI. New/Load transitions switch to `src.states.gameplay`.
+3. `gameplay` initializes the physics world, spawns the sector via blueprints, and wires ECS systems.
+4. Each frame, Love2D pumps events, runs physics with a fixed timestep, then updates the TinyECS world.
 
-When `gameplay` is entered it loads the world, initializes the ECS systems, spawns the player, and starts background music. Leaving the state tears everything down cleanly (physics, ECS systems, UI state, audio).
+## Key Modules
 
----
+### Game State (`src/states/gameplay.lua`)
+- Owns global simulation state (world, camera, player references).
+- Coordinates save/load, docking, targeting, and the main update loop.
+- Provides `GameContext` helpers (see below) to standardize system dependencies.
 
-## Entity Component System (ECS)
+### Game Context (`src/states/gameplay/context.lua`)
+- `GameContext.compose(state, overrides?)` creates a context carrying `resolveState`, `resolveLocalPlayer`, and optional physics callbacks.
+- `GameContext.extend(context, overrides?)` clones existing contexts per system.
+- Most systems receive context instead of direct state references, improving isolation.
 
-Novus uses [Tiny-ecs](https://github.com/bakpakin/tiny-ecs) to drive gameplay systems.
+### ECS Systems (`src/states/gameplay/systems.lua` & `src/systems/`)
+- Systems are constructed via factories like `createMovementSystem` and registered in `Systems.initialize`.
+- Context wiring injects shared resources (camera, uiInput, engine trails, etc.).
+- Major system groups:
+  - **Input & Control**: `input_local`, `player_control`
+  - **Combat**: `weapon_logic`, `weapon_projectile_spawn`, `weapon_hitscan`, `weapon_beam_vfx`
+  - **Simulation**: `movement`, `projectile`, `ship`, `enemy_ai`, `loot_drop`
+  - **Rendering/UI**: `render`, `effects_renderer`, `hud`, `ui`
 
-- **World Management** – `Systems.initialize` in `src/states/gameplay/systems.lua` ensures a `tiny.world`, attaches shared `uiInput`, and registers all active systems. Teardown removes references and resets captured input state.
-- **Update Order** – The `gameplay:update` loop steps physics on a fixed timestep, then calls `world:update(dt)` so systems process freshly simulated positions.
-- **System Groups**:
-  - *Input & Control*: `input_local`, `player_control`
-  - *Simulation*: `movement`, `ship`, `projectile`, `weapon_logic`, `weapon_projectile_spawn`, `weapon_hitscan`, `enemy_ai`
-  - *Spawning & Progression*: `asteroid`, `enemy`, `station`, `loot_drop`, `pickup`
-  - *Destruction & Effects*: `destruction`, `damage_numbers`
-  - *Presentation*: `render`, `weapon_beam_vfx`, `hud`, `ui`, `targeting`
+### Input Pipeline
+- `input_local` reads mouse/keyboard, normalizes into **Intent** objects per player, and respects `uiInput.mouseCaptured`/`keyboardCaptured`.
+- `src/input/mapper.lua` translates key bindings from `src/input/bindings.lua` into intents.
+- Control modifiers (e.g., Ctrl for targeting) are handled directly in `input_local`.
 
-Each system resides in `src/systems/` (or `src/spawners/`, `src/renderers/`) and is created via factory functions that accept a gameplay **context** rather than the raw state table.
+### Blueprint System (`src/blueprints/`)
+- Blueprints define ships, stations, modules, etc., validated against schemas.
+- `loader.instantiate(category, id, context)` resolves a blueprint, runs validation, and delegates to category factories.
+- Factories spawn physics fixtures, visuals, and components consistent with ECS expectations.
 
-### Gameplay Context (`GameContext`)
+### Entity Management (`src/states/gameplay/entities.lua`)
+- Provides helpers for spawning stations, warpgates, pickups, and the player ship.
+- Resolves spawn positions near stations or within world bounds.
+- Coordinates with `PlayerManager` to register the local player.
 
-Gameplay systems and spawners take a context table that wraps the `gameplay` state:
+### Player & Items (`src/player/`) 
+- `PlayerManager` tracks player currency, pilot progression, and active ship.
+- `src/player/weapons.lua` handles weapon loadouts and slot logic.
+- Items live in `src/items/`, with registries instantiating consumables, modules, and cargo.
 
-- **Creation** – `GameContext.compose(state, overrides?)` builds a context with:
-  - `state` – the underlying gameplay state table.
-  - `resolveState()` – helper that returns `state` (safe for callers that only see context).
-  - `resolveLocalPlayer()` – helper that uses `PlayerManager` to find the local player.
-  - Optional `registerPhysicsCallback` – present when the state exposes `registerPhysicsCallback`.
-  - `__index` fallback to `state`, so existing code that read `state.world`, `state.camera`, etc. continues to work.
-- **Extension** – `GameContext.extend(context, overrides?)` clones an existing context and merges in per-system overrides (e.g. `camera`, `uiInput`, `intentHolder`).
+### Audio & Effects
+- `src/audio/manager.lua` centralizes sound playback and mixers.
+- `src/effects/` covers visual embellishments (floating text, engine trails).
+- `assets/` stores all media; the manager respects runtime settings for volumes.
 
-`Systems.initialize` wires systems with shared base contexts:
+## Persistence Pipeline
 
-- `baseContext = GameContext.compose(state, { damageEntity = ... })`
-- `sharedContext = context or GameContext.compose(state)`
+### Component Registry (`src/util/component_registry.lua`)
+- Lists serializable components with custom `serialize/deserialize` functions where needed.
+- Enables consistent save/load logic without per-entity boilerplate.
 
-Systems are then constructed using `baseContext` / `GameContext.extend(baseContext, {...})` so they all see a consistent view of the gameplay state plus their own overrides.
+### Entity Serializer (`src/util/entity_serializer.lua`)
+1. Skips transient entities (projectiles, debug props).
+2. Serializes payload using the component registry.
+3. Derives an archetype and stable ID for each entity.
 
-### System Context Types (`*SystemContext`)
+### Save/Load (`src/util/save_load.lua`)
+- `SaveLoad.serialize(state)` gathers player ship snapshot, world entities, quests.
+- Writes JSON via `love.filesystem`; `savegame.json` lives in the LÖVE save directory.
+- Load path recreates entities using blueprints, then rehydrates components and physics state.
 
-Each system defines a local `*SystemContext` type documenting what it reads from the context table, for example:
+## UI Stack
+- **UI State Manager**: tracks modal windows and captures input (`uiInput` flags).
+- **HUD System**: draws overlays (health, minimap, target locks).
+- **UI System**: renders interactive windows; clicking over UI sets `uiInput.mouseCaptured` to prevent firing weapons.
+- UI components reside under `src/ui/components/` with factories in `src/ui/state/factories.lua`.
 
-- `WeaponSystemContext` – `physicsWorld`, `damageEntity`, `camera`, `intentHolder`, `state`, optional `registerPhysicsCallback`.
-- `ProjectileSystemContext` – `physicsWorld` (required), optional `damageEntity` and `registerPhysicsCallback`.
-- `PlayerControlSystemContext` – `state`, `camera`, optional `engineTrail`, `uiInput`, `intentHolder`.
-- `TargetingSystemContext` – `state`, optional `camera` and `uiInput`.
+## Extending the Game
 
-**Guidelines when adding new systems:**
+1. **New System**: add a factory in `src/systems/`, register in `Systems.initialize`, and update docs if inputs or context change.
+2. **New Entity/Blueprint**: add definitions under `src/blueprints/<category>/`, update schema if new fields are required, and make sure serialization handles custom components (via `ComponentRegistry`).
+3. **New Input**: extend `bindings.lua` and teach `input_local`/`player_control` how to use it.
+4. **New UI Window**: build a component, register with `UIStateManager`, and set `uiInput` captures appropriately.
 
-1. Define a local `---@class SomeSystemContext` near the top of the system file.
-2. Only document fields the system actually reads from `context`.
-3. Prefer taking a context (`GameContext.compose/extend`) over the raw state so helpers like `resolveState` and `resolveLocalPlayer` stay available.
+## Reference Diagram
 
-### Entities & Blueprints
+```
+               ┌─────────────────────┐
+               │      love.run       │
+               └─────────┬──────────┘
+                         │
+                ┌────────▼─────────┐
+                │    Gamestate     │
+                └────────┬────────┘
+                         │
+                ┌────────▼────────┐
+                │    gameplay     │
+                └──────┬┬┬───────┘
+                       │││
+          ┌────────────┘│└────────────┐
+          ▼             ▼             ▼
+   World.initialize  Systems.init   Entities.spawn
+          │             │             │
+          ▼             ▼             ▼
+   love.physics    tiny.world    Blueprint loader
+          │             │             │
+          └─────► ECS update ◄───────┘
+```
 
-- **Blueprint Loader** – `src/blueprints/loader.lua` loads static definitions or factory functions and hands them to a registered category factory. Blueprints live under `src/blueprints/<category>/`.
-- **Instantiation** – Gameplay code typically calls `loader.instantiate("ships", shipId, context)` via convenience functions in `src/states/gameplay/entities.lua`. Entities are plain tables with component-like fields consumed by Tiny systems.
-- **Player/World Entities** – `Entities.spawnPlayer` spawns the player ship, attaches it to `PlayerManager`, and inserts it into the ECS world. Stations, asteroids, enemies, loot, etc. follow similar patterns via helper functions in the same module.
-
----
-
-## Player & Input Management
-
-- **Intent System** – `src/input/intent.lua` (referenced by `Systems.initialize`) holds per-frame input buffers consumed by control and weapon systems.
-- **Player Manager** – `src/player/manager.lua` tracks player ships, attaches stats/XP, and exposes helper functions used by gameplay and UI states.
-- **Camera & View** – `src/states/gameplay/view.lua` (and related modules) compute camera position, parallax backgrounds, and resize hooks to keep the HUD aligned.
-
----
-
-## User Interface Framework
-
-- **UI State Manager** – `src/ui/state_manager.lua` stores visibility, modal status, and geometry for every window (cargo, map, skills, pause, death, options). It also controls `uiInput` capture so gameplay cannot steal input when a modal is open.
-- **Windows** – Individual windows live in `src/ui/windows/` and expose `draw`, `update`, and event handlers. They follow Novak’s flat, hard-edged aesthetic and use shared theme helpers in `src/ui/theme.lua`.
-- **UI System** – The ECS `ui` system (`src/systems/ui.lua`) resets `uiInput` capture flags each frame, draws windows and notifications, and re-applies capture if any modal UI is visible. Tooltips are rendered last to sit above everything.
-- **Notifications & HUD** – `src/ui/notifications.lua` and `src/hud/` render transient messages plus the in-game HUD (target reticles, health/credits readouts).
-
----
-
-## Audio System
-
-- **Audio Manager** – `src/audio/manager.lua` auto-imports SFX and music by scanning `assets/sounds` and `assets/music` (configurable prefixes: `sfx:` and `music:`). It maintains a registry of audio sources, supports per-track volume overrides, and exposes `play_sfx`, `play_music`, `stop_music`, etc.
-- **Integration** – `main.lua` initializes the audio manager once; gameplay states request tracks like `AudioManager.play_music("music:adrift", { loop = true, restart = true })` and leverage auto-imported IDs for SFX.
-
----
-
-## Data, Assets, and Constants
-
-- **Constants** – `src/constants/game.lua` centralizes window options, physics tuning, and gameplay defaults (starter ship, XP multipliers, etc.).
-- **Assets** – Static art, fonts, sounds, and music live in `assets/`. The audio manager’s auto-scan plus blueprint references ensure new assets become available without manual registration.
-- **Libraries** – External libs are vendored under `libs/`, notably `hump` (state machine), `tiny` (ECS), and `json.lua`.
-
----
-
-## Extending Novus
-
-When implementing new features:
-
-1. **Choose the right state** – Gameplay features belong in the `gameplay` state or its systems. Menu or modal work belongs under `start_menu` or the relevant UI window.
-2. **Add or Modify Systems** – To hook into the ECS update loop, create a system in `src/systems/` and register it in `Systems.initialize`. Keep system responsibilities narrow.
-3. **Expand Blueprints** – Add new ships, stations, or pickups by creating blueprints and, if necessary, extending the category factory.
-4. **Respect UI Capture** – Update `UIStateManager` when introducing new windows so gameplay input is correctly paused.
-5. **Leverage AudioManager** – Drop new audio files into assets and reference them via normalized identifiers (e.g., `sfx:weapons:laser_burst`).
-
----
-
-## Quick Reference Map
-
-| Domain | Key Modules |
-| --- | --- |
-| Boot & Loop | `main.lua`, `conf.lua`, `src/constants/game.lua` |
-| States | `src/states/start_menu.lua`, `src/states/gameplay.lua` |
-| ECS Systems | `src/states/gameplay/systems.lua`, `src/systems/*.lua`, `src/spawners/*.lua` |
-| Entities & Blueprints | `src/states/gameplay/entities.lua`, `src/blueprints/` |
-| Player & Input | `src/player/manager.lua`, `src/input/intent.lua` |
-| UI | `src/ui/state_manager.lua`, `src/ui/windows/*.lua`, `src/ui/theme.lua`, `src/systems/ui.lua` |
-| Audio | `src/audio/manager.lua`, `assets/sounds/`, `assets/music/` |
-
-Use this outline as a launchpad when exploring the codebase or building tooling/scripts around Novus.
+Keep this overview handy as you explore the codebase. When in doubt, trace the flow from `gameplay:enter()` to the systems it wires up.

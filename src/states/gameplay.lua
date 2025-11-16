@@ -16,12 +16,11 @@ local PlayerWeapons = require("src.player.weapons")
 local UIStateManager = require("src.ui.state_manager")
 local SaveLoad = require("src.util.save_load")
 
+-- Input system
+local InputMapper = require("src.input.mapper")
+local Intent = require("src.input.intent")
+
 -- UI Windows
-local cargo_window = require("src.ui.windows.cargo")
-local options_window = require("src.ui.windows.options")
-local map_window = require("src.ui.windows.map")
-local debug_window = require("src.ui.windows.debug")
-local station_window = require("src.ui.windows.station")
 
 -- Core gameplay modules
 local World = require("src.states.gameplay.world")
@@ -30,6 +29,12 @@ local Systems = require("src.states.gameplay.systems")
 local View = require("src.states.gameplay.view")
 local Universe = require("src.states.gameplay.universe")
 local Metrics = require("src.states.gameplay.metrics")
+local PhysicsCallbacks = require("src.states.gameplay.physics_callbacks")
+local Docking = require("src.states.gameplay.docking")
+local Targeting = require("src.states.gameplay.targeting")
+local PlayerLifecycle = require("src.states.gameplay.player")
+local Feedback = require("src.states.gameplay.feedback")
+local Input = require("src.states.gameplay.input")
 
 -- Effects
 local EngineTrail = require("src.effects.engine_trail")
@@ -46,38 +51,8 @@ require("src.entities.warpgate_factory")
 local love = love
 
 -- ============================================================================
--- Constants
--- ============================================================================
-
-local DOCK_RADIUS_MULTIPLIER = 2.0
-local DOCK_RADIUS_FALLBACK = 1000
-
-local CONTROL_KEYS = { "lctrl", "rctrl" }
-
-local VALID_PHYSICS_CALLBACK_PHASES = {
-    beginContact = true,
-    endContact = true,
-    preSolve = true,
-    postSolve = true,
-}
-
--- ============================================================================
 -- Utility Functions
 -- ============================================================================
-
-local function is_control_modifier_active()
-    if not (love and love.keyboard and love.keyboard.isDown) then
-        return false
-    end
-
-    for i = 1, #CONTROL_KEYS do
-        if love.keyboard.isDown(CONTROL_KEYS[i]) then
-            return true
-        end
-    end
-
-    return false
-end
 
 local function resolveSectorId(config)
     if type(config) == "table" then
@@ -89,323 +64,21 @@ local function resolveSectorId(config)
 end
 
 -- ============================================================================
--- Station Docking System
--- ============================================================================
-
-local function resolve_station_dock_radius(station)
-    if not station then
-        return DOCK_RADIUS_FALLBACK
-    end
-
-    -- Try drawable radius first
-    local drawable = station.drawable
-    if drawable then
-        local base = ShipRuntime.compute_drawable_radius(drawable)
-        if base and base > 0 then
-            return math.max(base * DOCK_RADIUS_MULTIPLIER, DOCK_RADIUS_FALLBACK)
-        end
-    end
-
-    -- Fallback to mount radius
-    local mountRadius = station.mountRadius
-    if type(mountRadius) == "number" and mountRadius > 0 then
-        return math.max(mountRadius * DOCK_RADIUS_MULTIPLIER, DOCK_RADIUS_FALLBACK)
-    end
-
-    return DOCK_RADIUS_FALLBACK
-end
-
-local function update_station_dock_state(state)
-    if not state then
-        return
-    end
-
-    -- Clear previous dock state
-    state.stationDockTarget = nil
-    state.stationDockRadius = nil
-    state.stationDockDistance = nil
-
-    local stations = state.stationEntities
-    if not (stations and #stations > 0) then
-        return
-    end
-
-    local player = PlayerManager.getCurrentShip(state)
-    local position = player and player.position
-    if not (position and position.x and position.y) then
-        return
-    end
-
-    local px, py = position.x, position.y
-    local bestStation, bestDistanceSq, bestRadius = nil, math.huge, 0
-
-    -- Find closest station within range
-    for i = 1, #stations do
-        local station = stations[i]
-        if station then
-            station.stationInfluenceActive = false
-        end
-        
-        local stationPos = station and station.position
-        if stationPos and stationPos.x and stationPos.y then
-            local radius = resolve_station_dock_radius(station)
-            if radius and radius > 0 then
-                local dx, dy = px - stationPos.x, py - stationPos.y
-                local distSq = dx * dx + dy * dy
-                local radiusSq = radius * radius
-
-                if distSq <= radiusSq and distSq < bestDistanceSq then
-                    bestDistanceSq = distSq
-                    bestStation = station
-                    bestRadius = radius
-                end
-            end
-        end
-    end
-
-    -- Update state with best station
-    if bestStation then
-        state.stationDockTarget = bestStation
-        state.stationDockRadius = bestRadius
-        state.stationDockDistance = math.sqrt(bestDistanceSq)
-        bestStation.stationInfluenceActive = true
-    end
-end
-
--- ============================================================================
--- UI Feedback System
--- ============================================================================
-
-local function show_status_toast(state, message, color)
-    if not (state and message and FloatingText and FloatingText.add) then
-        return
-    end
-
-    local player = PlayerManager.getCurrentShip(state)
-    local position
-    local offsetY = 28
-
-    if player and player.position then
-        position = {
-            x = player.position.x or 0,
-            y = player.position.y or 0,
-        }
-        offsetY = (player.mountRadius or 36) + 24
-    elseif state.camera then
-        local cam = state.camera
-        local width = cam.width or state.viewport and state.viewport.width or 0
-        local height = cam.height or state.viewport and state.viewport.height or 0
-        position = {
-            x = (cam.x or 0) + width * 0.5,
-            y = (cam.y or 0) + height * 0.5,
-        }
-        offsetY = math.max(24, height * 0.1)
-    end
-
-    if not position then
-        return
-    end
-
-    FloatingText.add(state, position, message, {
-        color = color,
-        offsetY = offsetY,
-        rise = 32,
-        scale = 1.1,
-    })
-end
-
--- ============================================================================
 -- Main Gameplay State
 -- ============================================================================
 
 local gameplay = {}
 
 -- ============================================================================
--- Physics Callback System
+-- Physics Callback System (Delegated)
 -- ============================================================================
 
-function gameplay:ensurePhysicsCallbackRouter()
-    local physicsWorld = self.physicsWorld
-    if not physicsWorld then
-        return
-    end
-
-    if not self.physicsCallbackLists then
-        self.physicsCallbackLists = {
-            beginContact = {},
-            endContact = {},
-            preSolve = {},
-            postSolve = {},
-        }
-    end
-
-    if not self._physicsCallbackRouter then
-        local function forward(phase)
-            return function(...)
-                local lists = self.physicsCallbackLists
-                if not lists then
-                    return
-                end
-
-                local handlers = lists[phase]
-                if not handlers then
-                    return
-                end
-
-                for i = 1, #handlers do
-                    local handler = handlers[i]
-                    if handler then
-                        handler(...)
-                    end
-                end
-            end
-        end
-
-        self._physicsCallbackRouter = {
-            beginContact = forward("beginContact"),
-            endContact = forward("endContact"),
-            preSolve = forward("preSolve"),
-            postSolve = forward("postSolve"),
-        }
-    end
-
-    physicsWorld:setCallbacks(
-        self._physicsCallbackRouter.beginContact,
-        self._physicsCallbackRouter.endContact,
-        self._physicsCallbackRouter.preSolve,
-        self._physicsCallbackRouter.postSolve
-    )
-end
-
 function gameplay:registerPhysicsCallback(phase, handler)
-    if not VALID_PHYSICS_CALLBACK_PHASES[phase] then
-        error(string.format("Invalid physics callback phase '%s'", tostring(phase)))
-    end
-
-    if type(handler) ~= "function" then
-        error("Physics callback handler must be a function")
-    end
-
-    if not self.physicsWorld then
-        return function() end
-    end
-
-    self:ensurePhysicsCallbackRouter()
-
-    local list = self.physicsCallbackLists[phase]
-    list[#list + 1] = handler
-
-    return function()
-        self:unregisterPhysicsCallback(phase, handler)
-    end
+    return PhysicsCallbacks.register(self, phase, handler)
 end
 
 function gameplay:unregisterPhysicsCallback(phase, handler)
-    local lists = self.physicsCallbackLists
-    if not (lists and VALID_PHYSICS_CALLBACK_PHASES[phase]) then
-        return
-    end
-
-    local handlers = lists[phase]
-    if not handlers then
-        return
-    end
-
-    for i = #handlers, 1, -1 do
-        if handlers[i] == handler then
-            table.remove(handlers, i)
-            break
-        end
-    end
-end
-
-function gameplay:clearPhysicsCallbacks()
-    if self.physicsWorld then
-        self.physicsWorld:setCallbacks()
-    end
-
-    self.physicsCallbackLists = nil
-    self._physicsCallbackRouter = nil
-end
-
--- ============================================================================
--- Player Management
--- ============================================================================
-
-function gameplay:registerPlayerCallbacks(player)
-    if not player then
-        return
-    end
-
-    PlayerManager.attachShip(self, player)
-
-    local previousOnDestroyed = player.onDestroyed
-    player.onDestroyed = function(entity, context)
-        if type(previousOnDestroyed) == "function" then
-            previousOnDestroyed(entity, context)
-        end
-        self:onPlayerDestroyed(entity)
-    end
-end
-
-function gameplay:onPlayerDestroyed(entity)
-    if not entity then
-        return
-    end
-
-    PlayerManager.clearShip(self, entity)
-
-    if self.world and self.world.entities then
-        local entities = self.world.entities
-        for i = 1, #entities do
-            local e = entities[i]
-            if e and e.enemy then
-                e.currentTarget = nil
-                e.retaliationTarget = nil
-                e.retaliationTimer = nil
-
-                local weapon = e.weapon
-                if weapon then
-                    weapon.firing = false
-                    weapon.targetX = nil
-                    weapon.targetY = nil
-                    weapon.beamTimer = nil
-                end
-            end
-        end
-    end
-
-    if self.engineTrail then
-        self.engineTrail:setActive(false)
-        self.engineTrail:attachPlayer(nil)
-    end
-
-    UIStateManager.showDeathUI(self)
-    UIStateManager.clearRespawnRequest(self)
-    View.updateCamera(self)
-end
-
-function gameplay:respawnPlayer()
-    if not (self.world and self.physicsWorld) then
-        return
-    end
-
-    local player = Entities.spawnPlayer(self)
-    if not player then
-        return
-    end
-
-    self:registerPlayerCallbacks(player)
-
-    if self.engineTrail then
-        self.engineTrail:clear()
-        self.engineTrail:attachPlayer(player)
-        self.engineTrail:setActive(false)
-    end
-
-    UIStateManager.hideDeathUI(self)
-    UIStateManager.clearRespawnRequest(self)
-    View.updateCamera(self)
+    PhysicsCallbacks.unregister(self, phase, handler)
 end
 
 function gameplay:getLocalPlayer()
@@ -480,7 +153,7 @@ function gameplay:enter(_, config)
 
     World.loadSector(self, sectorId)
     World.initialize(self)
-    self:ensurePhysicsCallbackRouter()
+    PhysicsCallbacks.ensureRouter(self)
     View.initialize(self)
     self.activeTarget = nil
     Systems.initialize(self, Entities.damage)
@@ -505,7 +178,7 @@ function gameplay:enter(_, config)
             if self.engineTrail then
                 self.engineTrail:attachPlayer(player)
             end
-            self:registerPlayerCallbacks(player)
+            PlayerLifecycle.registerCallbacks(self, player)
         end
     end
     
@@ -517,7 +190,7 @@ function gameplay:leave()
     Entities.destroyWorldEntities(self.world)
     self.activeTarget = nil
     Systems.teardown(self)
-    self:clearPhysicsCallbacks()
+    PhysicsCallbacks.clear(self)
     World.teardown(self)
     View.teardown(self)
 
@@ -550,58 +223,11 @@ function gameplay:update(dt)
 
     -- Handle respawn request
     if UIStateManager.isRespawnRequested(self) then
-        self:respawnPlayer()
+        PlayerLifecycle.respawn(self)
     end
 
-    if self.targetLockTarget then
-        local target = self.targetLockTarget
-        local cache = self.targetingCache
-
-        local invalid = not target
-            or target.pendingDestroy
-            or (target.health and target.health.current and target.health.current <= 0)
-
-        if invalid then
-            self.targetLockTarget = nil
-            self.targetLockTimer = nil
-            self.targetLockDuration = nil
-            if cache then
-                cache.lockCandidate = nil
-                cache.lockProgress = nil
-                cache.lockDuration = nil
-                cache.activeEntity = self.activeTarget
-                cache.entity = self.activeTarget or cache.hoveredEntity
-            end
-        else
-            if cache and cache.lockCandidate ~= target then
-                cache.lockCandidate = target
-                cache.lockProgress = 0
-                cache.lockDuration = self.targetLockDuration or self.targetLockTimer or 0
-            end
-
-            if self.targetLockTimer then
-                self.targetLockTimer = self.targetLockTimer - dt
-                if cache and cache.lockDuration and cache.lockDuration > 0 then
-                    local progress = 1 - (self.targetLockTimer or 0) / cache.lockDuration
-                    cache.lockProgress = math.max(0, math.min(1, progress))
-                end
-            end
-
-            if not self.targetLockTimer or self.targetLockTimer <= 0 then
-                self.activeTarget = target
-                self.targetLockTarget = nil
-                self.targetLockTimer = nil
-                self.targetLockDuration = nil
-                if cache then
-                    cache.activeEntity = target
-                    cache.entity = target
-                    cache.lockCandidate = nil
-                    cache.lockProgress = nil
-                    cache.lockDuration = nil
-                end
-            end
-        end
-    end
+    -- Update target locking
+    Targeting.update(self, dt)
 
     -- Skip update if paused
     if UIStateManager.isPaused(self) then
@@ -635,7 +261,7 @@ function gameplay:update(dt)
     self.world:update(dt)
 
     -- Update game subsystems
-    update_station_dock_state(self)
+    Docking.updateState(self)
 
     if self.engineTrail then
         self.engineTrail:update(dt)
@@ -694,266 +320,23 @@ end
 -- ============================================================================
 
 function gameplay:wheelmoved(x, y)
-    -- Check UI windows first
-    if UIStateManager.isOptionsUIVisible(self) and options_window.wheelmoved(self, x, y) then
-        return
-    end
-
-    if UIStateManager.isMapUIVisible(self) and map_window.wheelmoved(self, x, y) then
-        return
-    end
-
-    if UIStateManager.isDebugUIVisible(self) and debug_window.wheelmoved(self, x, y) then
-        return
-    end
-    
-    if UIStateManager.isStationUIVisible(self) and station_window.wheelmoved(self, x, y) then
-        return
-    end
-
-    cargo_window.wheelmoved(self, x, y)
-
-    if not y or y == 0 then
-        return
-    end
-
-    if self.uiInput and self.uiInput.mouseCaptured then
-        return
-    end
-
-    -- Handle camera zoom
-    local cam = self.camera
-    if not cam then
-        return
-    end
-
-    local currentZoom = cam.zoom or 1
-    local zoomStep = 0.1
-    local desiredZoom = currentZoom + y * zoomStep
-    local clampedZoom = math.max(0.5, math.min(2, desiredZoom))
-
-    if math.abs(clampedZoom - currentZoom) < 1e-4 then
-        return
-    end
-
-    cam.zoom = clampedZoom
-    View.updateCamera(self)
+    Input.wheelmoved(self, x, y)
 end
 
-function gameplay:mousepressed(_, _, button)
-    if button ~= 1 then
-        return
-    end
-
-    local uiInput = self.uiInput
-    if (uiInput and uiInput.mouseCaptured) or UIStateManager.isAnyUIVisible(self) then
-        return
-    end
-
-    if not is_control_modifier_active() then
-        return
-    end
-
-    local cache = self.targetingCache
-    local hovered = cache and cache.hoveredEntity or nil
-
-    if not hovered or not hovered.enemy then
-        self.activeTarget = nil
-        self.targetLockTarget = nil
-        self.targetLockTimer = nil
-        if cache then
-            cache.activeEntity = nil
-            cache.entity = cache.hoveredEntity
-        end
-        return
-    end
-
-    if hovered == self.activeTarget then
-        self.activeTarget = nil
-        self.targetLockTarget = nil
-        self.targetLockTimer = nil
-        if cache then
-            cache.activeEntity = nil
-            cache.entity = cache.hoveredEntity
-        end
-        return
-    end
-
-    local player = PlayerManager.getCurrentShip(self)
-    local targetingTime
-    if player and player.stats and player.stats.targetingTime then
-        targetingTime = player.stats.targetingTime
-    end
-    targetingTime = targetingTime or 0.6
-
-    self.targetLockTarget = hovered
-    self.targetLockTimer = targetingTime
-    self.targetLockDuration = targetingTime
-    self.activeTarget = nil
-
-    if cache then
-        cache.activeEntity = nil
-        cache.entity = hovered
-        cache.lockCandidate = hovered
-        cache.lockProgress = 0
-        cache.lockDuration = targetingTime
-    end
+function gameplay:mousepressed(x, y, button, istouch, presses)
+    Input.mousepressed(self, x, y, button, istouch, presses)
 end
 
-function gameplay:keypressed(key)
-    -- Check UI windows first (in priority order)
-    if cargo_window.keypressed(self, key) then
-        return
-    end
-    
-    if station_window.keypressed(self, key) then
-        return
-    end
+function gameplay:mousereleased(x, y, button, istouch, presses)
+    Input.mousereleased(self, x, y, button, istouch, presses)
+end
 
-    if UIStateManager.isMapUIVisible(self) and map_window.keypressed(self, key) then
-        return
-    end
+function gameplay:textinput(text)
+    Input.textinput(self, text)
+end
 
-    if UIStateManager.isOptionsUIVisible(self) and options_window.keypressed(self, key) then
-        return
-    end
-
-    -- Debug toggle
-    if key == "f1" then
-        if UIStateManager.isDebugUIVisible(self) then
-            UIStateManager.hideDebugUI(self)
-        else
-            UIStateManager.showDebugUI(self)
-        end
-        return
-    end
-
-    -- Fullscreen toggle
-    if key == "f11" then
-        options_window.toggle_fullscreen(self)
-        return
-    end
-
-    -- Pause menu handling
-    if UIStateManager.isPauseUIVisible(self) then
-        if key == "escape" or key == "return" or key == "kpenter" then
-            UIStateManager.hidePauseUI(self)
-        end
-        return
-    end
-
-    -- Death screen handling
-    if UIStateManager.isDeathUIVisible(self) then
-        if key == "return" or key == "space" then
-            UIStateManager.requestRespawn(self)
-        end
-        return
-    end
-
-    -- Pause toggle
-    if key == "escape" then
-        UIStateManager.showPauseUI(self)
-        return
-    end
-
-    if key == "1" or key == "2" or key == "3" or key == "4" or key == "5"
-        or key == "6" or key == "7" or key == "8" or key == "9" or key == "0" then
-        if self.uiInput and self.uiInput.keyboardCaptured then
-            return
-        end
-
-        local index
-        if key == "0" then
-            index = 10
-        else
-            index = tonumber(key)
-        end
-
-        if index then
-            local player = PlayerManager.getCurrentShip(self)
-            if player then
-                local slots = PlayerWeapons.getSlots(player, { refresh = true })
-                if slots and slots.list and #slots.list > 0 then
-                    local count = #slots.list
-                    if index >= 1 and index <= count then
-                        PlayerWeapons.selectByIndex(player, index)
-                    end
-                end
-            end
-        end
-        return
-    end
-
-    -- Interact with stations (E)
-    if key == "e" then
-        if self.uiInput and self.uiInput.keyboardCaptured then
-            return
-        end
-
-        -- Station interaction takes priority when pressing E
-        if self.stationDockTarget then
-            UIStateManager.showStationUI(self)
-        end
-        return
-    end
-
-    -- UI toggles
-    if key == "tab" then
-        UIStateManager.toggleCargoUI(self)
-        return
-    end
-
-    if key == "m" then
-        UIStateManager.toggleMapUI(self)
-        return
-    end
-
-    if key == "k" then
-        UIStateManager.toggleSkillsUI(self)
-        return
-    end
-
-    -- Save/Load
-    if key == "f5" then
-        local success, err = SaveLoad.saveGame(self)
-        if success then
-            show_status_toast(self, "Game Saved", { 0.4, 1.0, 0.4, 1.0 })
-        else
-            show_status_toast(self, "Save Failed: " .. tostring(err), { 1.0, 0.4, 0.4, 1.0 })
-            print("[SaveLoad] Save error: " .. tostring(err))
-        end
-        return
-    end
-
-    -- Quick instrumentation helpers for QA/debugging persistence issues.
-    if key == "f6" then
-        local seedLabel = tostring(self.universeSeed or "<none>")
-        show_status_toast(self, "Seed: " .. seedLabel, { 0.65, 0.85, 1.0, 1.0 })
-        print("[Gameplay] Current universe seed: " .. seedLabel)
-        return
-    end
-
-    if key == "f7" then
-        local ok, err = SaveLoad.debugDumpWorld(self)
-        if ok then
-            show_status_toast(self, "World dump written", { 0.6, 1.0, 0.6, 1.0 })
-        else
-            show_status_toast(self, "Dump failed: " .. tostring(err), { 1.0, 0.5, 0.5, 1.0 })
-            print("[SaveLoad] World dump error: " .. tostring(err))
-        end
-        return
-    end
-
-    if key == "f9" then
-        local success, err = SaveLoad.loadGame(self)
-        if success then
-            show_status_toast(self, "Game Loaded", { 0.4, 1.0, 0.4, 1.0 })
-        else
-            show_status_toast(self, "Load Failed: " .. tostring(err), { 1.0, 0.4, 0.4, 1.0 })
-            print("[SaveLoad] Load error: " .. tostring(err))
-        end
-        return
-    end
+function gameplay:keypressed(key, scancode, isrepeat)
+    Input.keypressed(self, key, scancode, isrepeat)
 end
 
 -- ============================================================================

@@ -11,6 +11,7 @@ local PlayerManager = require("src.player.manager")
 local EntitySerializer = require("src.util.entity_serializer")
 local QuestTracker = require("src.quests.tracker")
 local loader = require("src.blueprints.loader")
+local ComponentRegistry = require("src.util.component_registry")
 
 ---@diagnostic disable-next-line: undefined-global
 local love = love
@@ -72,75 +73,11 @@ local function apply_snapshot_payload(entity, snapshot)
 
     local data = snapshot.data or {}
 
-    if data.position then
-        entity.position = entity.position or {}
-        entity.position.x = data.position.x or entity.position.x or 0
-        entity.position.y = data.position.y or entity.position.y or 0
-    end
+    -- Use component registry for generic deserialization
+    -- This automatically handles all registered components
+    ComponentRegistry.deserializeEntity(entity, data)
 
-    if data.rotation ~= nil then
-        entity.rotation = data.rotation
-    end
-
-    if data.velocity then
-        entity.velocity = entity.velocity or {}
-        entity.velocity.x = data.velocity.x or entity.velocity.x or 0
-        entity.velocity.y = data.velocity.y or entity.velocity.y or 0
-    end
-
-    if data.health then
-        entity.health = copy_into_table(entity.health, data.health)
-    end
-
-    if data.shield then
-        entity.shield = copy_into_table(entity.shield, data.shield)
-        if entity.health then
-            entity.health.shield = entity.shield
-        end
-    end
-
-    if data.energy then
-        entity.energy = copy_into_table(entity.energy, data.energy)
-    end
-
-    if data.thrust then
-        entity.thrust = copy_into_table(entity.thrust, data.thrust)
-        entity.isThrusting = data.thrust.isThrusting
-        entity.maxThrust = data.thrust.max or entity.maxThrust
-        entity.currentThrust = data.thrust.current or entity.currentThrust
-    end
-
-    if data.stats then
-        entity.stats = copy_into_table(entity.stats, data.stats)
-    end
-
-    if data.ai then
-        entity.ai = copy_into_table(entity.ai, data.ai)
-    end
-
-    if data.loot then
-        entity.loot = copy_into_table(entity.loot, data.loot)
-    end
-
-    if data.cargo then
-        entity.cargo = copy_into_table(entity.cargo, data.cargo)
-    end
-
-    if data.quest then
-        entity.quest = copy_into_table(entity.quest, data.quest)
-    end
-
-    if data.spawner then
-        entity.spawner = copy_into_table(entity.spawner, data.spawner)
-    end
-
-    entity.chunkLevel = data.chunkLevel or entity.chunkLevel
-    entity.miningVariant = data.miningVariant or entity.miningVariant
-    entity.faction = data.faction or entity.faction
-    entity.enemy = data.enemy or entity.enemy
-    entity.station = data.station or entity.station
-    entity.asteroid = data.asteroid or entity.asteroid
-
+    -- Apply physics body state after component deserialization
     apply_body_state(entity, data)
 end
 

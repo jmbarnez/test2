@@ -1,87 +1,54 @@
 local UIStateManager = {}
 
-local window = require("src.ui.components.window")
-local dropdown = require("src.ui.components.dropdown")
+local core = require("src.ui.state.core")
+local factories = require("src.ui.state.factories")
+local Events = require("src.ui.state.events")
 local QuestGenerator = require("src.stations.quest_generator")
 
 ---@diagnostic disable-next-line: undefined-global
 local love = love
 
-local function resolve_state_pair(state)
-    if not state then
-        return nil, nil
-    end
+-- Import core helpers
+local resolve_state_pair = core.resolve_state_pair
+local set_state_field = core.set_state_field
+local any_modal_visible = core.any_modal_visible
+local capture_input = core.capture_input
+local release_input = core.release_input
+local create_visibility_handlers = core.create_visibility_handlers
 
-    if type(state.resolveState) == "function" then
-        local ok, resolved = pcall(state.resolveState, state)
-        if ok and type(resolved) == "table" and resolved ~= state then
-            return resolved, state
-        end
-    end
+-- Import factory functions
+local createCargoUIState = factories.createCargoUIState
+local createDebugUIState = factories.createDebugUIState
+local createSkillsUIState = factories.createSkillsUIState
+local createStationUIState = factories.createStationUIState
+local createDeathUIState = factories.createDeathUIState
+local createPauseUIState = factories.createPauseUIState
+local createOptionsUIState = factories.createOptionsUIState
+local createMapUIState = factories.createMapUIState
+local reset_window_geometry = factories.resetWindowGeometry
 
-    if type(state.state) == "table" and state.state ~= state then
-        return state.state, state
-    end
-
-    return state, nil
+function UIStateManager.handleWheelMoved(state, x, y)
+    return Events.handleWheelMoved(UIStateManager, state, x, y)
 end
 
-local function set_state_field(primary, secondary, key, value)
-    if primary then
-        primary[key] = value
-    end
-
-    if secondary and secondary ~= primary then
-        secondary[key] = value
-    end
+function UIStateManager.handleKeyPressed(state, key, scancode, isrepeat)
+    return Events.handleKeyPressed(UIStateManager, state, key, scancode, isrepeat)
 end
 
-local function createCargoUIState()
-    return {
-        visible = false,
-        dragging = false,
-        _was_mouse_down = false,
-    }
+function UIStateManager.handleTextInput(state, text)
+    return Events.handleTextInput(UIStateManager, state, text)
 end
 
-local function createDebugUIState()
-    return {
-        visible = false,
-        dragging = false,
-        width = nil,
-        height = nil,
-        x = nil,
-        y = nil,
-        _was_mouse_down = false,
-        _just_opened = false,
-        scrollOffset = 0,
-        _contentRect = nil,
-    }
+function UIStateManager.handleMousePressed(state, x, y, button, istouch, presses)
+    return Events.handleMousePressed(UIStateManager, state, x, y, button, istouch, presses)
 end
 
-local function createSkillsUIState()
-    return {
-        visible = false,
-        dragging = false,
-        _was_mouse_down = false,
-    }
+function UIStateManager.handleMouseReleased(state, x, y, button, istouch, presses)
+    return Events.handleMouseReleased(UIStateManager, state, x, y, button, istouch, presses)
 end
 
-local function createStationUIState()
-    return {
-        visible = false,
-        dragging = false,
-        x = nil,
-        y = nil,
-        width = nil,
-        height = nil,
-        _was_mouse_down = false,
-        quests = nil,
-        selectedQuestId = nil,
-        activeQuestId = nil,
-        activeQuestIds = {},
-        _lastStationSignature = nil,
-    }
+function UIStateManager.toggleFullscreen(state)
+    return Events.toggleFullscreen(state)
 end
 
 local function resolve_station_signature(station)
@@ -219,99 +186,8 @@ local function ensure_station_quests(state)
     end
 end
 
-local function any_modal_visible(state)
-    state = resolve_state_pair(state)
-    if not state then
-        return false
-    end
-
-    return (state.pauseUI and state.pauseUI.visible)
-        or (state.deathUI and state.deathUI.visible)
-        or (state.cargoUI and state.cargoUI.visible)
-        or (state.optionsUI and state.optionsUI.visible)
-        or (state.mapUI and state.mapUI.visible)
-        or (state.skillsUI and state.skillsUI.visible)
-        or (state.stationUI and state.stationUI.visible)
-end
-
-local function capture_input(state)
-    state = resolve_state_pair(state)
-    if state and state.uiInput then
-        state.uiInput.mouseCaptured = true
-        state.uiInput.keyboardCaptured = true
-    end
-end
-
-local function release_input(state, respect_modals)
-    state = resolve_state_pair(state)
-    if not (state and state.uiInput) then
-        return
-    end
-
-    if respect_modals then
-        local keepCaptured = any_modal_visible(state)
-        state.uiInput.mouseCaptured = not not keepCaptured
-        state.uiInput.keyboardCaptured = not not keepCaptured
-    else
-        state.uiInput.mouseCaptured = false
-        state.uiInput.keyboardCaptured = false
-    end
-end
-
 local function is_primary_mouse_down()
     return love.mouse and love.mouse.isDown and love.mouse.isDown(1) or false
-end
-
-local function create_visibility_handlers(windowKey, config)
-    config = config or {}
-
-    local function set_visibility(state, visible)
-        local resolved, proxy = resolve_state_pair(state)
-        if not resolved then
-            return
-        end
-
-        state = resolved
-        if not (state and state[windowKey]) then
-            return
-        end
-
-        local window_state = state[windowKey]
-
-        if config.beforeSet and config.beforeSet(state, window_state, visible, proxy) == false then
-            return
-        end
-
-        if window_state.visible == visible then
-            if config.onUnchanged then
-                config.onUnchanged(state, window_state, visible, proxy)
-            end
-            return
-        end
-
-        window_state.visible = visible
-
-        if config.afterSet then
-            config.afterSet(state, window_state, visible, proxy)
-        end
-    end
-
-    return {
-        set = set_visibility,
-        show = function(state)
-            set_visibility(state, true)
-        end,
-        hide = function(state)
-            set_visibility(state, false)
-        end,
-        toggle = function(state)
-            if not (state and state[windowKey]) then
-                return
-            end
-
-            set_visibility(state, not state[windowKey].visible)
-        end,
-    }
 end
 
 local cargoVisibilityController = create_visibility_handlers("cargoUI", {
@@ -346,116 +222,6 @@ function UIStateManager.toggleCargoUI(state)
     else
         UIStateManager.showCargoUI(resolved)
     end
-end
-
-local function createDeathUIState()
-    return {
-        visible = false,
-        title = "Ship Destroyed",
-        message = "Your ship has been destroyed. Respawn to re-enter the fight.",
-        buttonLabel = "Respawn",
-        exitButtonLabel = "Exit to Menu",
-        hint = "Press Enter to respawn",
-        buttonHovered = false,
-        respawnHovered = false,
-        exitHovered = false,
-        _was_mouse_down = false,
-    }
-end
-
-local function createPauseUIState()
-    return {
-        visible = false,
-        title = "Paused",
-        message = "Take a breather while the galaxy waits.",
-        hint = "Press Esc or Enter to resume",
-        buttonLabel = "Resume",
-        buttonHovered = false,
-        _was_mouse_down = false,
-    }
-end
-
-local function createOptionsUIState()
-    return {
-        visible = false,
-        title = "Options",
-        message = "Adjust the experience to your liking.",
-        returnTo = nil,
-        _was_mouse_down = false,
-        syncPending = false,
-        resolutionDropdown = dropdown.create_state and dropdown.create_state() or nil,
-        fpsDropdown = dropdown.create_state and dropdown.create_state() or nil,
-    }
-end
-
-local function createMapUIState()
-    return {
-        visible = false,
-        mode = "sector",
-        title = "Sector Map",
-        zoom = 1,
-        min_zoom = 0.35,
-        max_zoom = 6,
-        centerX = nil,
-        centerY = nil,
-        dragging = false,
-        _was_mouse_down = false,
-        _just_opened = false,
-    }
-end
-
-local function reset_window_geometry(windowState)
-    if type(windowState) ~= "table" then
-        return
-    end
-
-    windowState.x = nil
-    windowState.y = nil
-    windowState.width = nil
-    windowState.height = nil
-    windowState.dragging = false
-    if windowState.resolutionDropdown and windowState.resolutionDropdown.open then
-        windowState.resolutionDropdown.open = false
-    end
-    if windowState.fpsDropdown and windowState.fpsDropdown.open then
-        windowState.fpsDropdown.open = false
-    end
-end
-
-local function hash_string(str)
-    local hash = 0
-    for i = 1, #str do
-        hash = (hash * 33 + str:byte(i)) % 4294967296
-    end
-    return hash
-end
-
-local function hsv_to_rgb(h, s, v)
-    local i = math.floor(h * 6)
-    local f = h * 6 - i
-    local p = v * (1 - s)
-    local q = v * (1 - f * s)
-    local t = v * (1 - (1 - f) * s)
-    i = i % 6
-    
-    if i == 0 then return { v, t, p, 1 } end
-    if i == 1 then return { q, v, p, 1 } end
-    if i == 2 then return { p, v, t, 1 } end
-    if i == 3 then return { p, q, v, 1 } end
-    if i == 4 then return { t, p, v, 1 } end
-    return { v, p, q, 1 }
-end
-
-local function generatePlayerColor(playerId)
-    local key = tostring(playerId or "unknown")
-    local hash = hash_string(key)
-
-    local golden_ratio_conjugate = 0.61803398875
-    local hue = (hash / 4294967296 + golden_ratio_conjugate) % 1
-    local sat = math.min(0.75 + ((hash % 97) / 96) * 0.2, 1)
-    local value = math.min(0.88 + ((hash % 53) / 52) * 0.12, 1)
-
-    return hsv_to_rgb(hue, sat, value)
 end
 
 function UIStateManager.initialize(state)

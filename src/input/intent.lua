@@ -4,6 +4,7 @@ local Intent = {}
 
 local function create_default_intent()
     return {
+        -- Combat intents
         moveX = 0,
         moveY = 0,
         moveMagnitude = 0,
@@ -13,6 +14,29 @@ local function create_default_intent()
         firePrimary = false,
         fireSecondary = false,
         ability1 = false,
+        
+        -- UI intents
+        togglePause = false,
+        toggleDebug = false,
+        toggleFullscreen = false,
+        confirm = false,
+        
+        -- Gameplay intents
+        interact = false,
+        toggleCargo = false,
+        toggleMap = false,
+        toggleSkills = false,
+        
+        -- Save/Load intents
+        quickSave = false,
+        quickLoad = false,
+        
+        -- Debug intents
+        showSeed = false,
+        dumpWorld = false,
+        
+        -- Weapon selection (special case)
+        weaponSlot = nil, -- number 1-10 or nil
     }
 end
 
@@ -55,6 +79,7 @@ function Intent.reset(intent)
         return
     end
 
+    -- Combat intents
     intent.moveX = 0
     intent.moveY = 0
     intent.moveMagnitude = 0
@@ -62,6 +87,29 @@ function Intent.reset(intent)
     intent.firePrimary = false
     intent.fireSecondary = false
     intent.ability1 = false
+    
+    -- UI intents
+    intent.togglePause = false
+    intent.toggleDebug = false
+    intent.toggleFullscreen = false
+    intent.confirm = false
+    
+    -- Gameplay intents
+    intent.interact = false
+    intent.toggleCargo = false
+    intent.toggleMap = false
+    intent.toggleSkills = false
+    
+    -- Save/Load intents
+    intent.quickSave = false
+    intent.quickLoad = false
+    
+    -- Debug intents
+    intent.showSeed = false
+    intent.dumpWorld = false
+    
+    -- Weapon selection
+    intent.weaponSlot = nil
 end
 
 function Intent.setMove(intent, moveX, moveY)
@@ -118,6 +166,20 @@ function Intent.setAbility(intent, index, isDown)
     else
         local field = "ability" .. tostring(index)
         intent[field] = not not isDown
+    end
+end
+
+-- Generic setter for boolean intents (toggles, actions, etc.)
+function Intent.setIntent(intent, intentName, isActive)
+    if intent and intentName then
+        intent[intentName] = not not isActive
+    end
+end
+
+-- Set weapon slot selection
+function Intent.setWeaponSlot(intent, slotIndex)
+    if intent then
+        intent.weaponSlot = slotIndex
     end
 end
 
