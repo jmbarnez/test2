@@ -336,7 +336,16 @@ function UIStateManager.hideCargoUI(state)
 end
 
 function UIStateManager.toggleCargoUI(state)
-    cargoVisibilityController.toggle(state)
+    local resolved = resolve_state_pair(state)
+    if not (resolved and resolved.cargoUI) then
+        return
+    end
+
+    if resolved.cargoUI.visible then
+        UIStateManager.hideCargoUI(resolved)
+    else
+        UIStateManager.showCargoUI(resolved)
+    end
 end
 
 local function createDeathUIState()
