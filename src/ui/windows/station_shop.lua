@@ -12,6 +12,8 @@ local love = love
 
 local station_shop = {}
 
+local SCROLLBAR_WIDTH = 10
+
 local window_colors = theme.colors.window
 local theme_spacing = theme.spacing
 local set_color = theme.utils.set_color
@@ -153,9 +155,10 @@ function station_shop.draw(context, params)
     state.shopQuantities = state.shopQuantities or {}
 
     local padding = theme_spacing.medium or 16
+    local scrollbarX = content.x + content.width - SCROLLBAR_WIDTH
     local inner_x = content.x + padding
     local inner_y = content.y + padding
-    local inner_width = math.max(0, content.width - padding * 2)
+    local inner_width = math.max(0, scrollbarX - inner_x - padding)
     local inner_height = math.max(0, content.height - padding * 2)
 
     set_color(window_colors.text or { 0.85, 0.9, 1.0, 1 })
@@ -187,18 +190,43 @@ function station_shop.draw(context, params)
     local slotPadding = theme_spacing.slot_padding
     local gridStartX = inner_x
     local gridStartY = grid_top
+    
+    -- Extra vertical spacing to account for controls (quantity + buttons = ~52px total)
+    local rowSpacing = 60
 
     local shopItems = ensure_shop_items(state)
+    
+    -- Calculate total content height
+    local totalRows = math.ceil(#shopItems / slotsPerRow)
+    local contentHeight = totalRows * (slotWithLabelHeight + slotPadding + rowSpacing)
+    
+    -- Initialize scroll state
+    state.scroll = tonumber(state.scroll) or 0
+    local maxScroll = math.max(0, contentHeight - grid_height)
+    state.scroll = math.max(0, math.min(maxScroll, state.scroll))
+    
+    -- Scissor clip for scrollable area
+    local viewportRect = {
+        x = inner_x,
+        y = grid_top,
+        w = inner_width,
+        h = grid_height,
+    }
+    love.graphics.setScissor(viewportRect.x, viewportRect.y, viewportRect.w, viewportRect.h)
 
-    for index = 1, math.min(totalVisibleSlots, #shopItems) do
+    for index = 1, #shopItems do
         local item = shopItems[index]
         local slotIndex = index - 1
         local row = math.floor(slotIndex / slotsPerRow)
         local col = slotIndex % slotsPerRow
         local slotX = gridStartX + col * (slotSize + slotPadding)
-        local slotY = gridStartY + row * (slotWithLabelHeight + slotPadding)
+        local slotY = gridStartY + row * (slotWithLabelHeight + slotPadding + rowSpacing) - state.scroll
 
-        if slotY + slotWithLabelHeight > grid_top + grid_height then
+        -- Skip items outside viewport
+        if slotY + slotWithLabelHeight + rowSpacing < grid_top then
+            goto continue
+        end
+        if slotY > grid_top + grid_height then
             break
         end
 
@@ -294,6 +322,37 @@ function station_shop.draw(context, params)
                 end
             end
         end
+        
+        ::continue::
+    end
+    
+    love.graphics.setScissor()
+    
+    -- Draw scrollbar if needed
+    if maxScroll > 0 then
+        local scrollAreaY = grid_top
+        local scrollAreaHeight = grid_height
+        local thumbHeight = math.max(18, scrollAreaHeight * (grid_height / contentHeight))
+        local thumbTravel = scrollAreaHeight - thumbHeight
+        local thumbY = scrollAreaY + (thumbTravel > 0 and (state.scroll / maxScroll) * thumbTravel or 0)
+        
+        -- Scrollbar track
+        set_color(window_colors.background or { 0.08, 0.1, 0.14, 0.8 })
+        love.graphics.rectangle("fill", scrollbarX, scrollAreaY, SCROLLBAR_WIDTH, scrollAreaHeight)
+        
+        -- Scrollbar thumb
+        local thumbHovered = point_in_rect(mouse_x, mouse_y, {
+            x = scrollbarX,
+            y = thumbY,
+            width = SCROLLBAR_WIDTH,
+            height = thumbHeight,
+        })
+        
+        local thumbColor = thumbHovered 
+            and (window_colors.accent or { 0.3, 0.5, 0.8, 0.9 })
+            or (window_colors.border or { 0.2, 0.25, 0.3, 0.8 })
+        set_color(thumbColor)
+        love.graphics.rectangle("fill", scrollbarX, thumbY, SCROLLBAR_WIDTH, thumbHeight, 2, 2)
     end
 
     local bottomBar = params.bottom_bar
@@ -304,6 +363,34 @@ function station_shop.draw(context, params)
             CargoRendering.drawCurrency(bottomBar, 0, currencyText, fonts)
         end
     end
+end
+
+--- Handles mouse wheel scrolling
+---@param context table The game context
+---@param x number X scroll amount
+---@param y number Y scroll amount
+---@return boolean Whether the scroll was handled
+function station_shop.wheelmoved(context, x, y)
+    local state = context and context.stationUI
+    if not (state and state.visible) then
+        return false
+    end
+    
+    -- Check if we have scrollable content
+    local scroll = tonumber(state.scroll) or 0
+    local maxScroll = 0
+    
+    -- Simple scroll step calculation
+    local step = 60
+    local nextScroll = math.max(0, scroll - y * step)
+    
+    -- If scroll changed, update it
+    if math.abs(nextScroll - scroll) > 0.1 then
+        state.scroll = nextScroll
+        return true
+    end
+    
+    return false
 end
 
 return station_shop

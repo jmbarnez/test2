@@ -313,10 +313,23 @@ end
 ---@param y number
 ---@return boolean
 function station_window.wheelmoved(context, x, y)
-    if station_window.is_visible(context) then
+    if not station_window.is_visible(context) then
+        return false
+    end
+    
+    local state = context and context.stationUI
+    if not state then
         return true
     end
-    return false
+    
+    -- Forward to active tab
+    if state.activeTab == "shop" and StationShop.wheelmoved then
+        return StationShop.wheelmoved(context, x, y)
+    elseif state.activeTab == "quests" and StationQuests.wheelmoved then
+        return StationQuests.wheelmoved(context, x, y)
+    end
+    
+    return true
 end
 
 return station_window

@@ -1,4 +1,9 @@
 local table_util = require("src.util.table")
+local BehaviorRegistry = require("src.weapons.behavior_registry")
+local plasma_thrower_behavior = require("src.weapons.behaviors.plasma_thrower")
+
+-- Register behavior plugin
+BehaviorRegistry.register("violet_cloudstream", plasma_thrower_behavior)
 
 local defaults = {
     damage_per_second = 54,

@@ -15,10 +15,11 @@ local createStationSpawner = require("src.spawners.station")
 local createWarpgateSpawner = require("src.spawners.warpgate")
 local createEnemyAISystem = require("src.systems.enemy_ai")
 local createWeaponLogicSystem = require("src.systems.weapon_logic")
-local createWeaponProjectileSystem = require("src.systems.weapon_projectile_spawn")
-local createWeaponHitscanSystem = require("src.systems.weapon_hitscan")
-local createWeaponCloudStreamSystem = require("src.systems.weapon_cloud_stream")
+local createWeaponUnifiedSystem = require("src.systems.weapon_unified")
 local createWeaponBeamVFXSystem = require("src.systems.weapon_beam_vfx")
+
+-- Initialize weapon behavior system (registers fallback behaviors)
+require("src.weapons.init")
 local createProjectileSystem = require("src.systems.projectile")
 local createCollisionImpactSystem = require("src.systems.collision_impact")
 local createShipSystem = require("src.systems.ship")
@@ -53,10 +54,9 @@ local Systems = {}
 --       intentHolder = state,
 --   }))
 --   createPickupSystem(GameContext.extend(sharedContext))
---   createWeaponLogicSystem(GameContext.extend(sharedContext))
---   createWeaponProjectileSystem(GameContext.extend(sharedContext))
---   createWeaponHitscanSystem(GameContext.extend(sharedContext))
---   createWeaponBeamVFXSystem(baseContext)
+--   createWeaponLogicSystem(GameContext.extend(sharedContext))    -- handles input/aiming
+--   createWeaponUnifiedSystem(GameContext.extend(sharedContext))  -- behavior plugin architecture
+--   createWeaponBeamVFXSystem(baseContext)                        -- renders beam effects
 --   createShipSystem(GameContext.extend(sharedContext))
 --   createAbilityModuleSystem(GameContext.extend(sharedContext))  -- uses state/intentHolder via GameContext
 --   createProjectileSystem(GameContext.extend(sharedContext))     -- uses physicsWorld, damageEntity, registerPhysicsCallback
@@ -144,9 +144,9 @@ local function add_common_systems(state, context)
     local sharedContext = context or GameContext.compose(state)
     state.pickupSystem = state.world:addSystem(createPickupSystem(GameContext.extend(sharedContext)))
     state.weaponLogicSystem = state.world:addSystem(createWeaponLogicSystem(GameContext.extend(sharedContext)))
-    state.weaponProjectileSystem = state.world:addSystem(createWeaponProjectileSystem(GameContext.extend(sharedContext)))
-    state.weaponHitscanSystem = state.world:addSystem(createWeaponHitscanSystem(GameContext.extend(sharedContext)))
-    state.weaponCloudStreamSystem = state.world:addSystem(createWeaponCloudStreamSystem(GameContext.extend(sharedContext)))
+    
+    -- Unified weapon system (behavior plugin architecture)
+    state.weaponUnifiedSystem = state.world:addSystem(createWeaponUnifiedSystem(GameContext.extend(sharedContext)))
     state.shipSystem = state.world:addSystem(createShipSystem(GameContext.extend(sharedContext)))
     state.abilitySystem = state.world:addSystem(createAbilityModuleSystem(GameContext.extend(sharedContext)))
     state.projectileSystem = state.world:addSystem(createProjectileSystem(GameContext.extend(sharedContext)))
@@ -283,8 +283,7 @@ function Systems.teardown(state)
     state.pickupSystem = nil
     state.renderSystem = nil
     state.weaponLogicSystem = nil
-    state.weaponProjectileSystem = nil
-    state.weaponHitscanSystem = nil
+    state.weaponUnifiedSystem = nil
     state.weaponBeamVFXSystem = nil
     if state.projectileSystem and state.projectileSystem.detachPhysicsCallbacks then
         state.projectileSystem:detachPhysicsCallbacks()

@@ -1,4 +1,9 @@
 local table_util = require("src.util.table")
+local BehaviorRegistry = require("src.weapons.behavior_registry")
+local lightning_arc_behavior = require("src.weapons.behaviors.lightning_arc")
+
+-- Register behavior plugin
+BehaviorRegistry.register("lightning", lightning_arc_behavior)
 
 local defaults = {
     width = 1.6,

@@ -1,4 +1,9 @@
 local table_util = require("src.util.table")
+local BehaviorRegistry = require("src.weapons.behavior_registry")
+local missile_launcher_behavior = require("src.weapons.behaviors.missile_launcher")
+
+-- Register behavior plugin
+BehaviorRegistry.register("missile", missile_launcher_behavior)
 
 local defaults = {
     fire_rate = 2.2,
@@ -71,7 +76,7 @@ return {
                 turnRateDegrees = 210,
                 acceleration = 720,
                 minSpeed = 140,
-                maxSpeed = 520,
+                maxSpeed = 640,
                 usePhysicsSteering = true,
                 faceTarget = true,
                 hitRadius = 14,
