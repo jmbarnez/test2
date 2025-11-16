@@ -137,6 +137,25 @@ function ship_factory.instantiate(blueprint, context)
     -- Initialize ship runtime state (health, cargo, etc.)
     ShipRuntime.initialize(entity, constants, context)
 
+    -- Initialize ability modules for enemies (if defined in blueprint)
+    if entity.abilityModules and type(entity.abilityModules) == "table" then
+        local abilityState = {}
+        for i = 1, #entity.abilityModules do
+            local entry = entity.abilityModules[i]
+            if entry.ability and entry.key then
+                abilityState[entry.key] = {
+                    cooldown = 0,
+                    cooldownDuration = entry.ability.cooldown or 0,
+                    activeTimer = 0,
+                    wasDown = false,
+                }
+            end
+        end
+        if next(abilityState) then
+            entity._abilityState = abilityState
+        end
+    end
+
     -- Create physics body
     if not context.physicsWorld then
         error("Ship instantiation requires a physicsWorld in context", 2)

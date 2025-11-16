@@ -16,6 +16,18 @@ local function clone_table(source)
     return copy
 end
 
+--- Create a shallow copy of a drawable part.
+-- Exposed for renderers that need to duplicate and adjust parts (e.g. mirrors).
+-- @param source table
+-- @return table
+function drawable_helpers.clone_part(source)
+    if type(source) ~= "table" then
+        return {}
+    end
+
+    return clone_table(source)
+end
+
 --- Normalize a color spec to a 4-component RGBA table.
 -- Accepts either an array-like color or falls back to a provided default.
 -- Returns a table with exactly 4 components (r,g,b,a).
@@ -53,6 +65,39 @@ do
         end
 
         return fallback_color
+    end
+end
+
+--- Draw parts using a custom dispatcher table, falling back to the standard
+-- drawParts behaviour when handler is absent. Handlers receive (part, palette,
+-- defaults, context) and can return true to skip fallback logic.
+-- @param parts table
+-- @param palette table
+-- @param defaults table
+-- @param dispatcher table<string, fun(part, palette, defaults, context):boolean|nil>
+-- @param context table|nil optional context forwarded to handlers
+function drawable_helpers.draw_parts_with_dispatcher(parts, palette, defaults, dispatcher, context)
+    if type(parts) ~= "table" then
+        return
+    end
+
+    dispatcher = dispatcher or {}
+
+    for i = 1, #parts do
+        local part = parts[i]
+        if part then
+            local part_type = part.type or "polygon"
+            local handler = dispatcher[part_type]
+
+            local handled
+            if handler then
+                handled = handler(part, palette, defaults, context)
+            end
+
+            if not handled then
+                drawable_helpers.draw_parts({ part }, palette, defaults)
+            end
+        end
     end
 end
 

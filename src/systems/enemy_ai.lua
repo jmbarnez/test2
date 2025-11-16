@@ -425,6 +425,64 @@ local function update_range_profile(blackboard, detectionRange, engagementRange,
     blackboard.rangeProfile = rangeProfile
 end
 
+---@param entity EnemyEntity
+---@param abilityKey string
+---@return boolean
+local function can_use_ability(entity, abilityKey)
+    if not (entity and entity._abilityState and entity.abilityModules) then
+        return false
+    end
+
+    local state = entity._abilityState[abilityKey]
+    if not state then
+        return false
+    end
+
+    if state.cooldown and state.cooldown > 0 then
+        return false
+    end
+
+    if state.activeTimer and state.activeTimer > 0 then
+        return false
+    end
+
+    local energy = entity.energy
+    if not energy then
+        return true
+    end
+
+    for i = 1, #entity.abilityModules do
+        local entry = entity.abilityModules[i]
+        if entry.key == abilityKey and entry.ability then
+            local cost = entry.ability.energyCost or 0
+            if cost > 0 and energy.current < cost then
+                return false
+            end
+            break
+        end
+    end
+
+    return true
+end
+
+---@param entity EnemyEntity
+---@param abilityKey string
+---@return boolean
+local function trigger_ability(entity, abilityKey)
+    if not (entity and entity._abilityState) then
+        return false
+    end
+
+    local state = entity._abilityState[abilityKey]
+    if not state then
+        return false
+    end
+
+    -- Simulate button press
+    state.wasDown = false
+    return true
+end
+
 ---@param context EnemyBehaviorContext
 ---@return EnemyBehaviorTreeInstance
 local function create_behavior_tree(context)
@@ -652,11 +710,176 @@ local function create_behavior_tree(context)
 end
 
 ---@param ai table
+---@param entity EnemyEntity
 ---@param context EnemyBehaviorContext
 ---@return EnemyBehaviorTreeInstance
-local function ensure_behavior_tree(ai, context)
+local function ensure_behavior_tree(ai, entity, context)
     if not ai.behaviorTree then
-        ai.behaviorTree = create_behavior_tree(context)
+        local behavior = ai.behavior or "hunter"
+        if behavior == "dasher" then
+            -- Use dasher engage instead of normal engage
+            local root = BehaviorTree.Selector({
+                BehaviorTree.Sequence({
+                    BehaviorTree.Action(function(ent, blackboard, dt)
+                        local body = ent.body
+                        if not body or body:isDestroyed() then
+                            ent.currentTarget = nil
+                            return BTStatus.failure
+                        end
+
+                        local position = ent.position
+                        if not (position and position.x and position.y) then
+                            ent.currentTarget = nil
+                            return BTStatus.failure
+                        end
+
+                        local ai_data = ent.ai or {}
+                        ensure_home(ai_data, ent)
+
+                        local detectionRange, engagementRange, preferredDistance, weaponRange = compute_ranges(ent)
+                        update_range_profile(blackboard, detectionRange, engagementRange, preferredDistance, weaponRange)
+
+                        local target = ent.currentTarget
+
+                        if not is_target_valid(target) then
+                            local preferred
+                            if ent.retaliationTarget and is_target_valid(ent.retaliationTarget) then
+                                preferred = ent.retaliationTarget
+                            else
+                                preferred = get_local_player(context)
+                            end
+                            target = find_target(blackboard.world, ai_data.targetTag or "player", preferred, position, detectionRange)
+                            ent.currentTarget = target
+                        end
+
+                        if target and target.position then
+                            return BTStatus.success
+                        end
+
+                        disable_weapon(ent)
+                        return BTStatus.failure
+                    end),
+                    BehaviorTree.Action(function(ent, blackboard, dt)
+                        local body = ent.body
+                        if not body or body:isDestroyed() then
+                            update_engine_trail(ent, false)
+                            ent.currentTarget = nil
+                            return BTStatus.failure
+                        end
+
+                        local position = ent.position
+                        local target = ent.currentTarget
+                        if not (position and position.x and position.y and target and target.position) then
+                            apply_damping(body, dt, 4)
+                            update_engine_trail(ent, false)
+                            return BTStatus.failure
+                        end
+
+                        local ai_data = ent.ai or {}
+                        local stats = ent.stats or {}
+                        local detectionRange, engagementRange, preferredDistance, weaponRange = compute_ranges(ent)
+
+                        local ex, ey = position.x, position.y
+                        local tx, ty = target.position.x, target.position.y
+                        local dx, dy = tx - ex, ty - ey
+                        local dirX, dirY, distance = normalize_vector(dx, dy)
+
+                        if not dirX or not dirY then
+                            apply_damping(body, dt, 4)
+                            update_engine_trail(ent, false)
+                            return BTStatus.failure
+                        end
+
+                        local desiredAngle = atan2(dy, dx) + math.pi * 0.5
+                        local currentAngle = body:getAngle()
+                        local delta = clamp_angle(desiredAngle - currentAngle)
+
+                        body:setAngularVelocity(0)
+                        body:setAngle(currentAngle + delta)
+                        ent.rotation = body:getAngle()
+
+                        -- Try to use dash when in range and aligned
+                        local dashRange = ai_data.dashRange or 400
+                        local alignmentThreshold = math.pi / 8
+                        local isAligned = abs(delta) < alignmentThreshold
+                        
+                        if distance <= dashRange and distance > 100 and isAligned then
+                            if can_use_ability(ent, "dash") then
+                                trigger_ability(ent, "dash")
+                            end
+                        end
+
+                        -- Aggressive movement
+                        preferredDistance = ai_data.preferredDistance or 150
+                        local maxSpeed = stats.max_speed or 240
+                        local maxAccel = stats.max_acceleration or 600
+                        local mass = stats.mass or body:getMass() or 1
+
+                        local distanceError = distance - preferredDistance
+                        local normalizedError = preferredDistance > 0
+                            and (distanceError / preferredDistance)
+                            or (distanceError / max(distance, 1))
+                        normalizedError = max(-1, min(1, normalizedError))
+
+                        local desiredSpeed = maxSpeed * normalizedError * 1.2
+
+                        if distance < preferredDistance * 0.5 then
+                            desiredSpeed = desiredSpeed * 0.4
+                        end
+
+                        local desiredVX, desiredVY = dirX * desiredSpeed, dirY * desiredSpeed
+                        desiredVX, desiredVY = clamp_vector(desiredVX, desiredVY, maxSpeed)
+
+                        local currentVX, currentVY = body:getLinearVelocity()
+                        local diffX, diffY = desiredVX - currentVX, desiredVY - currentVY
+                        local diffLen = vector.length(diffX, diffY)
+
+                        if diffLen > 0 then
+                            local maxDelta = maxAccel * dt
+                            if diffLen > maxDelta then
+                                local scale = maxDelta / diffLen
+                                diffX, diffY = diffX * scale, diffY * scale
+                            end
+                            body:applyLinearImpulse(diffX * mass, diffY * mass)
+                        end
+
+                        local newVX, newVY = body:getLinearVelocity()
+                        newVX, newVY = clamp_vector(newVX, newVY, maxSpeed)
+                        body:setLinearVelocity(newVX, newVY)
+
+                        update_engine_trail(ent, true, 0, 0, dt, vector.length(desiredVX, desiredVY))
+
+                        if ent.weapon then
+                            local weapon = ent.weapon
+                            local maxRange = weaponRange or weapon.maxRange or engagementRange
+                            if maxRange and distance <= maxRange and distance > 200 then
+                                weapon.firing = (not weapon.cooldown or weapon.cooldown <= 0)
+                                weapon.targetX = weapon.firing and tx or nil
+                                weapon.targetY = weapon.firing and ty or nil
+                            else
+                                weapon.firing = false
+                                weapon.targetX = nil
+                                weapon.targetY = nil
+                            end
+                        end
+
+                        return BTStatus.running
+                    end),
+                }),
+                BehaviorTree.Action(function(ent, blackboard, dt)
+                    local body = ent.body
+                    if not body or body:isDestroyed() then
+                        return BTStatus.failure
+                    end
+                    local ai_data = ent.ai or {}
+                    local stats = ent.stats or {}
+                    return handle_wander(ent, body, ai_data, stats, dt) and BTStatus.success or BTStatus.failure
+                end),
+            })
+            ai.behaviorTree = BehaviorTree.new(root)
+        else
+            ai.behaviorTree = create_behavior_tree(context)
+        end
     end
 
     return ai.behaviorTree
@@ -677,7 +900,7 @@ return function(context)
 
             local ai = entity.ai or {}
             ensure_home(ai, entity)
-            local tree = ensure_behavior_tree(ai, context)
+            local tree = ensure_behavior_tree(ai, entity, context)
             local blackboard = ensure_blackboard(ai, context)
             blackboard.world = self.world
 
