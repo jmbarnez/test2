@@ -45,10 +45,11 @@ return {
         accent = { 0.35, 0.7, 1.0 },
         detail = { 0.85, 0.95, 1.0 },
         layers = {
-            { shape = "rounded_rect", width = 0.7, height = 0.32, color = { 0.12, 0.18, 0.3 }, alpha = 0.8, radius = 0.1 },
-            { shape = "rounded_rect", width = 0.62, height = 0.22, color = { 0.28, 0.48, 0.9 }, alpha = 0.95, radius = 0.08 },
-            { shape = "beam", width = 0.2, length = 0.9, color = { 0.6, 0.85, 1.0 }, alpha = 0.85 },
-            { shape = "beam", width = 0.08, length = 1.0, color = { 1.0, 1.0, 1.0 }, alpha = 0.6 },
+            { shape = "rounded_rect", width = 0.76, height = 0.36, radius = 0.12, color = { 0.08, 0.12, 0.2, 0.92 } },
+            { shape = "rounded_rect", width = 0.62, height = 0.26, radius = 0.1, color = { 0.22, 0.44, 0.86, 0.96 } },
+            { shape = "beam", width = 0.22, length = 1.0, color = { 0.64, 0.86, 1.0, 0.9 } },
+            { shape = "beam", width = 0.1, length = 1.02, color = { 1.0, 1.0, 1.0, 0.68 } },
+            { shape = "ring", radius = 0.52, thickness = 0.05, color = { 0.52, 0.78, 1.0, 0.28 } },
         },
     },
     components = {

@@ -46,10 +46,11 @@ return {
         accent = { 0.32, 0.72, 1.0 },
         detail = { 0.84, 0.96, 1.0 },
         layers = {
-            { shape = "rounded_rect", width = 0.68, height = 0.32, color = { 0.08, 0.16, 0.28 }, alpha = 0.85, radius = 0.1 },
-            { shape = "rounded_rect", width = 0.58, height = 0.22, color = { 0.2, 0.48, 0.9 }, alpha = 0.95, radius = 0.08 },
-            { shape = "zigzag", amplitude = 0.18, frequency = 6, length = 1.0, color = { 0.62, 0.9, 1.0 }, alpha = 0.9 },
-            { shape = "zigzag", amplitude = 0.08, frequency = 6, length = 1.0, color = { 1.0, 1.0, 1.0 }, alpha = 0.6 },
+            { shape = "rounded_rect", width = 0.78, height = 0.34, radius = 0.12, color = { 0.08, 0.14, 0.24, 0.92 } },
+            { shape = "rounded_rect", width = 0.64, height = 0.26, radius = 0.1, color = { 0.22, 0.52, 0.92, 0.94 } },
+            { shape = "polygon", points = { -0.3, -0.16, -0.06, -0.24, 0.02, -0.02, 0.26, -0.18, 0.08, 0.16, -0.04, 0.08, -0.24, 0.22 }, color = { 0.64, 0.9, 1.0, 0.92 } },
+            { shape = "polygon", points = { -0.18, -0.12, -0.02, -0.18, 0.12, -0.02, -0.02, 0.12, -0.18, 0.04 }, color = { 1.0, 1.0, 1.0, 0.75 } },
+            { shape = "ring", radius = 0.5, thickness = 0.05, color = { 0.5, 0.86, 1.0, 0.3 } },
         },
     },
     components = {

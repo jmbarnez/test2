@@ -11,11 +11,22 @@ return {
             { id = "enemy_drone", weight = 3 },
             { id = "enemy_scout", weight = 2 },
             { id = "enemy_boss", weight = 3 },
-            { id = "enemy_ram_tiny", weight = 4 },
         },
         spawn_radius = 1500,
         spawn_safe_radius = 900,
         wander_radius = 1500,
+    },
+    proceduralShips = {
+        count = { min = 8, max = 15 },
+        difficulty = "normal", -- "easy", "normal", "hard", "extreme"
+        spawn_safe_radius = 900,
+        separation_radius = 700,
+        wander_radius = 1500,
+        size_distribution = {
+            small = 0.5,   -- 50% small ships
+            medium = 0.35, -- 35% medium ships
+            large = 0.15,  -- 15% large ships
+        },
     },
     worldBounds = {
         x = 0,

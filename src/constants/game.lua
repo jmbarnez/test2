@@ -192,6 +192,15 @@ constants.enemies = {
             skill = "weapons",
         },
     },
+    level_scaling = {
+        hull = 0.18,
+        health = 0.18,
+        shield = 0.18,
+        damage = 0.12,
+        speed = 0.04,
+        credits = 0.12,
+        xp = 0.16,
+    },
 }
 
 -- ============================================================================

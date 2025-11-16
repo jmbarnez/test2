@@ -65,6 +65,10 @@ return {
     components = {
         type = "enemy_drone",
         enemy = true,
+        level = {
+            base = 2,
+            current = 2,
+        },
         position = { x = 0, y = 0 },
         velocity = { x = 0, y = 0 },
         rotation = 0,

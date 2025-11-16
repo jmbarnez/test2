@@ -1,5 +1,6 @@
 local theme = require("src.ui.theme")
 local PlayerWeapons = require("src.player.weapons")
+local ItemIconRenderer = require("src.util.item_icon_renderer")
 
 ---@diagnostic disable-next-line: undefined-global
 local love = love
@@ -12,71 +13,11 @@ local set_color = theme.utils.set_color
 local HOTBAR_SLOTS = 10
 local SELECTED_OUTLINE_COLOR = { 0.2, 0.85, 0.95, 1 }
 
-local function draw_icon_layer(icon, layer, size)
-    love.graphics.push()
-    set_color(layer.color or icon.detail or icon.color or icon.accent)
-    
-    local offsetX = (layer.offsetX or 0) * size
-    local offsetY = (layer.offsetY or 0) * size
-    love.graphics.translate(offsetX, offsetY)
-    
-    if layer.rotation then love.graphics.rotate(layer.rotation) end
-    
-    local shape = layer.shape or "circle"
-    local halfSize = size * 0.5
-    
-    if shape == "circle" then
-        love.graphics.circle("fill", 0, 0, (layer.radius or 0.5) * halfSize)
-    elseif shape == "ring" then
-        local radius = (layer.radius or 0.5) * halfSize
-        love.graphics.setLineWidth((layer.thickness or 0.1) * halfSize)
-        love.graphics.circle("line", 0, 0, radius)
-    elseif shape == "rectangle" then
-        local width, height = (layer.width or 0.6) * size, (layer.height or 0.2) * size
-        love.graphics.rectangle("fill", -width * 0.5, -height * 0.5, width, height)
-    elseif shape == "rounded_rect" then
-        local width, height = (layer.width or 0.6) * size, (layer.height or 0.2) * size
-        local radius = (layer.radius or 0.1) * size
-        love.graphics.rectangle("fill", -width * 0.5, -height * 0.5, width, height, radius, radius)
-    elseif shape == "triangle" then
-        local width, height = (layer.width or 0.5) * size, (layer.height or 0.5) * size
-        local halfWidth = width * 0.5
-        if (layer.direction or "up") == "up" then
-            love.graphics.polygon("fill", 0, -height * 0.5, halfWidth, height * 0.5, -halfWidth, height * 0.5)
-        else
-            love.graphics.polygon("fill", 0, height * 0.5, halfWidth, -height * 0.5, -halfWidth, -height * 0.5)
-        end
-    elseif shape == "beam" then
-        local width, length = (layer.width or 0.2) * size, (layer.length or 0.8) * size
-        love.graphics.rectangle("fill", -length * 0.5, -width * 0.5, length, width)
-    else
-        love.graphics.circle("fill", 0, 0, (layer.radius or 0.4) * halfSize)
-    end
-    
-    love.graphics.pop()
-end
-
 local function draw_item_icon(icon, x, y, size)
-    if type(icon) ~= "table" then return false end
-    
-    local layers = icon.layers
-    if type(layers) ~= "table" or #layers == 0 then
-        set_color(icon.color or icon.detail or icon.accent)
-        love.graphics.circle("fill", x + size * 0.5, y + size * 0.5, size * 0.35)
-        return true
-    end
-    
-    love.graphics.push("all")
-    love.graphics.translate(x + size * 0.5, y + size * 0.5)
-    
-    for i = 1, #layers do
-        if type(layers[i]) == "table" then
-            draw_icon_layer(icon, layers[i], size)
-        end
-    end
-    
-    love.graphics.pop()
-  return true
+    return ItemIconRenderer.drawAt(icon, x, y, size, {
+        set_color = set_color,
+        fallbackRadius = 0.35,
+    })
 end
 
 function Hotbar.draw(context, player)

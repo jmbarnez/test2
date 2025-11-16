@@ -4,6 +4,7 @@ local tiny = require("libs.tiny")
 local loader = require("src.blueprints.loader")
 local math_util = require("src.util.math")
 local PlayerManager = require("src.player.manager")
+local LevelScaling = require("src.combat.level_scaling")
 
 local TAU = math_util.TAU
 
@@ -108,6 +109,39 @@ local function resolve_enemy_level(existing, override)
 
     return { current = 1 }
 end
+local function build_variant_level(entry)
+    if type(entry) ~= "table" then
+        return nil
+    end
+
+    if entry.level ~= nil then
+        if type(entry.level) == "table" then
+            return clone_table(entry.level)
+        end
+        return entry.level
+    end
+
+    local level_range = entry.level_range or entry.levelRange or entry.levels
+    if type(level_range) == "table" then
+        return clone_table(level_range)
+    end
+
+    local min_value = entry.level_min or entry.levelMin
+    local max_value = entry.level_max or entry.levelMax
+
+    if min_value or max_value then
+        local min_level = min_value or max_value
+        local max_level = max_value or min_value or min_level
+
+        return {
+            min = min_level,
+            max = max_level,
+        }
+    end
+
+    return nil
+end
+
 local function normalize_ship_variants(entries)
     if type(entries) ~= "table" then
         return nil
@@ -131,10 +165,21 @@ local function normalize_ship_variants(entries)
                     weight = 1
                 end
                 if weight > 0 then
+                    local context = nil
+                    if type(entry.context) == "table" then
+                        context = clone_table(entry.context)
+                    end
+
+                    local level_override = build_variant_level(entry)
+                    if level_override ~= nil then
+                        context = context or {}
+                        context.level = level_override
+                    end
+
                     normalized[#normalized + 1] = {
                         id = id,
                         weight = weight,
-                        context = type(entry.context) == "table" and entry.context or nil,
+                        context = context,
                     }
                     total_weight = total_weight + weight
                 end
@@ -279,6 +324,7 @@ return function(context)
             local variantContextLevel = chosen_variant and chosen_variant.context and chosen_variant.context.level
             local overrideLevel = instantiate_context.level or variantContextLevel or enemyConfig.level
             enemy.level = resolve_enemy_level(enemy.level, overrideLevel)
+            LevelScaling.apply(enemy)
 
             enemy.spawnPosition = enemy.spawnPosition or { x = spawn_x, y = spawn_y }
             enemy.ai = enemy.ai or {}

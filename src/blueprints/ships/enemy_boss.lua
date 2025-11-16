@@ -70,6 +70,10 @@ return {
     components = {
         type = "enemy_boss",
         enemy = true,
+        level = {
+            base = 3,
+            current = 3,
+        },
         position = { x = 0, y = 0 },
         velocity = { x = 0, y = 0 },
         rotation = 0,

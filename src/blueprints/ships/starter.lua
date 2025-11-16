@@ -197,7 +197,6 @@ return {
                 { weapon = "firework_launcher" },
                 { weapon = "shock_burst_launcher" },
                 { weapon = "lightning_arc" },
-                { weapon = "plasma_thrower" },
                 { module = "ability_afterburner", installed = true },
                 { module = "shield_t1" },
             },

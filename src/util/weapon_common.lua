@@ -231,7 +231,12 @@ end
 
 function weapon_common.resolve_damage_multiplier(shooter)
     if shooter and shooter.enemy then
-        return ENEMY_DAMAGE_MULTIPLIER
+        local multiplier = ENEMY_DAMAGE_MULTIPLIER
+        local scaling = shooter.levelScaling
+        if scaling and scaling.damage then
+            multiplier = multiplier * scaling.damage
+        end
+        return multiplier
     end
     return 1
 end

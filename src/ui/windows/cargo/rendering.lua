@@ -4,6 +4,7 @@
 local theme = require("src.ui.theme")
 local CargoData = require("src.ui.windows.cargo.data")
 local CurrencyIcon = require("src.ui.util.currency_icon")
+local ItemIconRenderer = require("src.util.item_icon_renderer")
 
 ---@diagnostic disable-next-line: undefined-global
 local love = love
@@ -22,67 +23,6 @@ function CargoRendering.drawCurrencyIcon(x, y, size)
     CurrencyIcon.draw(x, y, size)
 end
 
---- Draws a single icon layer
----@param icon table The icon definition
----@param layer table The layer to draw
----@param size number The icon size
-local function draw_icon_layer(icon, layer, size)
-    love.graphics.push()
-
-    local color = layer.color or icon.detail or icon.color or icon.accent
-    set_color(color)
-
-    local offsetX = (layer.offsetX or 0) * size
-    local offsetY = (layer.offsetY or 0) * size
-    love.graphics.translate(offsetX, offsetY)
-
-    if layer.rotation then
-        love.graphics.rotate(layer.rotation)
-    end
-
-    local shape = layer.shape or "circle"
-    local halfSize = size * 0.5
-
-    if shape == "circle" then
-        local radius = (layer.radius or 0.5) * halfSize
-        love.graphics.circle("fill", 0, 0, radius)
-    elseif shape == "ring" then
-        local radius = (layer.radius or 0.5) * halfSize
-        local thickness = (layer.thickness or 0.1) * halfSize
-        love.graphics.setLineWidth(thickness)
-        love.graphics.circle("line", 0, 0, radius)
-    elseif shape == "rectangle" then
-        local width = (layer.width or 0.6) * size
-        local height = (layer.height or 0.2) * size
-        love.graphics.rectangle("fill", -width * 0.5, -height * 0.5, width, height)
-    elseif shape == "rounded_rect" then
-        local width = (layer.width or 0.6) * size
-        local height = (layer.height or 0.2) * size
-        local radius = (layer.radius or 0.1) * size
-        love.graphics.rectangle("fill", -width * 0.5, -height * 0.5, width, height, radius, radius)
-    elseif shape == "triangle" then
-        local width = (layer.width or 0.5) * size
-        local height = (layer.height or 0.5) * size
-        local direction = layer.direction or "up"
-        local halfWidth = width * 0.5
-        if direction == "up" then
-            love.graphics.polygon("fill", 0, -height * 0.5, halfWidth, height * 0.5, -halfWidth, height * 0.5)
-        else
-            love.graphics.polygon("fill", 0, height * 0.5, halfWidth, -height * 0.5, -halfWidth, -height * 0.5)
-        end
-    elseif shape == "beam" then
-        local width = (layer.width or 0.2) * size
-        local length = (layer.length or 0.8) * size
-        love.graphics.rectangle("fill", -length * 0.5, -width * 0.5, length, width)
-    else
-        -- Default to circle
-        local radius = (layer.radius or 0.4) * halfSize
-        love.graphics.circle("fill", 0, 0, radius)
-    end
-
-    love.graphics.pop()
-end
-
 --- Draws an item icon
 ---@param icon table The icon definition
 ---@param x number X position
@@ -93,28 +33,10 @@ function CargoRendering.drawItemIcon(icon, x, y, size)
     if type(icon) ~= "table" then
         return false
     end
-
-    local layers = icon.layers
-    if type(layers) ~= "table" or #layers == 0 then
-        local baseColor = icon.color or icon.detail or icon.accent
-        set_color(baseColor)
-        local radius = size * 0.35
-        love.graphics.circle("fill", x + size * 0.5, y + size * 0.5, radius)
-        return true
-    end
-
-    love.graphics.push("all")
-    love.graphics.translate(x + size * 0.5, y + size * 0.5)
-
-    for i = 1, #layers do
-        local layer = layers[i]
-        if type(layer) == "table" then
-            draw_icon_layer(icon, layer, size)
-        end
-    end
-
-    love.graphics.pop()
-    return true
+    return ItemIconRenderer.drawAt(icon, x, y, size, {
+        set_color = set_color,
+        fallbackRadius = 0.35,
+    })
 end
 
 --- Draws a slot background

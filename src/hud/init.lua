@@ -1,4 +1,5 @@
 local StatusPanel = require("src.hud.status_panel")
+local StatusIndicators = require("src.hud.status_indicators")
 local ExperiencePanel = require("src.hud.experience_panel")
 local Minimap = require("src.hud.minimap")
 local Hotbar = require("src.hud.hotbar")
@@ -10,7 +11,9 @@ local QuestOverlay = require("src.hud.quest_overlay")
 local Hud = {}
 
 function Hud.draw(context, player)
-    StatusPanel.draw(player)
+    local statusPanelHeight = StatusPanel.draw(player)
+    local statusY = 15 + (statusPanelHeight or 0)
+    StatusIndicators.draw(player, statusY)
     ExperiencePanel.draw(context, player)
     TargetPanel.draw(context, player)
     local minimap_rect = Minimap.draw(context, player)

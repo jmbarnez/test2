@@ -46,6 +46,10 @@ return {
     components = {
         type = "enemy_ram_tiny",
         enemy = true,
+        level = {
+            base = 1,
+            current = 1,
+        },
         position = { x = 0, y = 0 },
         velocity = { x = 0, y = 0 },
         rotation = 0,

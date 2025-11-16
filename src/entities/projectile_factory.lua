@@ -285,6 +285,10 @@ function ProjectileFactory.spawn(tinyWorld, physicsWorld, shooter, startX, start
 
     if shooter and shooter.enemy then
         damageMultiplier = 0.5
+        local scaling = shooter.levelScaling
+        if scaling and scaling.damage then
+            damageMultiplier = damageMultiplier * scaling.damage
+        end
     end
 
     local blueprint = weapon.projectileBlueprint

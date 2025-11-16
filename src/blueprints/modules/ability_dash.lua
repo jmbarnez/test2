@@ -32,10 +32,37 @@ local blueprint = {
         accent = { 0.2, 0.6, 1.0, 1.0 },
         detail = { 0.7, 0.95, 1.0, 1.0 },
         layers = {
-            { shape = "rounded_rect", width = 0.8, height = 0.36, color = { 0.08, 0.12, 0.2 }, alpha = 0.95, radius = 0.1 },
-            { shape = "triangle", width = 0.4, height = 0.7, color = { 0.4, 0.8, 1.0 }, alpha = 0.9, direction = "up" },
-            { shape = "triangle", width = 0.28, height = 0.52, color = { 0.85, 0.98, 1.0 }, alpha = 0.75, direction = "up" },
-            { shape = "ring", radius = 0.46, thickness = 0.06, color = { 0.2, 0.6, 1.0 }, alpha = 0.7 },
+            {
+                shape = "rounded_rect",
+                width = 0.82,
+                height = 0.44,
+                radius = 0.12,
+                color = { 0.08, 0.14, 0.24, 0.92 },
+            },
+            {
+                shape = "rounded_rect",
+                width = 0.68,
+                height = 0.32,
+                radius = 0.1,
+                color = { 0.22, 0.52, 0.92, 0.95 },
+            },
+            {
+                shape = "polygon",
+                points = { -0.24, -0.18, -0.08, -0.18, 0.0, -0.28, 0.08, -0.18, 0.24, -0.18, 0.28, 0.18, -0.28, 0.18 },
+                color = { 0.42, 0.82, 1.0, 0.9 },
+            },
+            {
+                shape = "circle",
+                radius = 0.08,
+                color = { 0.85, 0.98, 1.0, 0.85 },
+                offsetY = -0.06,
+            },
+            {
+                shape = "ring",
+                radius = 0.48,
+                thickness = 0.05,
+                color = { 0.38, 0.72, 1.0, 0.28 },
+            },
         },
     },
     item = {

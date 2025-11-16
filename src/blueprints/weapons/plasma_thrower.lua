@@ -57,11 +57,13 @@ return {
         accent = { 0.5, 0.12, 0.9 },
         detail = { 0.96, 0.6, 1.0 },
         layers = {
-            { shape = "rounded_rect", width = 0.72, height = 0.38, color = { 0.12, 0.05, 0.25 }, alpha = 0.88, radius = 0.12 },
-            { shape = "rounded_rect", width = 0.6, height = 0.28, color = { 0.48, 0.12, 0.84 }, alpha = 0.94, radius = 0.1 },
-            { shape = "beam", width = 0.34, length = 0.98, color = { 1.0, 0.5, 0.96 }, alpha = 0.88 },
-            { shape = "beam", width = 0.16, length = 1.0, color = { 0.92, 0.82, 1.0 }, alpha = 0.74 },
-            { shape = "flame", radius = 0.18, color = { 1.0, 0.42, 1.0 }, alpha = 0.7, offsetY = 0.18 },
+            { shape = "rounded_rect", width = 0.8, height = 0.4, radius = 0.14, color = { 0.12, 0.04, 0.24, 0.92 } },
+            { shape = "rounded_rect", width = 0.64, height = 0.3, radius = 0.12, color = { 0.46, 0.12, 0.84, 0.95 } },
+            { shape = "polygon", points = { -0.16, -0.18, 0.12, -0.24, 0.28, -0.04, 0.2, 0.18, -0.08, 0.24, -0.28, 0.04 }, color = { 0.98, 0.54, 1.0, 0.85 } },
+            { shape = "circle", radius = 0.16, color = { 1.0, 0.72, 1.0, 0.78 }, offsetY = -0.06 },
+            { shape = "circle", radius = 0.08, color = { 1.0, 0.92, 1.0, 0.8 }, offsetY = -0.14 },
+            { shape = "rectangle", width = 0.14, height = 0.18, color = { 0.92, 0.5, 1.0, 0.7 }, offsetY = 0.16 },
+            { shape = "ring", radius = 0.52, thickness = 0.05, color = { 0.88, 0.52, 1.0, 0.25 } },
         },
     },
     components = {

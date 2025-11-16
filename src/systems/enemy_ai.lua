@@ -4,7 +4,6 @@ local tiny = require("libs.tiny")
 local math_util = require("src.util.math")
 local vector = require("src.util.vector")
 local BehaviorTree = require("src.ai.behavior_tree")
-local Entities = require("src.states.gameplay.entities")
 
 local TAU = math_util.TAU
 local BTStatus = BehaviorTree.Status
@@ -428,8 +427,7 @@ end
 
 ---@param context EnemyBehaviorContext
 ---@return EnemyBehaviorTreeInstance
-local function create_behavior_tree(context, behavior)
-    behavior = behavior or "default"
+local function create_behavior_tree(context)
     ---@param entity EnemyEntity
     ---@param blackboard EnemyBlackboard
     ---@param dt number
@@ -626,120 +624,6 @@ local function create_behavior_tree(context, behavior)
     ---@param entity EnemyEntity
     ---@param blackboard EnemyBlackboard
     ---@param dt number
-    local function rammer_engage_action(entity, blackboard, dt)
-        local body = entity.body
-        if not body or body:isDestroyed() then
-            update_engine_trail(entity, false)
-            entity.currentTarget = nil
-            return BTStatus.failure
-        end
-
-        local position = entity.position
-        local target = entity.currentTarget
-        if not (position and position.x and position.y and target and target.position) then
-            apply_damping(body, dt, 4)
-            update_engine_trail(entity, false)
-            return BTStatus.failure
-        end
-
-        local ai = entity.ai or {}
-        local stats = entity.stats or {}
-        local detectionRange, engagementRange, preferredDistance, weaponRange = compute_ranges(entity)
-        update_range_profile(blackboard, detectionRange, engagementRange, preferredDistance, weaponRange)
-
-        local ex, ey = position.x, position.y
-        local tx, ty = target.position.x, target.position.y
-        local dx, dy = tx - ex, ty - ey
-        local dirX, dirY, distance = normalize_vector(dx, dy)
-
-        if not dirX or not dirY then
-            apply_damping(body, dt, 4)
-            update_engine_trail(entity, false)
-            return BTStatus.failure
-        end
-
-        local dropRange = ai.disengageRange or stats.disengage_range or (detectionRange and detectionRange * 1.2)
-        if dropRange and dropRange > 0 and distance > dropRange then
-            entity.currentTarget = nil
-            disable_weapon(entity)
-            apply_damping(body, dt, 4)
-            update_engine_trail(entity, false)
-            return BTStatus.failure
-        end
-
-        local state = ensure_ai_state(entity)
-        state.ramCooldown = max(0, (state.ramCooldown or 0) - dt)
-        state.ramHitTimer = max(0, (state.ramHitTimer or 0) - dt)
-
-        if state.ramCooldown > 0 then
-            apply_damping(body, dt, ai.ramCooldownDamping or 8)
-            update_engine_trail(entity, false)
-            disable_weapon(entity)
-            return BTStatus.running
-        end
-
-        local desiredAngle = atan2(dy, dx) + math.pi * 0.5
-        local currentAngle = body:getAngle()
-        local delta = clamp_angle(desiredAngle - currentAngle)
-
-        body:setAngularVelocity(0)
-        body:setAngle(currentAngle + delta)
-        entity.rotation = body:getAngle()
-
-        local ramSpeed = ai.ramSpeed or stats.max_speed or 320
-        local ramMaxSpeed = ai.ramMaxSpeed or (ramSpeed * 1.1)
-        local ramAccel = ai.ramAcceleration or stats.max_acceleration or 600
-        local mass = stats.mass or body:getMass() or 1
-
-        local desiredVX, desiredVY = dirX * ramSpeed, dirY * ramSpeed
-        desiredVX, desiredVY = clamp_vector(desiredVX, desiredVY, ramMaxSpeed)
-
-        local currentVX, currentVY = body:getLinearVelocity()
-        local diffX, diffY = desiredVX - currentVX, desiredVY - currentVY
-        local diffLen = vector.length(diffX, diffY)
-
-        local impulseX, impulseY = 0, 0
-        if diffLen > 0 and dt > 0 then
-            local maxDelta = ramAccel * dt
-            if diffLen > maxDelta then
-                local scale = maxDelta / diffLen
-                diffX, diffY = diffX * scale, diffY * scale
-            end
-            impulseX, impulseY = diffX * mass, diffY * mass
-            body:applyLinearImpulse(impulseX, impulseY)
-        end
-
-        local newVX, newVY = body:getLinearVelocity()
-        newVX, newVY = clamp_vector(newVX, newVY, ramMaxSpeed)
-        body:setLinearVelocity(newVX, newVY)
-
-        local desiredSpeed = vector.length(desiredVX, desiredVY)
-        update_engine_trail(entity, true, impulseX, impulseY, dt, desiredSpeed)
-        disable_weapon(entity)
-
-        local hitRadius = ai.ramHitRadius or max(18, (entity.mountRadius or 20) * 0.9)
-        if distance <= hitRadius and state.ramHitTimer <= 0 then
-            state.ramHitTimer = 0.4
-            local damage = ai.ramDamage or stats.ram_damage or 30
-            damage = max(0, damage)
-            if damage > 0 and Entities and Entities.damage then
-                Entities.damage(target, damage, entity, { x = tx, y = ty })
-            end
-
-            state.ramCooldown = ai.ramCooldown or 3
-            local bounceScale = ai.ramBounceScale or 0.3
-            local bounceVX, bounceVY = body:getLinearVelocity()
-            body:setLinearVelocity(bounceVX * bounceScale, bounceVY * bounceScale)
-
-            update_engine_trail(entity, false)
-        end
-
-        return BTStatus.running
-    end
-
-    ---@param entity EnemyEntity
-    ---@param blackboard EnemyBlackboard
-    ---@param dt number
     local function wander_action(entity, blackboard, dt)
         local body = entity.body
         if not body or body:isDestroyed() then
@@ -753,23 +637,8 @@ local function create_behavior_tree(context, behavior)
     end
 
     local ensureTargetNode = BehaviorTree.Action(ensure_target_action)
-    local wanderNode = BehaviorTree.Action(wander_action)
-
-    if behavior == "rammer" then
-        local rammerNode = BehaviorTree.Action(rammer_engage_action)
-
-        local root = BehaviorTree.Selector({
-            BehaviorTree.Sequence({
-                ensureTargetNode,
-                rammerNode,
-            }),
-            wanderNode,
-        })
-
-        return BehaviorTree.new(root)
-    end
-
     local engageTargetNode = BehaviorTree.Action(engage_target_action)
+    local wanderNode = BehaviorTree.Action(wander_action)
 
     local root = BehaviorTree.Selector({
         BehaviorTree.Sequence({
@@ -786,16 +655,8 @@ end
 ---@param context EnemyBehaviorContext
 ---@return EnemyBehaviorTreeInstance
 local function ensure_behavior_tree(ai, context)
-    ai = ai or {}
-    local behavior = ai.behavior or "default"
-
-    if ai.behaviorTree and ai._behaviorTreeKind ~= behavior then
-        ai.behaviorTree = nil
-    end
-
     if not ai.behaviorTree then
-        ai.behaviorTree = create_behavior_tree(context, behavior)
-        ai._behaviorTreeKind = behavior
+        ai.behaviorTree = create_behavior_tree(context)
     end
 
     return ai.behaviorTree

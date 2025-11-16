@@ -68,6 +68,7 @@ function World.loadSector(state, sectorId)
         state.sector = sector
         state.asteroidConfig = sector.asteroids
         state.enemyConfig = sector.enemies
+        state.proceduralShipConfig = sector.proceduralShips
         state.stationConfig = sector.stations
         state.warpgateConfig = sector.warpgates
     else
@@ -76,6 +77,7 @@ function World.loadSector(state, sectorId)
         state.sector = nil
         state.asteroidConfig = nil
         state.enemyConfig = nil
+        state.proceduralShipConfig = nil
         state.stationConfig = nil
         state.warpgateConfig = nil
     end
@@ -100,6 +102,7 @@ function World.teardown(state)
     state.sector = nil
     state.asteroidConfig = nil
     state.enemyConfig = nil
+    state.proceduralShipConfig = nil
     state.stationConfig = nil
     state.warpgateConfig = nil
 end

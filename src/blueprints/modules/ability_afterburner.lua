@@ -41,11 +41,38 @@ local blueprint = {
         accent = { 0.12, 0.32, 0.85, 1.0 },
         detail = { 0.72, 0.92, 1.0, 1.0 },
         layers = {
-            { shape = "rounded_rect", width = 0.82, height = 0.42, color = { 0.04, 0.08, 0.16 }, alpha = 0.95, radius = 0.12 },
-            { shape = "triangle", width = 0.46, height = 0.78, color = { 0.28, 0.66, 1.0 }, alpha = 0.88, direction = "up" },
-            { shape = "triangle", width = 0.32, height = 0.56, color = { 0.85, 0.98, 1.0 }, alpha = 0.74, direction = "up" },
-            { shape = "ring", radius = 0.5, thickness = 0.07, color = { 0.16, 0.38, 0.92 }, alpha = 0.7 },
-            { shape = "burst", radius = 0.72, color = { 0.3, 0.75, 1.0 }, alpha = 0.38 },
+            {
+                shape = "rounded_rect",
+                width = 0.86,
+                height = 0.48,
+                radius = 0.14,
+                color = { 0.06, 0.1, 0.18, 0.92 },
+            },
+            {
+                shape = "rounded_rect",
+                width = 0.72,
+                height = 0.36,
+                radius = 0.12,
+                color = { 0.18, 0.38, 0.76, 0.95 },
+            },
+            {
+                shape = "polygon",
+                points = { -0.14, -0.28, 0.14, -0.28, 0.32, 0.22, -0.32, 0.22 },
+                color = { 0.32, 0.68, 1.0, 0.88 },
+            },
+            {
+                shape = "rectangle",
+                width = 0.12,
+                height = 0.22,
+                color = { 0.72, 0.92, 1.0, 0.75 },
+                offsetY = 0.08,
+            },
+            {
+                shape = "ring",
+                radius = 0.52,
+                thickness = 0.05,
+                color = { 0.42, 0.76, 1.0, 0.28 },
+            },
         },
     },
     item = {

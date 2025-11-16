@@ -66,13 +66,12 @@ return {
         accent = { 1.0, 0.68, 0.2 },
         detail = { 1.0, 0.98, 0.7 },
         layers = {
-            { shape = "circle", radius = 0.46, color = { 1.0, 0.72, 0.08 }, alpha = 0.45 },
-            { shape = "ring", radius = 0.46, thickness = 0.08, color = { 1.0, 0.82, 0.25 }, alpha = 0.9 },
-            { shape = "circle", radius = 0.33, color = { 1.0, 0.92, 0.2 }, alpha = 0.95 },
-            { shape = "circle", radius = 0.18, color = { 1.0, 0.98, 0.75 }, alpha = 1.0 },
-            { shape = "rectangle", width = 0.18, height = 0.58, color = { 1.0, 0.88, 0.3 }, alpha = 0.85 },
-            { shape = "rectangle", width = 0.12, height = 0.68, color = { 1.0, 1.0, 0.75 }, alpha = 0.6, rotation = 0.785 },
-            { shape = "rectangle", width = 0.12, height = 0.68, color = { 1.0, 1.0, 0.75 }, alpha = 0.6, rotation = -0.785 }
+            { shape = "rounded_rect", width = 0.82, height = 0.42, radius = 0.14, color = { 0.12, 0.1, 0.05, 0.88 }, offsetY = 0.04 },
+            { shape = "rounded_rect", width = 0.68, height = 0.3, radius = 0.1, color = { 0.32, 0.28, 0.18, 0.95 } },
+            { shape = "rectangle", width = 0.2, height = 0.58, color = { 0.95, 0.76, 0.24, 0.96 }, offsetY = -0.04 },
+            { shape = "circle", radius = 0.16, color = { 1.0, 0.9, 0.52, 0.9 }, offsetY = -0.24 },
+            { shape = "rectangle", width = 0.12, height = 0.22, color = { 1.0, 0.98, 0.76, 0.7 }, offsetY = 0.18 },
+            { shape = "ring", radius = 0.5, thickness = 0.05, color = { 1.0, 0.82, 0.28, 0.25 } },
         },
     },
     components = {

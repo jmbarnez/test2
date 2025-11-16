@@ -44,11 +44,12 @@ return {
         accent = { 0.32, 0.5, 0.96 },
         detail = clone_color(GLOW_COLOR),
         layers = {
-            { shape = "circle", radius = 0.48, color = { 0.11, 0.16, 0.26 }, alpha = 0.7 },
-            { shape = "ring", radius = 0.4, thickness = 0.1, color = clone_color(BASE_COLOR), alpha = 0.9 },
-            { shape = "circle", radius = 0.3, color = clone_color(GLOW_COLOR), alpha = 0.95 },
-            { shape = "star", points = 6, radius = 0.36, innerRadius = 0.16, color = { 1.0, 0.84, 0.4 }, alpha = 0.85 },
-            { shape = "circle", radius = 0.12, color = HIGHLIGHT_COLOR, alpha = 1.0 },
+            { shape = "rounded_rect", width = 0.8, height = 0.38, radius = 0.14, color = { 0.08, 0.12, 0.22, 0.9 } },
+            { shape = "rounded_rect", width = 0.64, height = 0.26, radius = 0.12, color = { 0.2, 0.32, 0.68, 0.95 } },
+            { shape = "polygon", points = { -0.12, -0.26, 0.12, -0.26, 0.32, 0.12, -0.32, 0.12 }, color = clone_color(BASE_COLOR), },
+            { shape = "circle", radius = 0.18, color = clone_color(GLOW_COLOR), offsetY = -0.08 },
+            { shape = "circle", radius = 0.08, color = HIGHLIGHT_COLOR, offsetY = -0.16 },
+            { shape = "ring", radius = 0.5, thickness = 0.05, color = { 1.0, 0.78, 0.36, 0.25 } },
         },
     },
     components = {

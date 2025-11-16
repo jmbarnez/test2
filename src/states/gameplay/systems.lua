@@ -11,6 +11,7 @@ local createPlayerControlSystem = require("src.systems.player_control")
 local EngineTrailSystem = require("src.systems.engine_trail")
 local createAsteroidSpawner = require("src.spawners.asteroid")
 local createEnemySpawner = require("src.spawners.enemy")
+local createProceduralShipSpawner = require("src.spawners.procedural_ships")
 local createStationSpawner = require("src.spawners.station")
 local createWarpgateSpawner = require("src.spawners.warpgate")
 local createEnemyAISystem = require("src.systems.enemy_ai")
@@ -240,6 +241,7 @@ function Systems.initialize(state, damageCallback)
 
     state.spawnerSystem = state.world:addSystem(createAsteroidSpawner(baseContext))
     state.enemySpawnerSystem = state.world:addSystem(createEnemySpawner(baseContext))
+    state.proceduralShipSpawnerSystem = state.world:addSystem(createProceduralShipSpawner(baseContext))
     state.stationSpawnerSystem = state.world:addSystem(createStationSpawner(baseContext))
     state.warpgateSpawnerSystem = state.world:addSystem(createWarpgateSpawner(baseContext))
 
@@ -277,6 +279,7 @@ function Systems.teardown(state)
     state.controlSystem = nil
     state.spawnerSystem = nil
     state.enemySpawnerSystem = nil
+    state.proceduralShipSpawnerSystem = nil
     state.stationSpawnerSystem = nil
     state.warpgateSpawnerSystem = nil
     state.movementSystem = nil
