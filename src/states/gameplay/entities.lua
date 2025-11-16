@@ -685,6 +685,29 @@ function Entities.damage(entity, amount, source, context)
     end
 end
 
+function Entities.pushCollisionImpact(entity, impactForce, impactPosition)
+    if not entity then
+        return
+    end
+
+    local shield = resolve_shield(entity)
+    if not shield or (tonumber(shield.max) or 0) <= 0 then
+        return
+    end
+
+    -- Only show impact if shield is active
+    local current = math.max(0, tonumber(shield.current) or 0)
+    if current <= 0 then
+        return
+    end
+
+    -- Scale impact force to a reasonable "absorbed" value for visual effect
+    -- Treat it as if it absorbed some shield energy proportional to the impact
+    local visualAbsorbed = math.max(1, math.min(impactForce * 0.5, shield.max * 0.2))
+    
+    push_impact_pulse(entity, visualAbsorbed, impactPosition, "shield")
+end
+
 function Entities.updateHealthTimers(world, dt)
     if not world or dt <= 0 then
         return

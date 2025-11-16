@@ -19,6 +19,7 @@ local createWeaponProjectileSystem = require("src.systems.weapon_projectile_spaw
 local createWeaponHitscanSystem = require("src.systems.weapon_hitscan")
 local createWeaponBeamVFXSystem = require("src.systems.weapon_beam_vfx")
 local createProjectileSystem = require("src.systems.projectile")
+local createCollisionImpactSystem = require("src.systems.collision_impact")
 local createShipSystem = require("src.systems.ship")
 local createAbilityModuleSystem = require("src.systems.ability_modules")
 local createHudSystem = require("src.systems.hud")
@@ -58,6 +59,7 @@ local Systems = {}
 --   createShipSystem(GameContext.extend(sharedContext))
 --   createAbilityModuleSystem(GameContext.extend(sharedContext))  -- uses state/intentHolder via GameContext
 --   createProjectileSystem(GameContext.extend(sharedContext))     -- uses physicsWorld, damageEntity, registerPhysicsCallback
+--   createCollisionImpactSystem(GameContext.extend(sharedContext)) -- uses registerPhysicsCallback for shield collision effects
 --   createLootDropSystem(GameContext.extend(sharedContext, {
 --       spawnLootItem = Entities.spawnLootPickup,
 --       onLootDropped = ...
@@ -146,6 +148,7 @@ local function add_common_systems(state, context)
     state.shipSystem = state.world:addSystem(createShipSystem(GameContext.extend(sharedContext)))
     state.abilitySystem = state.world:addSystem(createAbilityModuleSystem(GameContext.extend(sharedContext)))
     state.projectileSystem = state.world:addSystem(createProjectileSystem(GameContext.extend(sharedContext)))
+    state.collisionImpactSystem = state.world:addSystem(createCollisionImpactSystem(GameContext.extend(sharedContext)))
     state.lootDropSystem = state.world:addSystem(createLootDropSystem(GameContext.extend(sharedContext, {
         spawnLootItem = function(drop)
             return Entities.spawnLootPickup(state, drop)
@@ -285,6 +288,10 @@ function Systems.teardown(state)
         state.projectileSystem:detachPhysicsCallbacks()
     end
     state.projectileSystem = nil
+    if state.collisionImpactSystem and state.collisionImpactSystem.detachPhysicsCallbacks then
+        state.collisionImpactSystem:detachPhysicsCallbacks()
+    end
+    state.collisionImpactSystem = nil
     state.lootDropSystem = nil
     state.enemyAISystem = nil
     state.targetingSystem = nil
