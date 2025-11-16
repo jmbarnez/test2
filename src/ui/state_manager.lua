@@ -36,11 +36,11 @@ local function set_state_field(primary, secondary, key, value)
     end
 end
 
--- Create default UI state configurations
 local function createCargoUIState()
     return {
         visible = false,
         dragging = false,
+        _was_mouse_down = false,
     }
 end
 
@@ -79,6 +79,7 @@ local function createStationUIState()
         quests = nil,
         selectedQuestId = nil,
         activeQuestId = nil,
+        activeQuestIds = {},
         _lastStationSignature = nil,
     }
 end
@@ -104,15 +105,100 @@ local function regenerate_station_quests(state)
 
     local stationUI = state.stationUI
     local station = state.stationDockTarget
+    stationUI.activeQuestIds = stationUI.activeQuestIds or {}
 
-    stationUI.quests = QuestGenerator.generate(state, station)
-    stationUI.selectedQuestId = nil
-    stationUI.activeQuestId = nil
+    local previousQuests = stationUI.quests or {}
+    local previousSelected = stationUI.selectedQuestId
+    local trackedId = stationUI.activeQuestId
+    local activeIds = stationUI.activeQuestIds
+
+    local preserved = {}
+    if type(activeIds) == "table" then
+        for i = 1, #previousQuests do
+            local quest = previousQuests[i]
+            local id = quest and quest.id
+            if id and activeIds[id] then
+                preserved[id] = quest
+                quest.accepted = true
+            end
+        end
+    end
+
+    local generated = QuestGenerator.generate(state, station) or {}
+    local result = {}
+    local seen = {}
+
+    local function pushQuest(quest)
+        if not quest then
+            return
+        end
+
+        local id = quest.id
+        if not id or seen[id] then
+            return
+        end
+
+        if activeIds and activeIds[id] then
+            quest.accepted = true
+            quest.progress = quest.progress or 0
+        else
+            quest.accepted = nil
+        end
+
+        seen[id] = true
+        result[#result + 1] = quest
+    end
+
+    for i = 1, #generated do
+        local quest = generated[i]
+        local id = quest and quest.id
+        if id and preserved[id] then
+            pushQuest(preserved[id])
+            preserved[id] = nil
+        else
+            pushQuest(quest)
+        end
+    end
+
+    for _, quest in pairs(preserved) do
+        pushQuest(quest)
+    end
+
+    stationUI.quests = result
     stationUI._lastStationSignature = resolve_station_signature(station)
 
-    if stationUI.quests and #stationUI.quests > 0 then
-        stationUI.selectedQuestId = stationUI.quests[1].id
+    if type(activeIds) == "table" then
+        for id in pairs(activeIds) do
+            if not seen[id] then
+                activeIds[id] = nil
+            end
+        end
     end
+
+    if trackedId and (not activeIds or not activeIds[trackedId]) then
+        trackedId = nil
+    end
+
+    if previousSelected and seen[previousSelected] then
+        stationUI.selectedQuestId = previousSelected
+    elseif stationUI.quests and #stationUI.quests > 0 then
+        stationUI.selectedQuestId = stationUI.quests[1].id
+    else
+        stationUI.selectedQuestId = nil
+    end
+
+    if not trackedId and type(activeIds) == "table" then
+        for i = 1, #stationUI.quests do
+            local quest = stationUI.quests[i]
+            local id = quest and quest.id
+            if id and activeIds[id] then
+                trackedId = id
+                break
+            end
+        end
+    end
+
+    stationUI.activeQuestId = trackedId
 end
 
 function UIStateManager.refreshStationQuests(state)
@@ -226,6 +312,31 @@ local function create_visibility_handlers(windowKey, config)
             set_visibility(state, not state[windowKey].visible)
         end,
     }
+end
+
+local cargoVisibilityController = create_visibility_handlers("cargoUI", {
+    afterSet = function(state, window_state, visible)
+        window_state.dragging = false
+        window_state._was_mouse_down = is_primary_mouse_down()
+
+        if visible then
+            capture_input(state)
+        else
+            release_input(state, true)
+        end
+    end,
+})
+
+function UIStateManager.showCargoUI(state)
+    cargoVisibilityController.show(state)
+end
+
+function UIStateManager.hideCargoUI(state)
+    cargoVisibilityController.hide(state)
+end
+
+function UIStateManager.toggleCargoUI(state)
+    cargoVisibilityController.toggle(state)
 end
 
 local function createDeathUIState()
@@ -435,24 +546,16 @@ function UIStateManager.hideDeathUI(state)
     end
 end
 
-function UIStateManager.toggleCargoUI(state)
+function UIStateManager.toggleStationUI(state)
     local resolved = resolve_state_pair(state)
-    if not (resolved and resolved.cargoUI) then
+    if not (resolved and resolved.stationUI) then
         return
     end
 
-    state = resolved
-    state.cargoUI.visible = not state.cargoUI.visible
-
-    if state.uiInput then
-        if state.cargoUI.visible then
-            state.uiInput.mouseCaptured = true
-            state.uiInput.keyboardCaptured = true
-        else
-            local keepCaptured = any_modal_visible(state)
-            state.uiInput.mouseCaptured = not not keepCaptured
-            state.uiInput.keyboardCaptured = not not keepCaptured
-        end
+    if resolved.stationUI.visible then
+        UIStateManager.hideStationUI(resolved)
+    else
+        UIStateManager.showStationUI(resolved)
     end
 end
 
@@ -531,8 +634,11 @@ local mapVisibilityController = create_visibility_handlers("mapUI", {
         window_state.dragging = false
         window_state._just_opened = visible
 
-        if not visible then
+        if visible then
+            capture_input(state)
+        else
             window_state._was_mouse_down = is_primary_mouse_down()
+            release_input(state, true)
         end
     end,
 })
@@ -712,9 +818,12 @@ function UIStateManager.toggleStationUI(state)
     if not (resolved and resolved.stationUI) then
         return
     end
-    
-    state = resolved
-    state.stationUI.visible = not state.stationUI.visible
+
+    if resolved.stationUI.visible then
+        UIStateManager.hideStationUI(state)
+    else
+        UIStateManager.showStationUI(state)
+    end
 end
 
 function UIStateManager.requestRespawn(state)
@@ -765,8 +874,7 @@ function UIStateManager.onResize(state, width, height)
     end
 
     if type(state.uiInput) == "table" then
-        state.uiInput.mouseCaptured = false
-        state.uiInput.keyboardCaptured = false
+        release_input(state, true)
     end
 
     state._viewport = state._viewport or {}

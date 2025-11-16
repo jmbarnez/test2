@@ -1,9 +1,13 @@
 ---@diagnostic disable: undefined-global
+-- Pickup renderer
+-- Draws pickup items in the world, with optional bobbing and custom
+-- icon layers. Icons are made from simple shapes (circle, ring, triangle, etc.)
 local love = love
 local math = math
 
 local pickup_renderer = {}
 
+--- Set love.graphics color using an RGBA table or use white as fallback.
 local function set_color(color)
     if type(color) == "table" then
         love.graphics.setColor(
@@ -17,6 +21,10 @@ local function set_color(color)
     end
 end
 
+--- Draw a single icon layer for item icons. Supports multiple shapes.
+-- @param icon table parent icon definition (may contain color defaults)
+-- @param layer table layer definition (shape, offsets, color)
+-- @param size number scale of base icon
 local function draw_icon_layer(icon, layer, size)
     love.graphics.push()
 
@@ -73,6 +81,8 @@ local function draw_icon_layer(icon, layer, size)
     love.graphics.pop()
 end
 
+--- Draw a full item icon (stack of layers) at the origin.
+-- Returns true when an icon was drawn.
 local function draw_item_icon(icon, size)
     if type(icon) ~= "table" then
         return false
@@ -96,6 +106,8 @@ local function draw_item_icon(icon, size)
     return true
 end
 
+--- Draw a pickup entity at its position with optional bob and rotation.
+-- @param entity table collectible entity with drawable property.
 function pickup_renderer.draw(entity)
     local pos = entity.position
     local drawable = entity.drawable

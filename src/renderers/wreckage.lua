@@ -1,7 +1,10 @@
 ---@diagnostic disable: undefined-global
-
+-- Wreckage renderer
+-- Draws destroyed ship fragments and optional health/repair overlays.
 local wreckage_renderer = {}
 
+--- Draw a wreckage entity at its position. Draws a polygon fill/outline
+-- and a small health bar if the entity has a health component.
 function wreckage_renderer.draw(entity)
     if not (entity and entity.position and entity.drawable) then
         return

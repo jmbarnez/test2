@@ -1,5 +1,10 @@
 ---@diagnostic disable: undefined-global
 
+-- Ship renderer
+-- Responsible for drawing ship body parts, shields and hull VFX. This uses
+-- a shader to render shield impacts and provides fallback rendering when
+-- shader support isn't available. It also exposes a few color constants
+-- to keep shield/hull color values consistent across the codebase.
 local constants = require("src.constants.game")
 local vector = require("src.util.vector")
 
@@ -472,6 +477,11 @@ local function ensure_palette(drawable, entity)
     end
 end
 
+--- Generic ship body drawing. This will render shape parts and colors
+-- according to the drawable layout. It does not render shield pulses
+-- or overlays; those are handled separately.
+-- @param entity table
+-- @param context table
 local function draw_ship_generic(entity, context)
     local drawable = entity.drawable
     local parts = drawable and drawable.parts
@@ -531,6 +541,10 @@ local function draw_ship_generic(entity, context)
     return true
 end
 
+--- Draw shield/hull impact pulses. Pulses are read from `entity.impactPulses`
+-- and each entry should contain position/direction/intensity metadata.
+-- This function attempts to use a shader to render directional shield
+-- impacts and falls back to a simple radial glow for older/unsupported platforms.
 local function draw_impact_pulses(entity)
     if not entity or not entity.position then
         return
@@ -545,7 +559,6 @@ local function draw_impact_pulses(entity)
 
     local px = entity.position.x or 0
     local py = entity.position.y or 0
-    local rotation = entity.rotation or 0
     local fallbackRadius = (shield and shield.visualRadius)
         or entity.mountRadius
         or resolve_drawable_radius(entity.drawable)
@@ -554,9 +567,17 @@ local function draw_impact_pulses(entity)
 
     love.graphics.push("all")
     love.graphics.translate(px, py)
-    love.graphics.rotate(rotation)
     love.graphics.setBlendMode("add")
 
+    local rotation = entity.rotation or 0
+    local cosRotation
+    local sinRotation
+    if rotation ~= 0 then
+        cosRotation = math.cos(rotation)
+        sinRotation = math.sin(rotation)
+    end
+
+    ---@type love.Shader|nil
     local shader = shieldImpactShader
     local invM11, invM12, invM21, invM22
     local shipCenterX, shipCenterY = love.graphics.transformPoint(0, 0)
@@ -592,8 +613,21 @@ local function draw_impact_pulses(entity)
         local ringAlpha = pulse.ringAlpha or 0
         local glowAlpha = pulse.glowAlpha or 0
         local coreAlpha = pulse.coreAlpha or 0
-        local impactX = pulse.impactX or 0
-        local impactY = pulse.impactY or 0
+        local impactX = pulse.impactWorldX
+        local impactY = pulse.impactWorldY
+
+        if not (impactX and impactY) then
+            local legacyX = pulse.impactX or 0
+            local legacyY = pulse.impactY or 0
+
+            if cosRotation and sinRotation then
+                impactX = legacyX * cosRotation - legacyY * sinRotation
+                impactY = legacyX * sinRotation + legacyY * cosRotation
+            else
+                impactX = legacyX
+                impactY = legacyY
+            end
+        end
         local intensity = pulse.intensity or 0.4
         local progress = pulse.progress or 0
 
@@ -657,6 +691,8 @@ end
 
 ship_renderer.draw_shield_pulses = draw_impact_pulses
 
+--- Draws the entity's health bar above the entity if configured.
+-- This function reads from `entity.health` and `entity.healthBar`.
 local function draw_health_bar(entity)
     local health = entity.health
     if not (health and health.max and health.max > 0) then

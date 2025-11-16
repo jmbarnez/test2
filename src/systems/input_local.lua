@@ -85,18 +85,19 @@ return function(context)
             Intent.setMove(intent, moveX, moveY)
 
             if love.mouse then
-                local mx, my = love.mouse.getPosition()
-                local worldX, worldY = screen_to_world(mx, my, context.camera)
-
-                Intent.setAim(intent, worldX, worldY)
+                local uiInput = context.uiInput
+                local mouseCaptured = uiInput and uiInput.mouseCaptured
 
                 local primary_down = love.mouse.isDown and love.mouse.isDown(1)
                 local secondary_down = love.mouse.isDown and love.mouse.isDown(2)
 
-                local uiInput = context.uiInput
-                if uiInput and uiInput.mouseCaptured then
+                if mouseCaptured then
                     primary_down = false
                     secondary_down = false
+                else
+                    local mx, my = love.mouse.getPosition()
+                    local worldX, worldY = screen_to_world(mx, my, context.camera)
+                    Intent.setAim(intent, worldX, worldY)
                 end
 
                 Intent.setFirePrimary(intent, primary_down and not is_control_modifier_active())

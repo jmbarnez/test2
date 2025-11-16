@@ -36,6 +36,7 @@ return function(context)
             local intents = context.intents or (context.intentHolder and context.intentHolder.playerIntents)
             local intentHolder = context.intentHolder or context.state
             local localPlayerId = intentHolder and intentHolder.localPlayerId
+            local uiInput = context.uiInput
 
             local intent = intents and entity.playerId and intents[entity.playerId]
 
@@ -44,15 +45,17 @@ return function(context)
                 aimX = intent.aimX
                 aimY = intent.aimY
             elseif entity.playerId and localPlayerId and entity.playerId == localPlayerId and context.camera and love.mouse then
-                local mx, my = love.mouse.getPosition()
-                local cam = context.camera
-                local zoom = cam.zoom or 1
-                if zoom ~= 0 then
-                    aimX = mx / zoom + cam.x
-                    aimY = my / zoom + cam.y
-                else
-                    aimX = cam.x
-                    aimY = cam.y
+                if love.mouse.getPosition and not (uiInput and uiInput.mouseCaptured) then
+                    local mx, my = love.mouse.getPosition()
+                    local cam = context.camera
+                    local zoom = cam.zoom or 1
+                    if zoom ~= 0 then
+                        aimX = mx / zoom + cam.x
+                        aimY = my / zoom + cam.y
+                    else
+                        aimX = cam.x
+                        aimY = cam.y
+                    end
                 end
             end
 

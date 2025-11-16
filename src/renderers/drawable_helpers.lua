@@ -1,7 +1,13 @@
 ---@diagnostic disable: undefined-global
 
+-- Drawable helpers are used across renderers to draw shapes, handle
+-- color resolution and apply part-specific transforms. Keep implementations
+-- concise to be reused by different renderers (ships, stations, warpgates).
 local drawable_helpers = {}
 
+--- Create a shallow copy of a table.
+-- This is used when we need a modified copy of a drawable part (e.g. mirrored)
+-- without mutating the original.
 local function clone_table(source)
     local copy = {}
     for key, value in pairs(source) do
@@ -10,6 +16,12 @@ local function clone_table(source)
     return copy
 end
 
+--- Normalize a color spec to a 4-component RGBA table.
+-- Accepts either an array-like color or falls back to a provided default.
+-- Returns a table with exactly 4 components (r,g,b,a).
+-- @param color table|string|nil
+-- @param fallback table fallback RGBA color
+-- @return table RGBA
 function drawable_helpers.normalise_color(color, fallback)
     fallback = fallback or { 1, 1, 1, 1 }
     if type(color) ~= "table" then
@@ -27,6 +39,8 @@ end
 do
     local normalise_color = drawable_helpers.normalise_color
 
+    --- Resolve a color specification (string key or table) using the palette
+    --- and fallback color. Returns normalized RGBA color table.
     function drawable_helpers.resolve_color(palette, spec, fallback)
         local fallback_color = normalise_color(fallback)
         if type(spec) == "table" and #spec >= 3 then
@@ -42,6 +56,10 @@ do
     end
 end
 
+--- Apply translation/rotation/scale defined on a 'part' to the current
+-- graphics transform stack. Returns true when a transform was applied.
+-- This is a thin wrapper around love.graphics transform calls.
+-- @param part table
 function drawable_helpers.apply_transform(part)
     local has_transform = false
     if part.offset then
@@ -64,6 +82,9 @@ function drawable_helpers.apply_transform(part)
     return has_transform
 end
 
+--- Mirror points for symmetric parts. This flips the x-axis of polygon points.
+-- @param points table flat array of x,y alternating coordinates
+-- @return table mirrored points
 function drawable_helpers.mirror_points(points)
     if type(points) ~= "table" then
         return {}
@@ -77,6 +98,11 @@ function drawable_helpers.mirror_points(points)
     return mirrored
 end
 
+--- Draw polygon part with fill and optional stroke. Honors fill, stroke
+-- and transform properties of the part.
+-- @param part table polygon part
+-- @param palette table color palette
+-- @param defaults table default styling options
 function drawable_helpers.draw_polygon_part(part, palette, defaults)
     local points = part.points
     if type(points) ~= "table" or #points < 6 then
@@ -103,6 +129,10 @@ function drawable_helpers.draw_polygon_part(part, palette, defaults)
     love.graphics.pop()
 end
 
+--- Draw elliptical parts (circles, ellipses) including optional stroke.
+-- @param part table
+-- @param palette table
+-- @param defaults table
 function drawable_helpers.draw_ellipse_part(part, palette, defaults)
     local radius_x = part.radiusX or (part.width and part.width * 0.5) or part.radius or defaults.ellipseRadius or 5
     local radius_y = part.radiusY or (part.height and part.height * 0.5) or part.length or radius_x
@@ -135,6 +165,10 @@ function drawable_helpers.draw_ellipse_part(part, palette, defaults)
     love.graphics.pop()
 end
 
+--- Draw a list of drawable parts using helpers above. Handles mirroring.
+-- @param parts table
+-- @param palette table
+-- @param defaults table
 function drawable_helpers.draw_parts(parts, palette, defaults)
     if type(parts) ~= "table" then
         return

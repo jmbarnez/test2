@@ -1,5 +1,7 @@
 ---@diagnostic disable: undefined-global
-
+-- Warpgate renderer
+-- Renders warpgate structures and the portal visual. Uses a pair of
+-- shader effects (online/offline) and a structured drawable for the body.
 local drawable_helpers = require("src.renderers.drawable_helpers")
 local ship_renderer = require("src.renderers.ship")
 
@@ -7,6 +9,7 @@ local love = love
 
 local warpgate_renderer = {}
 
+--- Create a shader from source with error handling.
 local function load_shader(label, source)
     local ok, shaderOrError = pcall(love.graphics.newShader, source)
     if not ok then
@@ -87,6 +90,8 @@ local online_shader = load_shader("online", [[
     }
 ]])
 
+--- Ensure the drawable's palette contains all expected keys with
+--- sensible fallbacks.
 local function ensure_palette(drawable)
     if type(drawable.colors) ~= "table" then
         drawable.colors = {}
@@ -107,6 +112,7 @@ local function ensure_palette(drawable)
     return colors
 end
 
+--- Resolve default drawing options from the palette (stroke width, alpha etc.)
 local function resolve_defaults(drawable, palette)
     return {
         fill = palette.frame,
@@ -117,6 +123,7 @@ local function resolve_defaults(drawable, palette)
     }
 end
 
+--- Draw static warpgate structure from drawable parts.
 local function draw_structure(entity, palette, defaults)
     local drawable = entity.drawable
     if not drawable or type(drawable.parts) ~= "table" then
@@ -126,6 +133,7 @@ local function draw_structure(entity, palette, defaults)
     drawable_helpers.draw_parts(drawable.parts, palette, defaults)
 end
 
+--- Draw warpgate portal using shader or fallback mode.
 local function draw_portal(entity, palette)
     local warpgate = entity.warpgate or {}
     local online = warpgate.online and warpgate.status ~= "offline"

@@ -78,6 +78,10 @@ function station_quests.draw(context, params)
     local just_pressed = params.just_pressed == true
     local bottom_bar = params.bottom_bar
 
+    if type(state.activeQuestIds) ~= "table" then
+        state.activeQuestIds = {}
+    end
+
     if not state.quests then
         UIStateManager.refreshStationQuests(context)
     end
@@ -124,8 +128,8 @@ function station_quests.draw(context, params)
 
     local display_area_height = area_height
     local selectedQuest
-    local active_id = state.activeQuestId
     local selected_id = state.selectedQuestId
+    local activeIds = state.activeQuestIds
 
     if selected_id then
         for i = 1, #quests do
@@ -170,13 +174,15 @@ function station_quests.draw(context, params)
 
         local hovered = point_in_rect(mouse_x, mouse_y, rect)
         local is_selected = selected_id == quest.id
-        local is_active = active_id == quest.id
+        local is_active = activeIds and activeIds[quest.id]
 
         local fill_color
         if is_selected then
             fill_color = window_colors.accent_secondary or window_colors.accent or { 0.32, 0.52, 0.92, 0.96 }
         elseif hovered then
             fill_color = window_colors.row_hover or { 0.2, 0.26, 0.32, 0.28 }
+        elseif is_active then
+            fill_color = window_colors.row_alternate or { 0.09, 0.11, 0.14, 0.8 }
         else
             fill_color = window_colors.background or { 0.04, 0.05, 0.07, 0.96 }
         end
@@ -195,7 +201,22 @@ function station_quests.draw(context, params)
         end
 
         local text_x = rect.x + row_inner_padding
-        local text_width = rect.width - row_inner_padding * 2
+        local button_width = math.max(92, row_inner_padding * 3)
+        local button_height = math.max(summary_font:getHeight() + row_inner_padding * 0.6, 26)
+        local button_x = rect.x + rect.width - row_inner_padding - button_width
+        local button_y = rect.y + (rect.height - button_height) * 0.5
+        local button_rect = {
+            x = button_x,
+            y = button_y,
+            width = button_width,
+            height = button_height,
+        }
+
+        local text_width = button_rect.x - text_x - row_inner_padding
+        if text_width < 80 then
+            text_width = rect.width - row_inner_padding * 2
+        end
+
         local top_text_y = rect.y + row_inner_padding - 2
 
         love.graphics.setFont(title_font)
@@ -207,14 +228,12 @@ function station_quests.draw(context, params)
         love.graphics.printf(quest.title, text_x, top_text_y, text_width, "left")
 
         love.graphics.setFont(summary_font)
+        local status_y = rect.y + rect.height - summary_font:getHeight() - row_inner_padding * 0.5
         if is_active then
             set_color(window_colors.accent_player or { 0.3, 0.78, 0.46, 1 })
             local progress_label = QuestGenerator.progressLabel(quest)
-            if progress_label ~= "" then
-                love.graphics.printf(progress_label, text_x, rect.y + rect.height - summary_font:getHeight() - row_inner_padding * 0.5, text_width, "right")
-            else
-                love.graphics.printf("Accepted", text_x, rect.y + rect.height - summary_font:getHeight() - row_inner_padding * 0.5, text_width, "right")
-            end
+            local status_label = progress_label ~= "" and progress_label or "Accepted"
+            love.graphics.printf(status_label, text_x, status_y, text_width, "right")
             set_color(window_colors.text or { 0.85, 0.9, 1.0, 1 })
         else
             set_color(window_colors.muted or { 0.65, 0.7, 0.8, 1 })
@@ -222,6 +241,49 @@ function station_quests.draw(context, params)
 
         local summary_y = rect.y + rect.height - summary_font:getHeight() - row_inner_padding
         love.graphics.printf(QuestGenerator.rewardLabel(quest), text_x, summary_y, text_width, "left")
+
+        local button_hovered = point_in_rect(mouse_x, mouse_y, button_rect)
+        local button_active = button_hovered and mouse_down
+        local was_active = is_active
+
+        local function select_fallback_tracked()
+            if not state or type(activeIds) ~= "table" then
+                return
+            end
+
+            for i = 1, #quests do
+                local candidate = quests[i]
+                local id = candidate and candidate.id
+                if id and activeIds[id] then
+                    state.activeQuestId = id
+                    return
+                end
+            end
+
+            state.activeQuestId = nil
+        end
+
+        if just_pressed and button_hovered then
+            if was_active then
+                if activeIds then
+                    activeIds[quest.id] = nil
+                end
+                quest.accepted = nil
+                if state and state.activeQuestId == quest.id then
+                    select_fallback_tracked()
+                end
+            else
+                activeIds[quest.id] = true
+                quest.accepted = true
+                quest.progress = quest.progress or 0
+                if state then
+                    state.activeQuestId = quest.id
+                end
+            end
+        end
+
+        local button_label = was_active and "Abandon" or "Accept"
+        draw_action_button(button_rect, button_label, fonts, button_hovered, button_active, false)
     end
 
     local detail_top = area_top
@@ -274,9 +336,15 @@ function station_quests.draw(context, params)
             detail_cursor_y = detail_cursor_y + reward_height + row_spacing * 1.5
         end
 
-        if active_id == selectedQuest.id then
+        local selected_active = activeIds[selectedQuest.id]
+        if selected_active then
             local progress_label = QuestGenerator.progressLabel(selectedQuest)
-            local status_text = progress_label ~= "" and string.format("Active - Progress: %s", progress_label) or "This contract is active."
+            local status_text
+            if progress_label ~= "" then
+                status_text = string.format("Accepted - Progress: %s", progress_label)
+            else
+                status_text = "This contract is accepted."
+            end
             love.graphics.setFont(summary_font)
             set_color(window_colors.accent_player or { 0.3, 0.78, 0.46, 1 })
             love.graphics.printf(status_text, detail_inner_x, detail_cursor_y, detail_inner_width, "left")
@@ -292,29 +360,14 @@ function station_quests.draw(context, params)
     if bottom_bar then
         local button_gap = theme_spacing.medium or 16
         local button_height = math.max(24, bottom_bar.height - button_gap)
-        local button_width = math.min(168, (bottom_bar.width - button_gap * 3) * 0.5)
+        local button_width = math.min(200, bottom_bar.width - button_gap * 2)
         local base_y = bottom_bar.y + (bottom_bar.height - button_height) * 0.5
-        local accept_rect = {
-            x = bottom_bar.x + button_gap,
-            y = base_y,
-            width = button_width,
-            height = button_height,
-        }
         local refresh_rect = {
-            x = accept_rect.x + button_width + button_gap,
+            x = bottom_bar.x + (bottom_bar.width - button_width) * 0.5,
             y = base_y,
             width = button_width,
             height = button_height,
         }
-
-        local accept_disabled = not selectedQuest or (active_id == selected_id)
-        local accept_hovered = point_in_rect(mouse_x, mouse_y, accept_rect)
-        local accept_active = accept_hovered and mouse_down and not accept_disabled
-        if just_pressed and accept_hovered and not accept_disabled then
-            state.activeQuestId = selected_id
-        end
-
-        draw_action_button(accept_rect, accept_disabled and "Accepted" or "Accept Contract", fonts, accept_hovered, accept_active, accept_disabled)
 
         local refresh_hovered = point_in_rect(mouse_x, mouse_y, refresh_rect)
         local refresh_active = refresh_hovered and mouse_down

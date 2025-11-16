@@ -569,18 +569,17 @@ local function push_impact_pulse(entity, absorbed, impactPosition, pulseType)
     local dx = px - ex
     local dy = py - ey
 
-    local rotation = entity.rotation
-    if not rotation and entity.body and not entity.body:isDestroyed() then
-        rotation = entity.body:getAngle()
+    local impactAngle = math.atan2(dy, dx)
+    local impactDistance = math.sqrt(dx * dx + dy * dy)
+
+    if impactDistance <= 0 then
+        local shield = resolve_shield(entity)
+        local fallbackRadius = (shield and shield.visualRadius)
+            or entity.mountRadius
+            or entity.radius
+            or 32
+        impactDistance = fallbackRadius
     end
-    rotation = rotation or 0
-
-    local cosR = math.cos(-rotation)
-    local sinR = math.sin(-rotation)
-    local localX = dx * cosR - dy * sinR
-    local localY = dx * sinR + dy * cosR
-
-    local impactAngle = math.atan2(localY, localX)
 
     local maxHealth = math.max(0, tonumber(entity.health and entity.health.max) or 0)
     local intensity
@@ -591,8 +590,9 @@ local function push_impact_pulse(entity, absorbed, impactPosition, pulseType)
     end
 
     pulses[#pulses + 1] = {
-        impactX = localX,
-        impactY = localY,
+        impactWorldX = dx,
+        impactWorldY = dy,
+        impactDistance = impactDistance,
         impactAngle = impactAngle,
         age = 0,
         duration = 0.5,

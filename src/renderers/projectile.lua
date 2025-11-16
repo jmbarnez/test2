@@ -1,7 +1,12 @@
+-- Projectile renderer
+-- Draws projectiles (orbs, beams, missiles) and optional travel indicators
 local love = love
 
 local projectile_renderer = {}
 
+--- Draw a projectile entity with its visual style. Handles beams, missiles
+--- and default orb-like projectiles, and draws a motion trail if present.
+-- @param entity table projectile entity
 function projectile_renderer.draw(entity)
     if not (entity and entity.position and entity.drawable) then
         return

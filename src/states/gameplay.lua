@@ -745,12 +745,8 @@ function gameplay:mousepressed(_, _, button)
         return
     end
 
-    if UIStateManager.isAnyUIVisible(self) then
-        return
-    end
-
     local uiInput = self.uiInput
-    if uiInput and uiInput.mouseCaptured then
+    if (uiInput and uiInput.mouseCaptured) or UIStateManager.isAnyUIVisible(self) then
         return
     end
 

@@ -1,3 +1,7 @@
+-- Explosion renderer
+-- Provides a shader-based (and fallback) rendering for explosion effects,
+-- including core color, glow and ring. The shader parameters are driven
+-- by explosion instance data (position, radius, color, progress).
 local love = love
 local lg = love.graphics
 
@@ -75,6 +79,7 @@ end
 local DEFAULT_CORE_COLOR = { 1.0, 0.62, 0.26, 0.95 }
 local DEFAULT_RING_COLOR = { 1.0, 0.82, 0.48, 0.82 }
 
+--- Clamp a number to [0, 1]
 local function clamp01(value)
     if value < 0 then
         return 0
@@ -84,6 +89,9 @@ local function clamp01(value)
     return value
 end
 
+--- Ensure an RGBA color table exists; fall back to the provided default.
+-- @param src table|nil color source
+-- @param fallback table default RGBA
 local function ensure_color(src, fallback)
     local base = src or fallback
     local fb = fallback
@@ -95,6 +103,7 @@ local function ensure_color(src, fallback)
     }
 end
 
+--- Heuristically derive a glow color from core and ring colors.
 local function derive_glow_color(coreColor, ringColor)
     return {
         clamp01(coreColor[1] * 0.55 + 0.45),
@@ -104,6 +113,10 @@ local function derive_glow_color(coreColor, ringColor)
     }
 end
 
+--- Draw a table of explosion entries. This handles both shader and
+--- non-shader fallback rendering. Each explosion entry should contain
+--- x,y position and radius, as well as optional color fields and timing.
+-- @param explosions table array of explosion entries
 function explosion_renderer.draw(explosions)
     if not (explosions and #explosions > 0) then
         return

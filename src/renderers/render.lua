@@ -21,6 +21,8 @@ local highlight_secondary = { 0.2, 0.7, 0.95, 0.25 }
 local lock_primary = { 1.0, 0.3, 0.25, 0.85 }
 local lock_secondary = { 1.0, 0.1, 0.05, 0.5 }
 
+--- Get a cached targeting structure from context or global state
+-- The render system consults this cache to draw hover/lock overlays.
 local function get_target_cache(context)
     if not context then
         return nil
@@ -35,6 +37,8 @@ local function get_target_cache(context)
     return nil
 end
 
+--- Compute an approximate radius from polygon points. Used for culling
+-- and hover radius calculations.
 local function compute_polygon_radius(points)
     local max_radius = 0
     if type(points) ~= "table" then
@@ -53,6 +57,8 @@ local function compute_polygon_radius(points)
     return max_radius
 end
 
+--- Resolve a drawable's visual radius using explicit radius fields
+-- or by inspecting polygon/shape geometry.
 local function resolve_drawable_radius(drawable)
     if type(drawable) ~= "table" then
         return nil
@@ -91,6 +97,7 @@ local function resolve_drawable_radius(drawable)
     return nil
 end
 
+--- Compute the highlight radius for an entity. Used for hover and locks.
 local function compute_highlight_radius(entity)
     if not entity then
         return 0
@@ -112,6 +119,8 @@ local function compute_highlight_radius(entity)
     return radius
 end
 
+--- Decide whether an entity should be culled/hidden during rendering
+-- This consults the Culling util so large render queues are efficient.
 local function should_skip_render(entity, context)
     if not entity then
         return false
@@ -122,6 +131,7 @@ local function should_skip_render(entity, context)
     })
 end
 
+--- Draws hover, lock, and active highlights around entities
 local function draw_highlight(entity, cache)
     if not cache then
         return
@@ -248,6 +258,9 @@ local function draw_highlight(entity, cache)
     love.graphics.pop()
 end
 
+--- Render a single entity by delegating to per-entity renderers.
+-- This keeps the top-level renderer small and lets domain-specific
+-- renderer modules handle their drawing logic.
 local function render_single(entity, context, cache)
     local drawable = entity.drawable or {}
 

@@ -1,7 +1,12 @@
 ---@diagnostic disable: undefined-global
 
+--- Asteroid renderer
+-- Responsible for drawing asteroid entities, applying multiple layered
+-- fill and stroke operations to provide a textured rock-like appearance.
 local asteroid_renderer = {}
 
+--- Draws an asteroid entity on screen.
+-- @param entity table An entity with the drawable shape and position/rotation
 function asteroid_renderer.draw(entity)
     local drawable = entity.drawable
     local vertices = drawable and drawable.shape

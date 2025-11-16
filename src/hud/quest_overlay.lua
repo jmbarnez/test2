@@ -39,22 +39,32 @@ local function resolve_state(context)
     return context
 end
 
-local function resolve_active_quest(state)
+local function resolve_active_quests(state)
     state = resolve_state(state)
-    if not (state and state.stationUI and state.stationUI.activeQuestId) then
-        return nil
+    if not (state and state.stationUI) then
+        return {}
     end
 
-    local quests = state.stationUI.quests or {}
-    local activeId = state.stationUI.activeQuestId
+    local ui = state.stationUI
+    local quests = ui.quests or {}
+    local activeIds = ui.activeQuestIds
+
+    if type(activeIds) ~= "table" or next(activeIds) == nil then
+        return {}
+    end
+
+    local active = {}
     for i = 1, #quests do
         local quest = quests[i]
-        if quest and quest.id == activeId then
-            return quest
+        local id = quest and quest.id
+        if id and activeIds[id] then
+            quest.accepted = true
+            quest.progress = quest.progress or 0
+            active[#active + 1] = quest
         end
     end
 
-    return nil
+    return active
 end
 
 local function draw_text(font, text, x, y, color)
@@ -69,8 +79,8 @@ function quest_overlay.draw(context, minimap_rect)
     end
 
     local state = context and (context.state or context) or nil
-    local quest = resolve_active_quest(state)
-    if not quest then
+    local quests = resolve_active_quests(state)
+    if not quests or #quests == 0 then
         return
     end
 
@@ -87,23 +97,30 @@ function quest_overlay.draw(context, minimap_rect)
     local overlay_x = minimap_rect.x
     local overlay_y = minimap_rect.y + minimap_rect.height + padding
 
-    local progress_label = QuestGenerator.progressLabel(quest)
-    local reward_label = QuestGenerator.rewardLabel(quest)
-
     local cursor_x = overlay_x
     local cursor_y = overlay_y
 
-    draw_text(title_font, quest.title or "Active Contract", cursor_x, cursor_y, resolve_color("text"))
+    local block_spacing = spacing * 3
 
-    cursor_y = cursor_y + title_height + spacing
+    for index = 1, #quests do
+        local quest = quests[index]
+        local title = quest and quest.title or string.format("Contract %d", index)
+        local progress_label = QuestGenerator.progressLabel(quest)
+        local reward_label = QuestGenerator.rewardLabel(quest)
 
-    local progress_text = progress_label ~= "" and string.format("Progress: %s", progress_label) or "Progress: --"
-    draw_text(body_font, progress_text, cursor_x, cursor_y, resolve_color("text"))
+        draw_text(title_font, title, cursor_x, cursor_y, resolve_color("text"))
+        cursor_y = cursor_y + title_height + spacing
 
-    cursor_y = cursor_y + line_height
+        local progress_text = progress_label ~= "" and string.format("Progress: %s", progress_label) or "Progress: --"
+        draw_text(body_font, progress_text, cursor_x, cursor_y, resolve_color("text"))
+        cursor_y = cursor_y + line_height
 
-    local reward_text = reward_label ~= "" and string.format("Reward: %s", reward_label) or "Reward: --"
-    draw_text(body_font, reward_text, cursor_x, cursor_y, resolve_color("accent"))
+        local reward_text = reward_label ~= "" and string.format("Reward: %s", reward_label) or "Reward: --"
+        draw_text(body_font, reward_text, cursor_x, cursor_y, resolve_color("accent"))
+        if index < #quests then
+            cursor_y = cursor_y + line_height + block_spacing
+        end
+    end
 end
 
 return quest_overlay

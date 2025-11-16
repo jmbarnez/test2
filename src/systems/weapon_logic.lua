@@ -54,6 +54,13 @@ return function(context)
             local gameplayState = resolve_gameplay_state(context)
             local cam = context.camera
             local intentHolder = context.intentHolder or context.state or context
+            local uiInput = context.uiInput or (gameplayState and gameplayState.uiInput)
+            local mouseCaptured = false
+            if uiInput and uiInput.mouseCaptured then
+                mouseCaptured = true
+            elseif gameplayState and gameplayState.uiInput and gameplayState.uiInput.mouseCaptured then
+                mouseCaptured = true
+            end
             local localPlayerId, localPlayerEntity = resolve_local_player(intentHolder)
 
             local fire = false
@@ -84,7 +91,11 @@ return function(context)
                 fire = weapon.firing or weapon.alwaysFire
             end
 
-            if (not targetX or not targetY) and isLocalPlayer and love and love.mouse and love.mouse.getPosition then
+            if (not targetX or not targetY)
+                and isLocalPlayer
+                and love and love.mouse and love.mouse.getPosition
+                and not mouseCaptured
+            then
                 local mx, my = love.mouse.getPosition()
                 if cam then
                     local zoom = cam.zoom or 1
@@ -101,8 +112,7 @@ return function(context)
             end
 
             if isLocalPlayer and not fire and love and love.mouse and love.mouse.isDown then
-                local uiInput = gameplayState and gameplayState.uiInput
-                if not (uiInput and uiInput.mouseCaptured) then
+                if not mouseCaptured then
                     local isControlHeld = love.keyboard and love.keyboard.isDown
                         and (love.keyboard.isDown("lctrl") or love.keyboard.isDown("rctrl"))
                     if not isControlHeld then

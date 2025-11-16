@@ -1,10 +1,13 @@
 ---@diagnostic disable: undefined-global
-
+-- Station renderer
+-- Builds on ship renderer to show station-specific overlays like
+-- influence rings and optional fill/accents.
 local ship_renderer = require("src.renderers.ship")
 local math_util = require("src.util.math")
 
 local station_renderer = {}
 
+--- Clamp a numeric component to [0, 1], falling back when invalid.
 local function clamp_color_component(value, fallback)
     local number = tonumber(value)
     if not number then
@@ -13,6 +16,7 @@ local function clamp_color_component(value, fallback)
     return math_util.clamp(number, 0, 1)
 end
 
+--- Apply a color to love.graphics, using a fallback if the color is invalid.
 local function apply_color(color, fallback)
     if type(color) ~= "table" then
         if fallback then
@@ -28,6 +32,7 @@ local function apply_color(color, fallback)
     love.graphics.setColor(r, g, b, a)
 end
 
+--- Modulate a color by brightness and alpha multiplier returning a new RGBA color table.
 local function modulate_color(color, brightness, alphaScale)
     if type(color) ~= "table" then
         return nil
@@ -44,6 +49,8 @@ local function modulate_color(color, brightness, alphaScale)
     return { r, g, b, a }
 end
 
+--- Draws the station influence ring (optional glow/accents) around the station.
+-- The ring shows active/inactive states and adapts color/alpha.
 local function draw_influence_ring(entity, context)
     local influence = entity and entity.stationInfluence
     if not influence then

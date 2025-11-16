@@ -217,12 +217,13 @@ function Hotbar.draw(context, player)
 
     local selectedDisplayIndex = math.min(selectedIndex, HOTBAR_SLOTS)
 
+    local uiInput = context.uiInput
+    local allowInteraction = not (uiInput and uiInput.mouseCaptured)
+
     local mouseX, mouseY
-    if love.mouse and love.mouse.getPosition then
+    if allowInteraction and love.mouse and love.mouse.getPosition then
         mouseX, mouseY = love.mouse.getPosition()
     end
-
-    local uiInput = context.uiInput
     local hotbarState
     if type(state) == "table" then
         state.hotbarUI = state.hotbarUI or {}
@@ -233,12 +234,12 @@ function Hotbar.draw(context, player)
     end
 
     local isMouseDown = false
-    if love.mouse and love.mouse.isDown then
+    if allowInteraction and love.mouse and love.mouse.isDown then
         isMouseDown = love.mouse.isDown(1) or false
     end
 
     local wasMouseDown = hotbarState and hotbarState.wasMouseDown or false
-    local justPressed = isMouseDown and not wasMouseDown
+    local justPressed = allowInteraction and isMouseDown and not wasMouseDown
 
     local hoveredIndex = nil
 
@@ -252,13 +253,13 @@ function Hotbar.draw(context, player)
             isHovered = mouseX >= slotX and mouseX <= slotX + slotSize and mouseY >= slotY and mouseY <= slotY + slotSize
             if isHovered then
                 hoveredIndex = i
-                if uiInput and (isMouseDown or justPressed) then
+                if allowInteraction and uiInput and (isMouseDown or justPressed) then
                     uiInput.mouseCaptured = true
                 end
             end
         end
 
-        if justPressed and isHovered and i <= total then
+        if allowInteraction and justPressed and isHovered and i <= total then
             local selectedResult = PlayerWeapons.selectByIndex(player, i, { skipRefresh = true })
             if selectedResult then
                 selectedIndex = i
@@ -348,7 +349,7 @@ function Hotbar.draw(context, player)
     end
 
     if hotbarState then
-        hotbarState.wasMouseDown = isMouseDown
+        hotbarState.wasMouseDown = allowInteraction and isMouseDown or false
     end
 
     if hoveredIndex and hoveredIndex >= 1 and hoveredIndex <= total and state and not state.hudTooltipRequest then
