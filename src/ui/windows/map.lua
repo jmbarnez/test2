@@ -5,6 +5,7 @@ local UIButton = require("src.ui.components.button")
 local PlayerManager = require("src.player.manager")
 local math_util = require("src.util.math")
 local Universe = require("src.states.gameplay.universe")
+local window_geometry = require("src.ui.util.window_geometry")
 
 ---@diagnostic disable-next-line: undefined-global
 local love = love
@@ -16,6 +17,8 @@ local map_window = {}
 -- ============================================================================
 
 local DEFAULT_MODE = "sector"
+local DEFAULT_WINDOW_WIDTH = 640
+local DEFAULT_WINDOW_HEIGHT = 520
 
 local BUTTON_SPACING = 12
 local BUTTON_MIN_WIDTH = 96
@@ -214,21 +217,6 @@ local function apply_mode(context, state, mode)
     state._just_opened = true
 
     return true
-end
-
-local function get_window_rect(screen_width, screen_height)
-    local spacing = theme.get_spacing()
-    local margin = spacing and spacing.window_margin or 48
-
-    local rect_width = math.max(420, screen_width - margin * 2)
-    local rect_height = math.max(320, screen_height - margin * 2)
-
-    return {
-        x = math.max(0, (screen_width - rect_width) * 0.5),
-        y = math.max(0, (screen_height - rect_height) * 0.5),
-        width = rect_width,
-        height = rect_height,
-    }
 end
 
 local function get_map_rect(content)
@@ -623,7 +611,12 @@ function map_window.draw(context)
     local screenWidth = love.graphics.getWidth()
     local screenHeight = love.graphics.getHeight()
 
-    local windowRect = get_window_rect(screenWidth, screenHeight)
+    local windowRect = window_geometry.centered({
+        preferred_width = DEFAULT_WINDOW_WIDTH,
+        preferred_height = DEFAULT_WINDOW_HEIGHT,
+        min_width = 520,
+        min_height = 420,
+    })
 
     state.zoom = math_util.clamp(state.zoom or 1, state.min_zoom or 0.35, state.max_zoom or 6)
 
@@ -643,8 +636,8 @@ function map_window.draw(context)
     love.graphics.rectangle("fill", 0, 0, screenWidth, screenHeight)
 
     local frame = window.draw_frame {
-        x = windowRect.x,
-        y = windowRect.y,
+        x = state.x or windowRect.x,
+        y = state.y or windowRect.y,
         width = windowRect.width,
         height = windowRect.height,
         title = state.title or get_mode_title(mode),

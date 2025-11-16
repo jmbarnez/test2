@@ -3,6 +3,7 @@
 local theme = require("src.ui.theme")
 local window = require("src.ui.components.window")
 local geometry = require("src.util.geometry")
+local window_geometry = require("src.ui.util.window_geometry")
 local QuestGenerator = require("src.stations.quest_generator")
 local UIStateManager = require("src.ui.state_manager")
 local StationQuests = require("src.ui.windows.station_quests")
@@ -18,8 +19,8 @@ local theme_spacing = theme.spacing
 local set_color = theme.utils.set_color
 local point_in_rect = geometry.point_in_rect
 
-local DEFAULT_WIDTH = 620
-local DEFAULT_HEIGHT = 460
+local DEFAULT_WIDTH = 640
+local DEFAULT_HEIGHT = 520
 
 local function clear_array(list)
     if type(list) ~= "table" then
@@ -115,22 +116,22 @@ function station_window.draw(context)
         UIStateManager.refreshStationQuests(context)
     end
 
-    local vw, vh = love.graphics.getWidth(), love.graphics.getHeight()
-
-    state.width = vw
-    state.height = vh
-    state.x = 0
-    state.y = 0
+    local dims = window_geometry.centered({
+        preferred_width = DEFAULT_WIDTH,
+        preferred_height = DEFAULT_HEIGHT,
+        min_width = 520,
+        min_height = 420,
+    })
 
     local mouse_x, mouse_y = love.mouse.getPosition()
     local mouse_down = love.mouse.isDown(1)
     local previous_down = state._mouse_down_prev or false
 
     local frame = window.draw_frame {
-        x = state.x,
-        y = state.y,
-        width = state.width,
-        height = state.height,
+        x = state.x or dims.x,
+        y = state.y or dims.y,
+        width = dims.width,
+        height = dims.height,
         title = resolve_station_name(context),
         state = state,
         fonts = fonts,
