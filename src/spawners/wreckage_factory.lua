@@ -3,7 +3,7 @@ local math_util = require("src.util.math")
 ---@diagnostic disable-next-line: undefined-global
 local love = love
 
-local ShipWreckage = {}
+local WreckageFactory = {}
 
 local unpack = table.unpack or unpack
 
@@ -260,7 +260,7 @@ local function create_wreckage_piece(context, params)
     context.world:add(entity)
 end
 
-function ShipWreckage.spawn(ship, context)
+function WreckageFactory.spawn(ship, context)
     if not (ship and context and context.world and context.physicsWorld) then
         return
     end
@@ -345,4 +345,4 @@ function ShipWreckage.spawn(ship, context)
     end
 end
 
-return ShipWreckage
+return WreckageFactory

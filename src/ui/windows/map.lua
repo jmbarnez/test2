@@ -27,6 +27,7 @@ local DEFAULT_BOUNDS_COLOR = { 0.46, 0.64, 0.72, 0.8 }
 local DEFAULT_OVERLAY_COLOR = { 0, 0, 0, 0.78 }
 local DEFAULT_BACKGROUND_COLOR = { 0.05, 0.06, 0.08, 0.95 }
 local DEFAULT_ACTIVE_BUTTON_COLOR = { 0.32, 0.52, 0.92, 1 }
+local DEFAULT_WARPGATE_COLOR = { 1.0, 0.35, 0.75, 1 }
 
 local MODE_BUTTONS = {
     { label = "Sector", mode = "sector" },
@@ -380,6 +381,56 @@ local function draw_legend(rect, fonts, colors)
     end
 end
 
+local function draw_entities(context, player, rect, bounds, colors, scale, centerX, centerY)
+    if not (context and context.world) then
+        return
+    end
+
+    local entities = context.world.entities or {}
+
+    for i = 1, #entities do
+        local entity = entities[i]
+        if entity and entity.position then
+            local color
+            local radius = 3
+
+            if entity == player then
+                color = colors.player
+                radius = 5
+            elseif entity.player then
+                color = colors.teammate
+                radius = 4
+            elseif entity.station or (entity.blueprint and entity.blueprint.category == "stations") then
+                color = colors.station
+                radius = 4
+            elseif entity.warpgate or entity.type == "warpgate" or (entity.blueprint and entity.blueprint.category == "warpgates") then
+                color = colors.warpgate
+                radius = 4.5
+            elseif entity.blueprint and entity.blueprint.category == "asteroids" then
+                color = colors.asteroid
+                radius = 3
+            elseif entity.blueprint and entity.blueprint.category == "ships" then
+                color = colors.enemy
+                radius = 4
+            end
+
+            if color then
+                local screenX, screenY = world_to_screen(entity.position.x, entity.position.y, rect, scale, centerX, centerY)
+                if screenX >= rect.x and screenX <= rect.x + rect.width and screenY >= rect.y and screenY <= rect.y + rect.height then
+                    love.graphics.setColor(color)
+                    love.graphics.circle("fill", screenX, screenY, radius)
+                end
+            end
+        end
+    end
+
+    if player and player.position then
+        love.graphics.setColor(colors.player)
+        local px, py = world_to_screen(player.position.x, player.position.y, rect, scale, centerX, centerY)
+        love.graphics.circle("line", px, py, 9)
+    end
+end
+
 -- ============================================================================
 -- View mode metadata
 -- ============================================================================
@@ -542,53 +593,6 @@ local function draw_universe_view(context, rect, bounds, colors, scale, centerX,
 	end
 end
 
-local function draw_entities(context, player, rect, bounds, colors, scale, centerX, centerY)
-    if not (context and context.world) then
-        return
-    end
-
-    local entities = context.world.entities or {}
-
-    for i = 1, #entities do
-        local entity = entities[i]
-        if entity and entity.position then
-            local color
-            local radius = 3
-
-            if entity == player then
-                color = colors.player
-                radius = 5
-            elseif entity.player then
-                color = colors.teammate
-                radius = 4
-            elseif entity.station or (entity.blueprint and entity.blueprint.category == "stations") then
-                color = colors.station
-                radius = 4
-            elseif entity.blueprint and entity.blueprint.category == "asteroids" then
-                color = colors.asteroid
-                radius = 3
-            elseif entity.blueprint and entity.blueprint.category == "ships" then
-                color = colors.enemy
-                radius = 4
-            end
-
-            if color then
-                local screenX, screenY = world_to_screen(entity.position.x, entity.position.y, rect, scale, centerX, centerY)
-                if screenX >= rect.x and screenX <= rect.x + rect.width and screenY >= rect.y and screenY <= rect.y + rect.height then
-                    love.graphics.setColor(color)
-                    love.graphics.circle("fill", screenX, screenY, radius)
-                end
-            end
-        end
-    end
-
-    if player and player.position then
-        love.graphics.setColor(colors.player)
-        local px, py = world_to_screen(player.position.x, player.position.y, rect, scale, centerX, centerY)
-        love.graphics.circle("line", px, py, 9)
-    end
-end
-
 function map_window.draw(context)
     local state = context and context.mapUI
     if not (state and state.visible) then
@@ -603,6 +607,7 @@ function map_window.draw(context)
 
     local fonts = theme.get_fonts()
     local colors = theme.colors.map or {}
+    colors.warpgate = colors.warpgate or DEFAULT_WARPGATE_COLOR
 
     local screenWidth = love.graphics.getWidth()
     local screenHeight = love.graphics.getHeight()

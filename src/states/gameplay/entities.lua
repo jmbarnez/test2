@@ -182,6 +182,63 @@ local function resolve_station_id(spec)
     return spec
 end
 
+local function resolve_warpgate_context(state, spec)
+    local instantiateContext = {
+        worldBounds = state.worldBounds,
+    }
+
+    local offsetX, offsetY = 0, 0
+    if type(spec) == "table" then
+        local offset = spec.offset
+        if type(offset) == "table" then
+            offsetX = offset.x or 0
+            offsetY = offset.y or 0
+        end
+
+        if spec.position then
+            local basePosition = clone_vector(spec.position)
+            instantiateContext.position = {
+                x = basePosition.x + offsetX,
+                y = basePosition.y + offsetY,
+            }
+            offsetX, offsetY = 0, 0
+        end
+
+        if spec.rotation ~= nil then
+            instantiateContext.rotation = spec.rotation
+        end
+
+        if spec.context then
+            for key, value in pairs(spec.context) do
+                if instantiateContext[key] == nil then
+                    instantiateContext[key] = value
+                end
+            end
+        end
+    end
+
+    if not instantiateContext.position then
+        local bounds = state.worldBounds
+        if bounds then
+            instantiateContext.position = {
+                x = (bounds.x or 0) + (bounds.width or 0) * 0.5 + offsetX,
+                y = (bounds.y or 0) + (bounds.height or 0) * 0.5 + offsetY,
+            }
+        else
+            instantiateContext.position = { x = offsetX, y = offsetY }
+        end
+    end
+
+    return instantiateContext
+end
+
+local function resolve_warpgate_id(spec)
+    if type(spec) == "table" then
+        return spec.id or spec.warpgateId or spec.blueprint or spec[1]
+    end
+    return spec
+end
+
 function Entities.spawnStation(state, spec)
     if not (state and state.world and state.physicsWorld) then
         print("[ENTITIES] spawnStation failed - missing state/world/physicsWorld")
@@ -246,6 +303,61 @@ function Entities.spawnStations(state, configs)
     end
 
     print("[ENTITIES] Finished spawning. Total stations:", #state.stationEntities)
+    return lastSpawned
+end
+
+function Entities.spawnWarpgate(state, spec)
+    if not (state and state.world) then
+        print("[ENTITIES] spawnWarpgate failed - missing state/world")
+        return nil
+    end
+
+    local gateId = resolve_warpgate_id(spec) or "warpgate_alpha"
+    local instantiateContext = resolve_warpgate_context(state, spec)
+
+    print("[ENTITIES] spawnWarpgate - id:", gateId, "position:", instantiateContext.position)
+
+    local ok, warpgate = pcall(loader.instantiate, "warpgates", gateId, instantiateContext)
+    if not ok then
+        print(string.format("[entities] Failed to spawn warpgate '%s': %s", tostring(gateId), tostring(warpgate)))
+        return nil
+    end
+
+    warpgate.position = warpgate.position or clone_vector(instantiateContext.position)
+
+    local world = state.world
+    local gateEntity = world:add(warpgate)
+
+    state.warpgateEntities = state.warpgateEntities or {}
+    state.warpgateEntities[#state.warpgateEntities + 1] = gateEntity
+
+    return gateEntity
+end
+
+function Entities.spawnWarpgates(state, configs)
+    if not (state and state.world) or not configs then
+        print("[ENTITIES] spawnWarpgates failed - state/world missing or no configs")
+        return nil
+    end
+
+    state.warpgateEntities = {}
+
+    if type(configs) ~= "table" then
+        return Entities.spawnWarpgate(state, configs)
+    end
+
+    local lastSpawned
+    if configs[1] ~= nil then
+        for index = 1, #configs do
+            lastSpawned = Entities.spawnWarpgate(state, configs[index]) or lastSpawned
+        end
+    else
+        for _, spec in pairs(configs) do
+            lastSpawned = Entities.spawnWarpgate(state, spec) or lastSpawned
+        end
+    end
+
+    print("[ENTITIES] Finished spawning warpgates:", #state.warpgateEntities)
     return lastSpawned
 end
 

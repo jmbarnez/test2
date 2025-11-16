@@ -752,4 +752,6 @@ function ship_renderer.draw(entity, context)
     draw_health_bar(entity)
 end
 
+ship_renderer.draw_health_bar = draw_health_bar
+
 return ship_renderer

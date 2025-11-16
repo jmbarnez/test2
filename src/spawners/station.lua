@@ -14,6 +14,11 @@ return function(context)
                 return
             end
 
+            if state and state.skipProceduralSpawns then
+                spawned = true
+                return
+            end
+
             spawned = true
 
             if not state then

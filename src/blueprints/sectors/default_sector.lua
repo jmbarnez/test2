@@ -31,4 +31,14 @@ return {
             },
         },
     },
+    warpgates = {
+        {
+            id = "warpgate_alpha",
+            position = {
+                x = 10000 + 720,
+                y = 10000 - 180,
+            },
+            rotation = math.pi * 0.15,
+        },
+    },
 }

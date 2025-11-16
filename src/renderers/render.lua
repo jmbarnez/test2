@@ -10,6 +10,7 @@ local vector = require("src.util.vector")
 local Culling = require("src.util.culling")
 local ship_renderer = require("src.renderers.ship")
 local station_renderer = require("src.renderers.station")
+local warpgate_renderer = require("src.renderers.warpgate")
 local asteroid_renderer = require("src.renderers.asteroid")
 local projectile_renderer = require("src.renderers.projectile")
 local pickup_renderer = require("src.renderers.pickup")
@@ -247,32 +248,77 @@ local function draw_highlight(entity, cache)
     love.graphics.pop()
 end
 
+local function render_single(entity, context, cache)
+    local drawable = entity.drawable or {}
+
+    if entity.station then
+        if entity.warpgate or drawable.type == "warpgate" then
+            warpgate_renderer.draw(entity, context)
+        else
+            station_renderer.draw(entity, context)
+        end
+    elseif drawable.type == "warpgate" then
+        warpgate_renderer.draw(entity, context)
+    elseif drawable.type == "station" then
+        station_renderer.draw(entity, context)
+    elseif drawable.type == "ship" then
+        ship_renderer.draw(entity, context)
+    elseif drawable.type == "asteroid" then
+        asteroid_renderer.draw(entity)
+    elseif drawable.type == "projectile" then
+        projectile_renderer.draw(entity)
+    elseif drawable.type == "pickup" then
+        pickup_renderer.draw(entity)
+    elseif drawable.type == "wreckage" then
+        wreckage_renderer.draw(entity)
+    end
+
+    draw_highlight(entity, cache)
+end
+
 return function(context)
     return tiny.system {
         filter = tiny.requireAll("position", "drawable"),
-        drawEntity = function(_, entity)
+        backgroundQueue = {},
+        foregroundQueue = {},
+        drawEntity = function(self, entity)
             if should_skip_render(entity, context) then
                 return
             end
 
-            local cache = get_target_cache(context)
             local drawable = entity.drawable or {}
-            if entity.station or drawable.type == "station" then
-                station_renderer.draw(entity, context)
-            elseif drawable.type == "ship" then
-                ship_renderer.draw(entity, context)
-            elseif drawable.type == "asteroid" then
-                asteroid_renderer.draw(entity)
-            elseif drawable.type == "projectile" then
-                projectile_renderer.draw(entity)
-            elseif drawable.type == "pickup" then
-                pickup_renderer.draw(entity)
-            elseif drawable.type == "wreckage" then
-                wreckage_renderer.draw(entity)
+            if entity.warpgate or drawable.type == "warpgate" then
+                self.backgroundQueue[#self.backgroundQueue + 1] = entity
+            else
+                self.foregroundQueue[#self.foregroundQueue + 1] = entity
+            end
+        end,
+        draw = function(self)
+            local cache = get_target_cache(context)
+
+            for i = 1, #self.backgroundQueue do
+                render_single(self.backgroundQueue[i], context, cache)
             end
 
-            draw_highlight(entity, cache)
+            if table.clear then
+                table.clear(self.backgroundQueue)
+            else
+                for i = #self.backgroundQueue, 1, -1 do
+                    self.backgroundQueue[i] = nil
+                end
+            end
+
+            for i = 1, #self.foregroundQueue do
+                render_single(self.foregroundQueue[i], context, cache)
+            end
+
+            if table.clear then
+                table.clear(self.foregroundQueue)
+            else
+                for i = #self.foregroundQueue, 1, -1 do
+                    self.foregroundQueue[i] = nil
+                end
+            end
         end,
-        draw = function() end,
     }
 end

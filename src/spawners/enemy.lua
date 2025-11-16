@@ -174,6 +174,11 @@ end
 return function(context)
     context = context or {}
 
+    local function should_skip_spawns()
+        local state = context.state or context
+        return state and state.skipProceduralSpawns
+    end
+
     local enemyConfig = context.enemyConfig or {}
     local bounds = context.worldBounds
     if not bounds then
@@ -302,6 +307,11 @@ return function(context)
             context.state = context
         end,
         update = function(self, dt)
+            if should_skip_spawns() then
+                spawned = true
+                return
+            end
+
             if not spawned then
                 spawned = true
                 print("[ENEMY SPAWNER] Starting enemy spawn")

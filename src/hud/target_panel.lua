@@ -178,34 +178,10 @@ function TargetPanel.draw(context, player)
     local hovered = cache and cache.hoveredEntity
     local target = active or hovered or (cache and cache.entity)
 
-    if not target then
-        return
-    end
-
-    local targetPos = target.position
-    if not targetPos then
-        return
-    end
-
     local fonts = theme.get_fonts()
     if not fonts then
         return
     end
-
-    local isLocked = active ~= nil and target == active
-    local isEnemy = not not target.enemy
-    local isLocking = false
-    local lockProgress = 0
-    local lockDuration = nil
-    if cache and cache.lockCandidate == target and not isLocked then
-        lockDuration = cache.lockDuration
-        lockProgress = cache.lockProgress or 0
-        if lockDuration and lockDuration > 0 then
-            isLocking = lockProgress < 1
-        end
-    end
-
-    local showFullPanel = (not isEnemy) or isLocked
 
     local hud_colors = theme.colors.hud or {}
     local set_color = theme.utils.set_color
@@ -213,19 +189,40 @@ function TargetPanel.draw(context, player)
 
     local padding = math.min(10, spacing.window_padding or 10)
     local width = 280
-    local height = showFullPanel and 96 or 68
     local screenWidth = love.graphics.getWidth()
 
     local x = (screenWidth - width) * 0.5
     local y = 18
 
     local playerShip = player or PlayerManager.getCurrentShip(state)
+    local text_x = x + padding
+    local text_width = width - padding * 2
 
-    local hull_current, hull_max = Util.resolve_resource(target.health)
-    local shield_current, shield_max = Util.resolve_resource(target.shield or target.shields or (target.health and target.health.shield))
+    local targetPos = target and target.position
+    local hull_current, hull_max, shield_current, shield_max
+    local hasTarget = false
 
-    if not (hull_current and hull_max) then
-        return
+    if targetPos then
+        hull_current, hull_max = Util.resolve_resource(target.health)
+        shield_current, shield_max = Util.resolve_resource(target.shield or target.shields or (target.health and target.health.shield))
+        hasTarget = hull_current ~= nil and hull_max ~= nil
+    end
+
+    local isLocked = hasTarget and active ~= nil and target == active or false
+    local isEnemy = hasTarget and not not target.enemy or false
+    local showFullPanel = hasTarget and ((not isEnemy) or isLocked) or false
+
+    local height = hasTarget and (showFullPanel and 96 or 68) or 84
+
+    local isLocking = false
+    local lockProgress = 0
+    local lockDuration = nil
+    if hasTarget and cache and cache.lockCandidate == target and not isLocked then
+        lockDuration = cache.lockDuration
+        lockProgress = cache.lockProgress or 0
+        if lockDuration and lockDuration > 0 then
+            isLocking = lockProgress < 1
+        end
     end
 
     set_color(hud_colors.status_panel or { 0.05, 0.06, 0.09, 0.95 })
@@ -235,8 +232,26 @@ function TargetPanel.draw(context, player)
     love.graphics.setLineWidth(1)
     love.graphics.rectangle("line", x + 0.5, y + 0.5, width - 1, height - 1)
 
-    local text_x = x + padding
-    local text_width = width - padding * 2
+    if not hasTarget then
+        local headingFont = fonts.small
+        local detailFont = fonts.tiny or fonts.small
+        local infoY = y + padding + 4
+
+        love.graphics.setFont(headingFont)
+        set_color(hud_colors.status_text or { 0.82, 0.88, 0.93, 1 })
+        love.graphics.printf("No target selected", text_x, infoY, text_width, "center")
+
+        love.graphics.setFont(detailFont)
+        infoY = infoY + headingFont:getHeight() + 6
+        set_color(hud_colors.status_muted or { 0.6, 0.66, 0.72, 1 })
+        love.graphics.printf("Hover ships or interactable objects to preview them.", text_x, infoY, text_width, "center")
+
+        infoY = infoY + detailFont:getHeight() + 4
+        love.graphics.printf("Hold Ctrl + Left Mouse to lock enemies and reveal more intel.", text_x, infoY, text_width, "center")
+
+        return
+    end
+
     love.graphics.push("all")
     love.graphics.pop()
 

@@ -12,6 +12,7 @@ local EngineTrailSystem = require("src.systems.engine_trail")
 local createAsteroidSpawner = require("src.spawners.asteroid")
 local createEnemySpawner = require("src.spawners.enemy")
 local createStationSpawner = require("src.spawners.station")
+local createWarpgateSpawner = require("src.spawners.warpgate")
 local createEnemyAISystem = require("src.systems.enemy_ai")
 local createWeaponLogicSystem = require("src.systems.weapon_logic")
 local createWeaponProjectileSystem = require("src.systems.weapon_projectile_spawn")
@@ -27,7 +28,7 @@ local createDestructionSystem = require("src.systems.destruction")
 local createLootDropSystem = require("src.systems.loot_drop")
 local FloatingText = require("src.effects.floating_text")
 local createPickupSystem = require("src.systems.pickup")
-local createParticleEffectsSystem = require("src.systems.particle_effects")
+local createEffectsRendererSystem = require("src.systems.effects_renderer")
 local Entities = require("src.states.gameplay.entities")
 local PlayerManager = require("src.player.manager")
 
@@ -64,9 +65,9 @@ local Systems = {}
 --   createDestructionSystem(GameContext.extend(sharedContext))
 --   createEnemyAISystem(baseContext)
 --   createRenderSystem(baseContext)
---   createParticleEffectsSystem(GameContext.extend(baseContext, {
+--   createEffectsRendererSystem(GameContext.extend(baseContext, {
 --       projectileSystem = state.projectileSystem,
---       weaponFireSystem = state.weaponSystem,
+--       weaponBeamSystem = state.weaponBeamVFXSystem,
 --   }))
 --   createTargetingSystem(GameContext.extend(baseContext, {
 --       camera = state.camera,
@@ -110,11 +111,29 @@ local function resolve_loot_player_id(drop, sourceEntity)
     return nil
 end
 
+local function floating_text_position(localPlayer, extraOffset)
+    local base = (localPlayer and localPlayer.mountRadius or 36) + 18
+    if extraOffset then
+        return base + extraOffset
+    end
+    return base
+end
+
 local function ensure_world(state)
     if not state.world then
         state.world = tiny.world()
     end
     Intent.ensureContainer(state)
+end
+
+local function reset_ui_input(state)
+    if not state then
+        return
+    end
+
+    state.uiInput = state.uiInput or {}
+    state.uiInput.mouseCaptured = false
+    state.uiInput.keyboardCaptured = false
 end
 
 local function add_common_systems(state, context)
@@ -158,7 +177,7 @@ local function add_common_systems(state, context)
 
                         if position and FloatingText and FloatingText.add then
                             FloatingText.add(state, position, string.format("+%d XP", amount), {
-                                offsetY = (localPlayer and localPlayer.mountRadius or 36) + 18,
+                                offsetY = floating_text_position(localPlayer),
                                 color = { 0.3, 0.9, 0.4, 1 },
                                 rise = 40,
                                 scale = 1.1,
@@ -176,7 +195,7 @@ local function add_common_systems(state, context)
 
                     if position and FloatingText and FloatingText.add then
                         FloatingText.add(state, position, string.format("+%d credits", credits), {
-                            offsetY = (localPlayer and localPlayer.mountRadius or 36) + 18 + 22,
+                            offsetY = floating_text_position(localPlayer, 22),
                             color = { 1.0, 0.9, 0.2, 1 },
                             rise = 40,
                             scale = 1.1,
@@ -194,9 +213,7 @@ end
 function Systems.initialize(state, damageCallback)
     ensure_world(state)
 
-    state.uiInput = state.uiInput or {}
-    state.uiInput.mouseCaptured = false
-    state.uiInput.keyboardCaptured = false
+    reset_ui_input(state)
 
     local baseContext = GameContext.compose(state, {
         damageEntity = damageCallback or state.damageEntity,
@@ -219,29 +236,22 @@ function Systems.initialize(state, damageCallback)
     state.spawnerSystem = state.world:addSystem(createAsteroidSpawner(baseContext))
     state.enemySpawnerSystem = state.world:addSystem(createEnemySpawner(baseContext))
     state.stationSpawnerSystem = state.world:addSystem(createStationSpawner(baseContext))
+    state.warpgateSpawnerSystem = state.world:addSystem(createWarpgateSpawner(baseContext))
 
     add_common_systems(state, baseContext)
 
-    local enemyAIContext = {
-        state = state,
-        resolveState = function()
-            return state
+    local enemyAIContext = GameContext.extend(baseContext, {
+        getLocalPlayer = function(self)
+            return GameContext.resolveLocalPlayer(self or state)
         end,
-        resolveLocalPlayer = function()
-            return PlayerManager.getLocalPlayer(state)
-        end,
-    }
-
-    enemyAIContext.getLocalPlayer = function(self)
-        return PlayerManager.getLocalPlayer(state)
-    end
+    })
 
     state.enemyAISystem = state.world:addSystem(createEnemyAISystem(enemyAIContext))
 
     state.engineTrailSystem = state.world:addSystem(EngineTrailSystem)
     state.renderSystem = state.world:addSystem(createRenderSystem(baseContext))
     state.weaponBeamVFXSystem = state.world:addSystem(createWeaponBeamVFXSystem(baseContext))
-    state.particleEffectsSystem = state.world:addSystem(createParticleEffectsSystem(GameContext.extend(baseContext, {
+    state.effectsRendererSystem = state.world:addSystem(createEffectsRendererSystem(GameContext.extend(baseContext, {
         projectileSystem = state.projectileSystem,
         weaponBeamSystem = state.weaponBeamVFXSystem,
     })))
@@ -255,8 +265,7 @@ end
 
 function Systems.teardown(state)
     if state.uiInput then
-        state.uiInput.mouseCaptured = false
-        state.uiInput.keyboardCaptured = false
+        reset_ui_input(state)
         state.uiInput = nil
     end
 
@@ -264,6 +273,7 @@ function Systems.teardown(state)
     state.spawnerSystem = nil
     state.enemySpawnerSystem = nil
     state.stationSpawnerSystem = nil
+    state.warpgateSpawnerSystem = nil
     state.movementSystem = nil
     state.pickupSystem = nil
     state.renderSystem = nil

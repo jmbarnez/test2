@@ -41,6 +41,7 @@ require("src.entities.ship_factory")
 require("src.entities.asteroid_factory")
 require("src.entities.weapon_factory")
 require("src.entities.station_factory")
+require("src.entities.warpgate_factory")
 
 local love = love
 
@@ -415,17 +416,59 @@ end
 -- State Lifecycle
 -- ============================================================================
 
+--[[
+    Entering gameplay now has two distinct flows:
+      1. Fresh games generate a brand-new deterministic universe seed.
+      2. Load requests prefetch save data so we can restore the saved seed and
+         sector before Universe.generate runs.  This guarantees the exact same
+         layout and procedural spawns, and lets spawner systems know they must
+         skip their runtime generation pass.
+]]
 function gameplay:enter(_, config)
+    config = config or {}
+
+    local pendingSaveData
+    if config.loadGame then
+        local saveData, err = SaveLoad.loadSaveData()
+        if saveData then
+            pendingSaveData = saveData
+            if saveData.universe and saveData.universe.seed then
+                self.universeSeed = saveData.universe.seed
+            end
+            if saveData.sector then
+                config.sectorId = saveData.sector
+            end
+            self.skipProceduralSpawns = true
+        else
+            print("[SaveLoad] Failed to preload save: " .. tostring(err))
+            self.skipProceduralSpawns = nil
+        end
+    else
+        self.skipProceduralSpawns = nil
+    end
+
+    if not self.universeSeed then
+        local maxSeed = 0x7fffffff
+        self.universeSeed = love.math.random(0, maxSeed)
+    end
+
     local sectorId = resolveSectorId(config)
     self.currentSectorId = sectorId or self.currentSectorId
 
-	self.universe = Universe.generate({
-		galaxy_count = 3,
-		sectors_per_galaxy = { min = 10, max = 18 },
-	})
+    local prevSeed1, prevSeed2 = love.math.getRandomSeed()
+    love.math.setRandomSeed(self.universeSeed, self.universeSeed)
 
-    	-- Initialize subsystems
-	UIStateManager.initialize(self)
+    self.universe = Universe.generate({
+        galaxy_count = 3,
+        sectors_per_galaxy = { min = 10, max = 18 },
+    })
+
+    if prevSeed1 then
+        love.math.setRandomSeed(prevSeed1, prevSeed2)
+    end
+
+    -- Initialize subsystems
+    UIStateManager.initialize(self)
     
     self.performanceStatsRecords = {}
     self.performanceStats = {}
@@ -444,13 +487,26 @@ function gameplay:enter(_, config)
 
     AudioManager.play_music("music:adrift", { loop = true, restart = true })
 
-    -- Spawn and setup player
-    local player = Entities.spawnPlayer(self)
-    if player then
-        if self.engineTrail then
-            self.engineTrail:attachPlayer(player)
+    local restoredFromSave = false
+    if pendingSaveData then
+        local ok, err = SaveLoad.loadGame(self, pendingSaveData)
+        if not ok then
+            print("[SaveLoad] Failed to load save data: " .. tostring(err))
+            self.skipProceduralSpawns = nil
+        else
+            restoredFromSave = true
         end
-        self:registerPlayerCallbacks(player)
+    end
+
+    -- Spawn and setup player
+    if not restoredFromSave then
+        local player = Entities.spawnPlayer(self)
+        if player then
+            if self.engineTrail then
+                self.engineTrail:attachPlayer(player)
+            end
+            self:registerPlayerCallbacks(player)
+        end
     end
     
     View.updateCamera(self)
@@ -869,6 +925,25 @@ function gameplay:keypressed(key)
         else
             show_status_toast(self, "Save Failed: " .. tostring(err), { 1.0, 0.4, 0.4, 1.0 })
             print("[SaveLoad] Save error: " .. tostring(err))
+        end
+        return
+    end
+
+    -- Quick instrumentation helpers for QA/debugging persistence issues.
+    if key == "f6" then
+        local seedLabel = tostring(self.universeSeed or "<none>")
+        show_status_toast(self, "Seed: " .. seedLabel, { 0.65, 0.85, 1.0, 1.0 })
+        print("[Gameplay] Current universe seed: " .. seedLabel)
+        return
+    end
+
+    if key == "f7" then
+        local ok, err = SaveLoad.debugDumpWorld(self)
+        if ok then
+            show_status_toast(self, "World dump written", { 0.6, 1.0, 0.6, 1.0 })
+        else
+            show_status_toast(self, "Dump failed: " .. tostring(err), { 1.0, 0.5, 0.5, 1.0 })
+            print("[SaveLoad] World dump error: " .. tostring(err))
         end
         return
     end

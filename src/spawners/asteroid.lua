@@ -14,6 +14,11 @@ local function choose_count(range)
     return range or 1
 end
 
+local function should_skip_spawns(context)
+    local state = context and (context.state or context)
+    return state and state.skipProceduralSpawns
+end
+
 return function(context)
     context = context or {}
     
@@ -34,6 +39,11 @@ return function(context)
 
     return tiny.system {
         update = function(self, dt)
+            if should_skip_spawns(context) then
+                spawned = true
+                return
+            end
+
             if not spawned then
                 spawned = true
                 print(string.format("[ASTEROID SPAWNER] Spawning %d asteroids in bounds (%d,%d,%d,%d)", 

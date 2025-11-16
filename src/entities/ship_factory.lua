@@ -3,7 +3,7 @@ local constants = require("src.constants.game")
 local ShipRuntime = require("src.ships.runtime")
 local Culling = require("src.util.culling")
 local ShipCargo = require("src.ships.cargo")
-local ShipWreckage = require("src.effects.ship_wreckage")
+local WreckageFactory = require("src.spawners.wreckage_factory")
 local table_util = require("src.util.table")
 ---@diagnostic disable-next-line: undefined-global
 local love = love
@@ -250,7 +250,7 @@ function ship_factory.instantiate(blueprint, context)
 
     local previous_on_destroyed = entity.onDestroyed
     entity.onDestroyed = function(self, destruction_context)
-        ShipWreckage.spawn(self, destruction_context)
+        WreckageFactory.spawn(self, destruction_context)
         
         -- Track quest progress for hunting enemies
         if self.enemy and self.lastDamagePlayerId and destruction_context then

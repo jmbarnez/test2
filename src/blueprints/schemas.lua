@@ -169,13 +169,14 @@ local ship_schema = {
                 position = vector_schema(),
                 velocity = vector_schema(),
                 rotation = { type = "number", optional = true },
+                nonPhysical = { type = "boolean", optional = true },
                 drawable = { type = "table", optional = true, allow_extra = true },
                 stats = { type = "table", optional = true, allow_extra = true },
                 hull = { type = "table", optional = true, allow_extra = true },
                 health = { type = "table", optional = true, allow_extra = true },
                 energy = { type = "table", optional = true, allow_extra = true },
                 cargo = { type = "table", optional = true, allow_extra = true },
-                colliders = colliders_schema(true),
+                colliders = colliders_schema(false),
                 ai = { type = "table", optional = true, allow_extra = true },
             },
             custom = function(value)
@@ -183,12 +184,15 @@ local ship_schema = {
                     return false, "components must be a table"
                 end
 
-                if type(value.colliders) ~= "table" or #value.colliders == 0 then
-                    if value.collider == nil then
-                        return false, "ship blueprint requires components.colliders array or components.collider table"
-                    end
-                    if type(value.collider) ~= "table" then
-                        return false, "components.collider must be a table"
+                local require_colliders = not value.nonPhysical
+                if require_colliders then
+                    if type(value.colliders) ~= "table" or #value.colliders == 0 then
+                        if value.collider == nil then
+                            return false, "ship blueprint requires components.colliders array or components.collider table"
+                        end
+                        if type(value.collider) ~= "table" then
+                            return false, "components.collider must be a table"
+                        end
                     end
                 end
 
@@ -388,6 +392,25 @@ local sector_schema = {
                 fields = {
                     id = { type = "string" },
                     position = vector_schema(),
+                },
+            },
+        },
+        warpgates = {
+            type = "array",
+            optional = true,
+            elements = {
+                type = "table",
+                allow_extra = true,
+                fields = {
+                    id = { type = "string" },
+                    position = vector_schema(),
+                    rotation = { type = "number", optional = true },
+                    offset = vector_schema(),
+                    context = {
+                        type = "table",
+                        optional = true,
+                        allow_extra = true,
+                    },
                 },
             },
         },

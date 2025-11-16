@@ -24,13 +24,13 @@ function station_factory.instantiate(blueprint, context)
     assert(type(blueprint) == "table", "station blueprint must be a table")
     normalize_station_components(blueprint)
 
+    context = context or {}
+    context.station = true
+
     local physics = blueprint.physics or {}
     physics.body = physics.body or { type = "static", fixedRotation = true }
     physics.fixture = physics.fixture or {}
     blueprint.physics = physics
-
-    context = context or {}
-    context.station = true
 
     return ship_factory.instantiate(blueprint, context)
 end

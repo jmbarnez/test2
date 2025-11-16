@@ -8,14 +8,221 @@ local ShipRuntime = require("src.ships.runtime")
 local Modules = require("src.ships.modules")
 local Items = require("src.items.registry")
 local PlayerManager = require("src.player.manager")
+local EntitySerializer = require("src.util.entity_serializer")
+local QuestTracker = require("src.quests.tracker")
+local loader = require("src.blueprints.loader")
 
 ---@diagnostic disable-next-line: undefined-global
 local love = love
 
+--[[
+    SaveLoad orchestrates all long-term persistence for Novus.  Besides the
+    traditional player snapshot, it now captures the deterministic universe
+    seed, every ECS entity via EntitySerializer, and the quest/UI state.  The
+    helpers below deliberately mirror the structure of the runtime so the
+    restore path can rebuild complex entities (ships, stations, pickups, etc.)
+    without bespoke glue per system.  The optional debugDumpWorld utility lets
+    us dump a raw entity snapshot for troubleshooting or regression tests.
+]]
 local SaveLoad = {}
 
 local SAVE_FILE_NAME = "savegame.json"
 local SAVE_VERSION = 1
+
+local function copy_into_table(target, source)
+    if type(source) ~= "table" then
+        return target
+    end
+
+    target = target or {}
+    for key, value in pairs(source) do
+        if type(value) == "table" then
+            target[key] = table_util.deep_copy(value)
+        else
+            target[key] = value
+        end
+    end
+    return target
+end
+
+local function apply_body_state(entity, data)
+    if not (entity and entity.body and not entity.body:isDestroyed()) then
+        return
+    end
+
+    local body = entity.body
+    if data.position then
+        body:setPosition(data.position.x or 0, data.position.y or 0)
+    end
+    if data.rotation then
+        body:setAngle(data.rotation)
+    end
+    if data.velocity then
+        body:setLinearVelocity(data.velocity.x or 0, data.velocity.y or 0)
+    end
+    if data.angularVelocity then
+        body:setAngularVelocity(data.angularVelocity)
+    end
+end
+
+local function apply_snapshot_payload(entity, snapshot)
+    if not (entity and snapshot) then
+        return
+    end
+
+    local data = snapshot.data or {}
+
+    if data.position then
+        entity.position = entity.position or {}
+        entity.position.x = data.position.x or entity.position.x or 0
+        entity.position.y = data.position.y or entity.position.y or 0
+    end
+
+    if data.rotation ~= nil then
+        entity.rotation = data.rotation
+    end
+
+    if data.velocity then
+        entity.velocity = entity.velocity or {}
+        entity.velocity.x = data.velocity.x or entity.velocity.x or 0
+        entity.velocity.y = data.velocity.y or entity.velocity.y or 0
+    end
+
+    if data.health then
+        entity.health = copy_into_table(entity.health, data.health)
+    end
+
+    if data.shield then
+        entity.shield = copy_into_table(entity.shield, data.shield)
+        if entity.health then
+            entity.health.shield = entity.shield
+        end
+    end
+
+    if data.energy then
+        entity.energy = copy_into_table(entity.energy, data.energy)
+    end
+
+    if data.thrust then
+        entity.thrust = copy_into_table(entity.thrust, data.thrust)
+        entity.isThrusting = data.thrust.isThrusting
+        entity.maxThrust = data.thrust.max or entity.maxThrust
+        entity.currentThrust = data.thrust.current or entity.currentThrust
+    end
+
+    if data.stats then
+        entity.stats = copy_into_table(entity.stats, data.stats)
+    end
+
+    if data.ai then
+        entity.ai = copy_into_table(entity.ai, data.ai)
+    end
+
+    if data.loot then
+        entity.loot = copy_into_table(entity.loot, data.loot)
+    end
+
+    if data.cargo then
+        entity.cargo = copy_into_table(entity.cargo, data.cargo)
+    end
+
+    if data.quest then
+        entity.quest = copy_into_table(entity.quest, data.quest)
+    end
+
+    if data.spawner then
+        entity.spawner = copy_into_table(entity.spawner, data.spawner)
+    end
+
+    entity.chunkLevel = data.chunkLevel or entity.chunkLevel
+    entity.miningVariant = data.miningVariant or entity.miningVariant
+    entity.faction = data.faction or entity.faction
+    entity.enemy = data.enemy or entity.enemy
+    entity.station = data.station or entity.station
+    entity.asteroid = data.asteroid or entity.asteroid
+
+    apply_body_state(entity, data)
+end
+
+local function instantiate_pickup_from_snapshot(state, snapshot)
+    local data = snapshot.data or {}
+    local pickup = data.pickup
+    if not (pickup and state and state.world) then
+        return nil, false
+    end
+
+    local drop = {
+        id = pickup.itemId or (pickup.item and pickup.item.id),
+        item = pickup.item,
+        quantity = pickup.quantity,
+        position = data.position,
+        velocity = data.velocity,
+        collectRadius = pickup.collectRadius,
+        lifetime = pickup.lifetime,
+    }
+
+    local Entities = require("src.states.gameplay.entities")
+    local entity = Entities.spawnLootPickup(state, drop)
+    return entity, true
+end
+
+local function instantiate_entity_from_snapshot(state, snapshot)
+    if not (state and snapshot) then
+        return nil, false
+    end
+
+    if snapshot.archetype == "pickup" then
+        return instantiate_pickup_from_snapshot(state, snapshot)
+    end
+
+    local blueprint = snapshot.blueprint
+    if not blueprint then
+        return nil, false
+    end
+
+    local context = {
+        physicsWorld = state.physicsWorld,
+        worldBounds = state.worldBounds,
+        position = snapshot.data and table_util.deep_copy(snapshot.data.position or nil) or nil,
+        rotation = snapshot.data and snapshot.data.rotation or nil,
+    }
+
+    local ok, entityOrError = pcall(loader.instantiate, blueprint.category, blueprint.id, context)
+    if not ok then
+        print(string.format("[SaveLoad] Failed to instantiate '%s/%s' from snapshot: %s", blueprint.category or "?", blueprint.id or "?", tostring(entityOrError)))
+        return nil, false
+    end
+
+    local entity = entityOrError
+    entity.entityId = snapshot.id or entity.entityId
+    entity.blueprint = entity.blueprint or blueprint
+    apply_snapshot_payload(entity, snapshot)
+
+    return entity, false
+end
+
+local function restore_world_entities(state, snapshots)
+    if not (state and state.world and type(snapshots) == "table") then
+        return
+    end
+
+    state.stationEntities = nil
+
+    for index = 1, #snapshots do
+        local snapshot = snapshots[index]
+        local entity, alreadyAdded = instantiate_entity_from_snapshot(state, snapshot)
+        if entity then
+            if not alreadyAdded then
+                state.world:add(entity)
+            end
+
+            if entity.station then
+                state.stationEntities = state.stationEntities or {}
+                state.stationEntities[#state.stationEntities + 1] = entity
+            end
+        end
+    end
+end
 
 --- Serializes cargo items from an entity
 ---@param cargo table
@@ -115,6 +322,18 @@ function SaveLoad.serialize(state)
             pilot = pilotSnapshot,
         },
     }
+
+    local worldEntities = EntitySerializer.serialize_world(state)
+    if worldEntities and #worldEntities > 0 then
+        saveData.world = {
+            entities = worldEntities,
+        }
+    end
+
+    local questData = QuestTracker.serialize(state)
+    if questData then
+        saveData.quests = questData
+    end
 
     return saveData
 end
@@ -227,7 +446,6 @@ local function restore_player_ship(state, shipSnapshot)
     end
 
     local blueprint = shipSnapshot.blueprint
-    local loader = require("src.blueprints.loader")
     
     -- Create context for ship instantiation
     local context = {
@@ -297,8 +515,8 @@ function SaveLoad.restoreGameState(state, saveData)
         player.playerId = 1
 
         -- Add to ECS world
-        if state.world then
-            state.world:addEntity(player)
+        if state.world and state.world.add then
+            state.world:add(player)
         end
 
         -- Register with player manager
@@ -326,12 +544,23 @@ function SaveLoad.restoreGameState(state, saveData)
     -- Restore currency
     if playerData.currency then
         state.playerCurrency = playerData.currency
-        local PlayerCurrency = require("src.player.currency")
-        PlayerCurrency.sync_to_entity(state)
+    end
+    local PlayerCurrency = require("src.player.currency")
+    if PlayerCurrency and PlayerCurrency.sync then
+        local ship = PlayerManager and PlayerManager.getCurrentShip and PlayerManager.getCurrentShip(state)
+        PlayerCurrency.sync(state, ship)
     end
 
     if saveData.universe and saveData.universe.seed then
         state.universeSeed = saveData.universe.seed
+    end
+
+    if saveData.world and saveData.world.entities then
+        restore_world_entities(state, saveData.world.entities)
+    end
+
+    if saveData.quests then
+        QuestTracker.restore(state, saveData.quests)
     end
 
     print("[SaveLoad] Game state restored successfully")
@@ -344,10 +573,12 @@ end
 ---@return boolean success
 ---@return string|nil error
 function SaveLoad.loadGame(state, saveData)
+    state.skipProceduralSpawns = true
     local loadError
     if not saveData then
         saveData, loadError = SaveLoad.loadSaveData()
         if not saveData then
+            state.skipProceduralSpawns = nil
             return false, loadError
         end
     end
@@ -365,6 +596,7 @@ function SaveLoad.loadGame(state, saveData)
     -- Restore game state
     local restoreOk, restoreError = SaveLoad.restoreGameState(state, saveData)
     if not restoreOk then
+        state.skipProceduralSpawns = nil
         return false, restoreError
     end
 
@@ -379,6 +611,30 @@ function SaveLoad.loadGame(state, saveData)
             state.engineTrail:clear()
             state.engineTrail:attachPlayer(player)
         end
+    end
+
+    state.skipProceduralSpawns = nil
+    return true
+end
+
+function SaveLoad.debugDumpWorld(state)
+    if not state then
+        return false, "No gameplay state"
+    end
+
+    local snapshot = EntitySerializer.serialize_world(state)
+    if not snapshot or #snapshot == 0 then
+        return false, "World is empty"
+    end
+
+    local ok, encoded = pcall(json.encode, snapshot)
+    if not ok then
+        return false, "Failed to encode world snapshot"
+    end
+
+    local writeOk, err = pcall(love.filesystem.write, "world_dump.json", encoded)
+    if not writeOk then
+        return false, tostring(err)
     end
 
     return true

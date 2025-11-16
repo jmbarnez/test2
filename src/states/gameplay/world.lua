@@ -69,6 +69,7 @@ function World.loadSector(state, sectorId)
         state.asteroidConfig = sector.asteroids
         state.enemyConfig = sector.enemies
         state.stationConfig = sector.stations
+        state.warpgateConfig = sector.warpgates
     else
         local reason = not ok and sector or "invalid sector data"
         print(string.format("[gameplay] Failed to load sector '%s': %s", tostring(chosenId), tostring(reason)))
@@ -76,6 +77,7 @@ function World.loadSector(state, sectorId)
         state.asteroidConfig = nil
         state.enemyConfig = nil
         state.stationConfig = nil
+        state.warpgateConfig = nil
     end
 end
 
@@ -99,6 +101,7 @@ function World.teardown(state)
     state.asteroidConfig = nil
     state.enemyConfig = nil
     state.stationConfig = nil
+    state.warpgateConfig = nil
 end
 
 return World

@@ -1,6 +1,6 @@
--- Particle Effects Rendering System
--- Draws particle effects (impact sparks, explosions, etc.) on top of entities
--- This system should be added AFTER the main render system to ensure particles
+-- Effects Renderer System
+-- Draws projectile and beam effects (sparks, shader explosions, etc.) on top of entities
+-- This system should be added AFTER the main render system to ensure effects
 -- appear in front of ships, stations, and other game objects
 
 local tiny = require("libs.tiny")
@@ -10,7 +10,7 @@ local explosion_renderer = require("src.renderers.explosion")
 local love = love
 local lg = love.graphics
 
----@class ParticleEffectsSystemContext
+---@class EffectsRendererSystemContext
 ---@field projectileSystem table|nil   # Projectile system providing impact particles/explosions
 ---@field weaponBeamSystem table|nil   # Weapon beam VFX system providing beam impact sparks
 
