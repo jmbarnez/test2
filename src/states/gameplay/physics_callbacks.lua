@@ -41,10 +41,14 @@ function PhysicsCallbacks.ensureRouter(state)
                     return
                 end
 
+                -- Execute handlers with error protection to prevent physics callback crashes
                 for i = 1, #handlers do
                     local handler = handlers[i]
                     if handler then
-                        handler(...)
+                        local ok, err = pcall(handler, ...)
+                        if not ok then
+                            print(string.format("[physics:%s] Handler %d failed: %s", phase, i, tostring(err)))
+                        end
                     end
                 end
             end

@@ -449,6 +449,21 @@ local function resolve_shield(entity)
     return shield
 end
 
+function Entities.hasActiveShield(entity)
+    local shield = resolve_shield(entity)
+    if not shield then
+        return false
+    end
+
+    local maxShield = tonumber(shield.max or shield.capacity or 0) or 0
+    if maxShield <= 0 then
+        return false
+    end
+
+    local current = tonumber(shield.current or shield.value or shield.energy or 0) or 0
+    return current > 0
+end
+
 local DEFAULT_RETALIATION_DURATION = 6
 
 local function assign_retaliation_target(entity, source)

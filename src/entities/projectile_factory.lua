@@ -89,6 +89,10 @@ end
 
 local ProjectileFactory = {}
 
+-- NOTE: Entity pooling opportunity - projectiles are created/destroyed frequently.
+-- Consider implementing an object pool to reduce GC pressure and allocation overhead.
+-- Pool could pre-allocate projectile entities and reuse them instead of creating new ones.
+
 local function resolve_damage_type(weapon)
     if weapon and weapon.damageType then
         return weapon.damageType

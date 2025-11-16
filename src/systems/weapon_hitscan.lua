@@ -3,6 +3,7 @@
 local tiny = require("libs.tiny")
 local weapon_common = require("src.util.weapon_common")
 local weapon_beam = require("src.util.weapon_beam")
+local Entities = require("src.states.gameplay.entities")
 
 local DEFAULT_PLAYER_ENERGY_DRAIN = weapon_common.DEFAULT_PLAYER_ENERGY_DRAIN
 
@@ -110,14 +111,18 @@ local function fire_hitscan(world, entity, startX, startY, dirX, dirY, weapon, p
             end
         end
 
-        queue_impact(weapon, {
-            x = endX,
-            y = endY,
-            dirX = dirX,
-            dirY = dirY,
-            color = beamColor,
-            glow = beamGlow,
-        })
+        local targetHasShield = Entities.hasActiveShield and Entities.hasActiveShield(target)
+
+        if not targetHasShield then
+            queue_impact(weapon, {
+                x = endX,
+                y = endY,
+                dirX = dirX,
+                dirY = dirY,
+                color = beamColor,
+                glow = beamGlow,
+            })
+        end
     end
 
     queue_segment(weapon, {

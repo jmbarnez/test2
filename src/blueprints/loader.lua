@@ -5,6 +5,7 @@ local loader = {}
 
 local registry = {}
 local factories = {}
+local validation_cache = {} -- Cache validated blueprints to avoid expensive re-validation
 
 local function module_key(category, id)
     return string.format("%s:%s", category, id)
@@ -65,19 +66,30 @@ function loader.load(category, id, params)
     blueprint.category = blueprint.category or category
     blueprint.id = blueprint.id or id
 
-    local ok, errors = Blueprint.validate(category, blueprint)
-    if not ok then
-        local header = string.format("Blueprint '%s/%s'", category, id)
-        local formatted
-        if type(errors) == "table" then
-            formatted = Blueprint.format_errors(errors)
-        else
-            formatted = tostring(errors)
+    -- Check validation cache first (only for static blueprints without params)
+    local cache_key = params and nil or module_key(category, id)
+    local is_cached = cache_key and validation_cache[cache_key]
+
+    if not is_cached then
+        local ok, errors = Blueprint.validate(category, blueprint)
+        if not ok then
+            local header = string.format("Blueprint '%s/%s'", category, id)
+            local formatted
+            if type(errors) == "table" then
+                formatted = Blueprint.format_errors(errors)
+            else
+                formatted = tostring(errors)
+            end
+            if formatted and #formatted > 0 then
+                error(string.format("%s failed validation:\n - %s", header, formatted), 3)
+            else
+                error(string.format("%s failed validation", header), 3)
+            end
         end
-        if formatted and #formatted > 0 then
-            error(string.format("%s failed validation:\n - %s", header, formatted), 3)
-        else
-            error(string.format("%s failed validation", header), 3)
+
+        -- Cache validation result for static blueprints
+        if cache_key then
+            validation_cache[cache_key] = true
         end
     end
 
@@ -92,6 +104,39 @@ function loader.instantiate(category, id, context, params)
 
     local blueprint = loader.load(category, id, params)
     return factory.instantiate(blueprint, context or {})
+end
+
+--- Clear validation cache (useful for development/hot-reloading)
+function loader.clear_validation_cache()
+    for key in pairs(validation_cache) do
+        validation_cache[key] = nil
+    end
+end
+
+--- Clear module registry (forces re-require on next load)
+function loader.clear_module_cache()
+    for key in pairs(registry) do
+        registry[key] = nil
+    end
+end
+
+--- Get cache statistics for debugging
+function loader.get_cache_stats()
+    local module_count = 0
+    local validation_count = 0
+    
+    for _ in pairs(registry) do
+        module_count = module_count + 1
+    end
+    
+    for _ in pairs(validation_cache) do
+        validation_count = validation_count + 1
+    end
+    
+    return {
+        modules_cached = module_count,
+        validations_cached = validation_count,
+    }
 end
 
 return loader

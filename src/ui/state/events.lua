@@ -97,26 +97,27 @@ end
 
 function Events.handleKeyPressed(UIStateManager, state, key, scancode, isrepeat)
     return with_resolved_state(state, function(resolved)
+        -- Note: cargo_window uses all parameters, others only use context and key
         local window = resolve_cargo_window()
         if window and window.keypressed and window.keypressed(resolved, key, scancode, isrepeat) then
             return true
         end
 
         window = resolve_station_window()
-        if window and window.keypressed and window.keypressed(resolved, key, scancode, isrepeat) then
+        if window and window.keypressed and window.keypressed(resolved, key) then
             return true
         end
 
         if UIStateManager.isMapUIVisible and UIStateManager.isMapUIVisible(resolved) then
             window = resolve_map_window()
-            if window and window.keypressed and window.keypressed(resolved, key, scancode, isrepeat) then
+            if window and window.keypressed and window.keypressed(resolved, key) then
                 return true
             end
         end
 
         if UIStateManager.isOptionsUIVisible and UIStateManager.isOptionsUIVisible(resolved) then
             window = resolve_options_window()
-            if window and window.keypressed and window.keypressed(resolved, key, scancode, isrepeat) then
+            if window and window.keypressed and window.keypressed(resolved, key) then
                 return true
             end
         end

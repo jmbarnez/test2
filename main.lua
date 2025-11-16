@@ -82,7 +82,8 @@ function love.run()
     end
 end
 
-function love.load()
+function love.load(arg, unfilteredArg)
+    -- Accept standard LÖVE arguments (unused in this implementation)
     local window = constants.window
     if love.window and window then
         love.window.setTitle(window.title or "Game")

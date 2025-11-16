@@ -65,11 +65,11 @@ local function duplicate_contract(template, suffix)
 end
 
 --- Generates a table of quest offers for the supplied station.
----@param _ context table
----@param _ station table
+---@param context table
+---@param station table
 ---@param options table|nil
 ---@return table quests
-function QuestGenerator.generate(_, _, options)
+function QuestGenerator.generate(context, station, options)
     options = options or {}
     local desired = math.max(1, math.floor(options.count or 3))
     local quests = {}

@@ -313,24 +313,18 @@ return function(context)
                 render_single(self.backgroundQueue[i], context, cache)
             end
 
-            if table.clear then
-                table.clear(self.backgroundQueue)
-            else
-                for i = #self.backgroundQueue, 1, -1 do
-                    self.backgroundQueue[i] = nil
-                end
+            -- Clear queue (compatible with Lua 5.1/LuaJIT)
+            for i = #self.backgroundQueue, 1, -1 do
+                self.backgroundQueue[i] = nil
             end
 
             for i = 1, #self.foregroundQueue do
                 render_single(self.foregroundQueue[i], context, cache)
             end
 
-            if table.clear then
-                table.clear(self.foregroundQueue)
-            else
-                for i = #self.foregroundQueue, 1, -1 do
-                    self.foregroundQueue[i] = nil
-                end
+            -- Clear queue (compatible with Lua 5.1/LuaJIT)
+            for i = #self.foregroundQueue, 1, -1 do
+                self.foregroundQueue[i] = nil
             end
         end,
     }

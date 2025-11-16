@@ -432,6 +432,13 @@ local function draw_entities(context, player, rect, bounds, colors, scale, cente
 end
 
 -- ============================================================================
+-- Forward declarations for view functions
+-- ============================================================================
+
+local draw_galaxy_view
+local draw_universe_view
+
+-- ============================================================================
 -- View mode metadata
 -- ============================================================================
 
@@ -472,7 +479,11 @@ VIEW_MODES = {
     },
 }
 
-local function draw_galaxy_view(context, rect, bounds, colors, scale, centerX, centerY)
+-- ============================================================================
+-- Galaxy view implementation
+-- ============================================================================
+
+draw_galaxy_view = function(context, rect, bounds, colors, scale, centerX, centerY)
 	local universe = resolve_universe(context)
 	if not universe then
 		return
@@ -536,7 +547,7 @@ local function draw_galaxy_view(context, rect, bounds, colors, scale, centerX, c
 	end
 end
 
-local function draw_universe_view(context, rect, bounds, colors, scale, centerX, centerY)
+draw_universe_view = function(context, rect, bounds, colors, scale, centerX, centerY)
 	local universe = resolve_universe(context)
 	if not universe then
 		return

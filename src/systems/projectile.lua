@@ -3,6 +3,7 @@ local love = love
 local lg, lp = love.graphics, love.physics
 local damage_util = require("src.util.damage")
 local ProjectileFactory = require("src.entities.projectile_factory")
+local Entities = require("src.states.gameplay.entities")
 local math_util = require("src.util.math")
 
 -- Lua compat helpers
@@ -587,13 +588,17 @@ return function(context)
             if self.processedCollisions[key] then return end
             self.processedCollisions[key] = true
 
-            -- Create impact particles (before early returns so visual feedback always occurs)
             local pos = projectile.position or {}
             local x, y = pos.x or 0, pos.y or 0
-            
-            local particles = create_impact_particles(x, y, projectile)
-            for i = 1, #particles do
-                self.impactParticles[#self.impactParticles + 1] = particles[i]
+
+            local targetHasShield = Entities.hasActiveShield and Entities.hasActiveShield(target)
+
+            -- Create impact particles only when the target lacks an active shield
+            if not targetHasShield then
+                local particles = create_impact_particles(x, y, projectile)
+                for i = 1, #particles do
+                    self.impactParticles[#self.impactParticles + 1] = particles[i]
+                end
             end
 
             if projectile.homing and projectile.homing.explosion and not projectile.homing._explosionSpawned then
