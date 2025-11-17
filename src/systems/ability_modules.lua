@@ -7,6 +7,7 @@ local constants = require("src.constants.game")
 local base_afterburner = require("src.abilities.behaviors.base_afterburner")
 local base_dash = require("src.abilities.behaviors.base_dash")
 local base_temporal_field = require("src.abilities.behaviors.base_temporal_field")
+local base_overdrive = require("src.abilities.behaviors.base_overdrive")
 
 BehaviorRegistry.registerFallback("afterburner", {
     update = base_afterburner.update,
@@ -24,6 +25,12 @@ BehaviorRegistry.registerFallback("temporal_field", {
     update = base_temporal_field.update,
     activate = base_temporal_field.activate,
     deactivate = base_temporal_field.deactivate,
+})
+
+BehaviorRegistry.registerFallback("overdrive", {
+    update = base_overdrive.update,
+    activate = base_overdrive.activate,
+    deactivate = base_overdrive.deactivate,
 })
 
 -- Legacy handlers kept for backward compatibility (will be removed in future)
