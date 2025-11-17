@@ -3,7 +3,7 @@ local Blueprint = require("src.blueprints.blueprint")
 
 local loader = {}
 
-local registry = {}
+local blueprint_cache = {}
 local factories = {}
 local validation_cache = {} -- Cache validated blueprints to avoid expensive re-validation
 
@@ -15,59 +15,97 @@ local function resolve_module_path(category, id)
     return string.format("src.blueprints.%s.%s", category, id)
 end
 
-local function load_blueprint_chunk(module_path)
-    if package and package.loaded then
-        package.loaded[module_path] = nil
+local function resolve_filesystem_path(category, id)
+    return string.format("src/blueprints/%s/%s.lua", category, id)
+end
+
+local function read_file(path)
+    local file, err = io.open(path, "rb")
+    if not file then
+        return nil, err
+    end
+    local content = file:read("*a")
+    file:close()
+    return content
+end
+
+local function read_blueprint_source(category, id)
+    local fs_path = resolve_filesystem_path(category, id)
+
+    if love and love.filesystem and love.filesystem.read then
+        local ok, contents, read_err = pcall(love.filesystem.read, fs_path)
+        if ok then
+            if contents then
+                return contents, fs_path
+            end
+            return nil, read_err or string.format("Empty blueprint file '%s'", fs_path)
+        end
     end
 
     if package and package.searchpath then
+        local module_path = resolve_module_path(category, id)
         local file_path = package.searchpath(module_path, package.path)
         if file_path then
-            local chunk, err = loadfile(file_path)
-            if not chunk then
-                return nil, err
+            local contents, io_err = read_file(file_path)
+            if contents then
+                return contents, file_path
             end
-            return chunk
+            return nil, io_err or string.format("Failed to read '%s'", file_path)
         end
     end
 
-    if love and love.filesystem and love.filesystem.load then
-        local fs_path = module_path:gsub("%.", "/") .. ".lua"
-        local chunk, err = love.filesystem.load(fs_path)
-        if not chunk then
-            return nil, err
-        end
-        return chunk
-    end
+    return nil, string.format("Unable to locate blueprint '%s/%s'", category, id)
+end
 
-    return nil, string.format("Unable to locate module '%s'", module_path)
+local function create_blueprint_environment(category, id, chunk_name)
+    local env = {
+        __BLUEPRINT_CATEGORY__ = category,
+        __BLUEPRINT_ID__ = id,
+        __BLUEPRINT_CHUNKNAME__ = chunk_name,
+    }
+
+    env._G = env
+
+    return setmetatable(env, {
+        __index = _G,
+    })
 end
 
 local function fetch_entry(category, id)
     local key = module_key(category, id)
-    local entry = registry[key]
+    local entry = blueprint_cache[key]
     if entry then
         return entry
     end
 
-    local module_path = resolve_module_path(category, id)
-    local chunk, load_err = load_blueprint_chunk(module_path)
-    if not chunk then
-        error(string.format("Failed to load blueprint '%s/%s': %s", category, id, load_err), 3)
+    local source, origin_or_err = read_blueprint_source(category, id)
+    if not source then
+        error(string.format("Failed to load blueprint '%s/%s': %s", category, id, origin_or_err), 3)
     end
 
-    local ok, mod = pcall(chunk, module_path)
+    local source_path = origin_or_err
+    local chunk_name = string.format("@%s", source_path)
+    local chunk, syntax_err = loadstring(source, chunk_name)
+    if not chunk then
+        error(string.format("Failed to parse blueprint '%s/%s': %s", category, id, syntax_err), 3)
+    end
+
+    local env = create_blueprint_environment(category, id, chunk_name)
+    setfenv(chunk, env)
+
+    local ok, mod = pcall(chunk)
     if not ok then
-        error(string.format("Failed to load blueprint '%s/%s': %s", category, id, mod), 3)
+        error(string.format("Failed to execute blueprint '%s/%s': %s", category, id, mod), 3)
     end
 
     local kind = type(mod)
     if kind ~= "table" and kind ~= "function" then
-        error(string.format("Blueprint module '%s/%s' must return a table or function, got %s", category, id, kind), 3)
+        error(string.format("Blueprint '%s/%s' must return a table or function, got %s", category, id, kind), 3)
     end
 
-    entry = { kind = kind, value = mod, module_path = module_path }
-    registry[key] = entry
+    entry = { kind = kind, value = mod, path = source_path }
+    blueprint_cache[key] = entry
+
     return entry
 end
 
@@ -147,24 +185,26 @@ function loader.clear_validation_cache()
 end
 
 --- Clear module registry (forces re-require on next load)
-function loader.clear_module_cache()
-    for key, entry in pairs(registry) do
-        if entry.module_path and package and package.loaded then
-            package.loaded[entry.module_path] = nil
-        end
-        registry[key] = nil
+function loader.clear_cache()
+    for key in pairs(blueprint_cache) do
+        blueprint_cache[key] = nil
     end
+    loader.clear_validation_cache()
+end
+
+function loader.clear_module_cache()
+    loader.clear_cache()
 end
 
 --- Get cache statistics for debugging
 function loader.get_cache_stats()
     local module_count = 0
     local validation_count = 0
-    
-    for _ in pairs(registry) do
+
+    for _ in pairs(blueprint_cache) do
         module_count = module_count + 1
     end
-    
+
     for _ in pairs(validation_cache) do
         validation_count = validation_count + 1
     end

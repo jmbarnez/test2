@@ -120,6 +120,11 @@ local function build_secondary_weapon(weapon, burst)
         energyPerShot = 0,
     }
 
+    local armorMultipliers = burst.armorMultipliers or weapon.armorMultipliers
+    if armorMultipliers then
+        secondary.armorMultipliers = deep_copy(armorMultipliers)
+    end
+
     if burst.randomizeColorOnSpawn or burst.randomColorOnSpawn then
         secondary.randomizeColorOnSpawn = true
     end
@@ -315,6 +320,12 @@ function ProjectileFactory.spawn(tinyWorld, physicsWorld, shooter, startX, start
     projectileComponent.ownerPlayerId = shooter and shooter.playerId or nil
     projectileComponent.groupIndex = projectileComponent.groupIndex or PROJECTILE_GROUP_INDEX
     projectileComponent.damageType = projectileComponent.damageType or resolve_damage_type(weapon)
+    if not projectileComponent.armorMultipliers then
+        local armorMultipliers = weapon.armorMultipliers
+        if armorMultipliers then
+            projectileComponent.armorMultipliers = deep_copy(armorMultipliers)
+        end
+    end
     projectile.projectile = projectileComponent
 
     local drawable = projectile.drawable or {}

@@ -1,221 +1,210 @@
-local math = math
+local scale = 14
 
-local scale = 18
-local cos30 = math.cos(math.rad(30))
-
-local function regular_hex(radius, v_scale)
-    local r = radius or scale
-    local v = v_scale or 1
-    local x = cos30 * r
-    return {
-        0, -r * v,
-        x, -0.5 * r * v,
-        x, 0.5 * r * v,
-        0, r * v,
-        -x, 0.5 * r * v,
-        -x, -0.5 * r * v,
-    }
-end
-
-local outer_hex = regular_hex(1.1 * scale, 1.05)
-local ring_hex = regular_hex(0.78 * scale, 1.0)
-local inner_hex = regular_hex(0.48 * scale, 0.9)
-
-local sensor_panel = {
-    -0.38 * scale, -0.48 * scale,
-    0, -0.92 * scale,
-    0.38 * scale, -0.48 * scale,
-    0.24 * scale, -0.18 * scale,
-    -0.24 * scale, -0.18 * scale,
+local body_hull = {
+    0, -1.2 * scale,
+    0.85 * scale, -0.35 * scale,
+    0.6 * scale, 0.55 * scale,
+    0.15 * scale, 1.1 * scale,
+    -0.15 * scale, 1.1 * scale,
+    -0.6 * scale, 0.55 * scale,
+    -0.85 * scale, -0.35 * scale,
 }
 
-local lattice_arm = {
-    0.32 * scale, -0.1 * scale,
-    0.66 * scale, -0.02 * scale,
-    0.66 * scale, 0.28 * scale,
-    0.28 * scale, 0.16 * scale,
+local core_plate = {
+    0, -0.78 * scale,
+    0.42 * scale, -0.22 * scale,
+    0.28 * scale, 0.36 * scale,
+    -0.28 * scale, 0.36 * scale,
+    -0.42 * scale, -0.22 * scale,
 }
 
-local accent_plate = {
-    -0.44 * scale, 0.02 * scale,
-    -0.2 * scale, -0.18 * scale,
-    0.2 * scale, -0.18 * scale,
-    0.44 * scale, 0.02 * scale,
-    0.22 * scale, 0.26 * scale,
-    -0.22 * scale, 0.26 * scale,
+local wing_left = {
+    -0.52 * scale, -0.18 * scale,
+    -1.05 * scale, 0.05 * scale,
+    -0.72 * scale, 0.58 * scale,
+    -0.38 * scale, 0.3 * scale,
 }
 
-local thruster_slot = {
-    -0.3 * scale, 0.56 * scale,
-    0.3 * scale, 0.56 * scale,
-    0.4 * scale, 0.98 * scale,
-    -0.4 * scale, 0.98 * scale,
+local wing_right = {
+    0.52 * scale, -0.18 * scale,
+    1.05 * scale, 0.05 * scale,
+    0.72 * scale, 0.58 * scale,
+    0.38 * scale, 0.3 * scale,
 }
 
-local underside_panel = {
-    -0.32 * scale, 0.35 * scale,
-    0.32 * scale, 0.35 * scale,
-    0.22 * scale, 0.6 * scale,
-    -0.22 * scale, 0.6 * scale,
+local antenna = {
+    -0.1 * scale, -1.2 * scale,
+    0, -1.45 * scale,
+    0.1 * scale, -1.2 * scale,
 }
 
-local physics_polygon = outer_hex
+local thruster = {
+    -0.28 * scale, 0.75 * scale,
+    0.28 * scale, 0.75 * scale,
+    0.18 * scale, 1.25 * scale,
+    -0.18 * scale, 1.25 * scale,
+}
+
+local engine_glow = {
+    -0.22 * scale, 0.78 * scale,
+    0.22 * scale, 0.78 * scale,
+    0, 1.28 * scale,
+}
+
+local physics_polygon = {
+    0, -1.15 * scale,
+    0.75 * scale, -0.32 * scale,
+    0.52 * scale, 0.55 * scale,
+    0.12 * scale, 1.05 * scale,
+    -0.12 * scale, 1.05 * scale,
+    -0.52 * scale, 0.55 * scale,
+    -0.75 * scale, -0.32 * scale,
+}
 
 return {
     category = "ships",
     id = "starter",
-    name = "Azure Hex Drone",
+    name = "Aurora Scout Drone",
     spawn = {
         strategy = "world_center",
         rotation = 0,
     },
     components = {
-        type = "hex_drone",
+        type = "starter_drone",
         player = true,
         position = { x = 0, y = 0 },
         velocity = { x = 0, y = 0 },
         rotation = 0,
-        hullSize = { x = 32, y = 34 },
+        hullSize = { x = 28, y = 30 },
         thrusterOffset = 0,
-        engineTrailAnchor = { x = 0, y = 0 },
+        engineTrailAnchor = { x = 0, y = 0.8 * scale },
         drawable = {
             type = "ship",
-            hull = outer_hex,
+            hull = body_hull,
             colors = {
-                hull = { 0.1, 0.2, 0.28, 1 },
-                outline = { 0.05, 0.1, 0.16, 1 },
-                accent = { 0.16, 0.36, 0.56, 1 },
-                trim = { 0.24, 0.52, 0.76, 1 },
-                core = { 0.4, 0.72, 1.0, 0.95 },
-                coreGlow = { 0.22, 0.42, 0.76, 0.85 },
-                engine = { 0.35, 0.6, 1.0, 1 },
-                default = { 0.1, 0.2, 0.28, 1 },
+                hull = { 0.07, 0.16, 0.22, 1 },
+                outline = { 0.03, 0.07, 0.12, 1 },
+                accent = { 0.18, 0.4, 0.55, 1 },
+                trim = { 0.28, 0.58, 0.72, 1 },
+                core = { 0.52, 0.85, 1.0, 0.92 },
+                glow = { 0.35, 0.7, 1.0, 0.45 },
+                engine = { 0.38, 0.8, 1.0, 0.8 },
             },
             parts = {
                 {
                     name = "hull",
                     type = "polygon",
-                    points = outer_hex,
+                    points = body_hull,
                     fill = "hull",
                     stroke = "outline",
-                    strokeWidth = 2.6,
+                    strokeWidth = 2.1,
                 },
                 {
-                    name = "accent_plate",
+                    name = "wing_left",
                     type = "polygon",
-                    points = accent_plate,
-                    fill = "accent",
-                    stroke = "outline",
-                    strokeWidth = 2,
-                },
-                {
-                    name = "ring",
-                    type = "polygon",
-                    points = ring_hex,
-                    fill = "trim",
-                    stroke = "outline",
-                    strokeWidth = 2,
-                },
-                {
-                    name = "lattice_arm",
-                    type = "polygon",
-                    points = lattice_arm,
-                    fill = "accent",
-                    stroke = "outline",
-                    strokeWidth = 1.6,
-                    mirror = true,
-                },
-                {
-                    name = "sensor_panel",
-                    type = "polygon",
-                    points = sensor_panel,
-                    fill = "trim",
-                    stroke = "outline",
-                    strokeWidth = 1.6,
-                },
-                {
-                    name = "underside_panel",
-                    type = "polygon",
-                    points = underside_panel,
+                    points = wing_left,
                     fill = "accent",
                     stroke = "outline",
                     strokeWidth = 1.4,
+                },
+                {
+                    name = "wing_right",
+                    type = "polygon",
+                    points = wing_right,
+                    fill = "accent",
+                    stroke = "outline",
+                    strokeWidth = 1.4,
+                },
+                {
+                    name = "core",
+                    type = "polygon",
+                    points = core_plate,
+                    fill = "core",
+                    stroke = "trim",
+                    strokeWidth = 1.1,
+                },
+                {
+                    name = "antenna",
+                    type = "polygon",
+                    points = antenna,
+                    fill = "trim",
+                    stroke = "outline",
+                    strokeWidth = 1.2,
+                },
+                {
+                    name = "thruster",
+                    type = "polygon",
+                    points = thruster,
+                    fill = "engine",
+                    stroke = "outline",
+                    strokeWidth = 1.2,
+                },
+                {
+                    name = "engine_glow",
+                    type = "polygon",
+                    points = engine_glow,
+                    fill = "glow",
+                    stroke = false,
+                    blend = "add",
                 },
                 {
                     name = "core_glow",
                     type = "ellipse",
                     centerX = 0,
-                    centerY = 0,
-                    radiusX = 0.24 * scale,
-                    radiusY = 0.26 * scale,
-                    fill = { 0.4, 0.75, 1.0, 0.35 },
+                    centerY = -0.1 * scale,
+                    radiusX = 0.22 * scale,
+                    radiusY = 0.24 * scale,
+                    fill = { 0.48, 0.82, 1.0, 0.32 },
                     stroke = false,
                     blend = "add",
-                },
-                {
-                    name = "core",
-                    type = "polygon",
-                    points = inner_hex,
-                    fill = "core",
-                    stroke = "coreGlow",
-                    strokeWidth = 1.4,
-                },
-                {
-                    name = "thruster_slot",
-                    type = "polygon",
-                    points = thruster_slot,
-                    fill = "engine",
-                    stroke = "outline",
-                    strokeWidth = 1.4,
                 },
             },
         },
         stats = {
-            mass = 1.6,
-            main_thrust = 115,
-            reverse_thrust = 45,
-            strafe_thrust = 75,
-            max_acceleration = 160,
-            max_speed = 210,
-            linear_damping = 0.65,
-            angular_damping = 0.18,
-            targetingTime = 1.2,
+            mass = 1.3,
+            main_thrust = 90,
+            reverse_thrust = 55,
+            strafe_thrust = 60,
+            max_acceleration = 135,
+            max_speed = 180,
+            linear_damping = 0.7,
+            angular_damping = 0.2,
+            targetingTime = 1.4,
         },
         energy = {
-            max = 140,
-            current = 140,
-            regen = 55,
-            rechargeDelay = 0.8,
-            thrustDrain = 42,
+            max = 110,
+            current = 110,
+            regen = 40,
+            rechargeDelay = 1.0,
+            thrustDrain = 34,
         },
         cargo = {
-            capacity = 50,
+            capacity = 24,
             items = {
-                { weapon = "cannon" },
-                { weapon = "laser_beam" },
+                { weapon = "laser_turret" },
             },
         },
         magnet = {
-            radius = 260,
-            strength = 360,
-            falloff = 0.55,
-            collectRadius = 28,
+            radius = 220,
+            strength = 280,
+            falloff = 0.6,
+            collectRadius = 24,
         },
         hull = {
-            max = 95,
-            current = 95,
+            max = 65,
+            current = 65,
             regen = 0,
         },
         shield = {
-            max = 50,
-            current = 50,
-            regen = 2,
-            rechargeDelay = 5.0,
+            max = 35,
+            current = 35,
+            regen = 1.5,
+            rechargeDelay = 5.5,
         },
         modules = {
-            defaultType = "defense",
+            defaultType = "utility",
             slots = {
-                { type = "defense" },
+                { type = "utility" },
                 { type = "ability" },
             },
         },
@@ -231,8 +220,8 @@ return {
         {
             id = "laser_turret",
             mount = {
-                anchor = { x = 0, y = 0.72 },
-                inset = 4,
+                anchor = { x = 0, y = 0.68 },
+                inset = 3,
             },
         },
     },
@@ -241,8 +230,8 @@ return {
             type = "dynamic",
         },
         fixture = {
-            friction = 0.18,
-            restitution = 0.12,
+            friction = 0.16,
+            restitution = 0.1,
         },
     },
 }

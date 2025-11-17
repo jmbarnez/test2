@@ -505,7 +505,8 @@ apply_explosion_damage = function(system, damageEntityCallback, x, y, projectile
                             local amount = baseDamage * multiplier
                             if damageType then
                                 local armorType = target.armorType
-                                local typeMultiplier = damage_util.resolve_multiplier(damageType, armorType)
+                                local overrides = projectileComponent.armorMultipliers
+                                local typeMultiplier = damage_util.resolve_multiplier(damageType, armorType, overrides)
                                 amount = amount * typeMultiplier
                             end
 
@@ -800,7 +801,8 @@ return function(context)
                 if damage > 0 then
                     local damageType = damageComponent.damageType
                     local armorType = target.armorType
-                    local multiplier = damage_util.resolve_multiplier(damageType, armorType)
+                    local overrides = damageComponent.armorMultipliers
+                    local multiplier = damage_util.resolve_multiplier(damageType, armorType, overrides)
                     damage = damage * multiplier
                     if damage > 0 then
                         local owner = damageComponent.owner or (damageComponent and damageComponent.owner)

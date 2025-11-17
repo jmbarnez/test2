@@ -336,6 +336,13 @@ local HULL_TEMPLATE_KEYS = {
     "x_wing",
 }
 
+local BASIC_HULL_TEMPLATE_KEYS = {
+    "triangle",
+    "diamond",
+    "wedge",
+    "blade",
+}
+
 local function random_choice(tbl)
     return tbl[love.math.random(1, #tbl)]
 end
@@ -357,16 +364,22 @@ local function shrink_polygon(points, factor)
     return scaled
 end
 
-local function generate_hull_shape(size_class)
-    local hull_type = random_choice(HULL_TEMPLATE_KEYS)
+local function generate_hull_shape(size_class, options)
+    options = options or {}
+    local hull_pool = options.basic and BASIC_HULL_TEMPLATE_KEYS or HULL_TEMPLATE_KEYS
+    local hull_type = random_choice(hull_pool)
 
     local base_scale = 10
     if size_class == "small" then
-        base_scale = love.math.random(8, 12)
+        if options.basic then
+            base_scale = love.math.random(7, 10)
+        else
+            base_scale = love.math.random(8, 12)
+        end
     elseif size_class == "medium" then
-        base_scale = love.math.random(12, 18)
+        base_scale = options.basic and love.math.random(11, 15) or love.math.random(12, 18)
     elseif size_class == "large" then
-        base_scale = love.math.random(18, 26)
+        base_scale = options.basic and love.math.random(16, 22) or love.math.random(18, 26)
     end
     
     local template = HULL_TEMPLATES[hull_type]
@@ -551,7 +564,8 @@ local function add_thruster_layers(parts, palette, scale, engine_length)
     end
 end
 
-local function generate_ship_parts(hull_points, scale, palette)
+local function generate_ship_parts(hull_points, scale, palette, options)
+    options = options or {}
     local parts = {}
     
     -- Hull (outer shell)
@@ -587,14 +601,17 @@ local function generate_ship_parts(hull_points, scale, palette)
         strokeWidth = 1,
     })
 
-    add_decals(parts, palette, scale)
-    add_greebles(parts, palette, scale)
+    if not options.basic then
+        add_decals(parts, palette, scale)
+        add_greebles(parts, palette, scale)
+    end
     add_thruster_layers(parts, palette, scale, engine_length)
 
     return parts
 end
 
-local function generate_stats(size_class, difficulty)
+local function generate_stats(size_class, difficulty, options)
+    options = options or {}
     local stats = {}
     
     -- Base stats vary by size class
@@ -642,11 +659,20 @@ local function generate_stats(size_class, difficulty)
             stats[k] = v * diff_mult
         end
     end
+
+    if options.basic then
+        stats.main_thrust = stats.main_thrust * 0.85
+        stats.strafe_thrust = stats.strafe_thrust * 0.85
+        stats.reverse_thrust = stats.reverse_thrust * 0.85
+        stats.max_acceleration = stats.max_acceleration * 0.85
+        stats.max_speed = stats.max_speed * 0.9
+    end
     
     return stats
 end
 
-local function generate_health(size_class, difficulty)
+local function generate_health(size_class, difficulty, options)
+    options = options or {}
     local base_health, base_hull
     
     if size_class == "small" then
@@ -673,6 +699,11 @@ local function generate_health(size_class, difficulty)
     base_health = math.floor(base_health * diff_mult)
     base_hull = math.floor(base_hull * diff_mult)
     
+    if options.basic then
+        base_health = math.floor(base_health * 0.75)
+        base_hull = math.floor(base_hull * 0.75)
+    end
+
     return {
         max = base_health,
         current = base_health,
@@ -717,7 +748,12 @@ local SIZE_ORDER = {
     large = 3,
 }
 
-local function choose_weapon(size_class)
+local function choose_weapon(size_class, options)
+    options = options or {}
+    if options.basic then
+        return "laser_turret"
+    end
+
     local class_rank = SIZE_ORDER[size_class] or 2
     local total = 0
     for i = 1, #WEAPON_LOADOUTS do
@@ -748,7 +784,8 @@ local function choose_weapon(size_class)
     return "laser_turret"
 end
 
-local function generate_ai_params(size_class)
+local function generate_ai_params(size_class, options)
+    options = options or {}
     local ai = {
         behavior = "hunter",
         targetTag = "player",
@@ -767,6 +804,13 @@ local function generate_ai_params(size_class)
         ai.fireArc = math.pi / love.math.random(6, 10)
         ai.preferredDistance = love.math.random(400, 650)
     end
+
+    if options.basic then
+        ai.engagementRange = math.floor(ai.engagementRange * 0.8)
+        ai.preferredDistance = math.floor(ai.preferredDistance * 0.8)
+        ai.maxBurstDuration = ai.maxBurstDuration or 1.5
+        ai.cooldownDuration = (ai.cooldownDuration or 1.5) + 0.5
+    end
     
     return ai
 end
@@ -779,6 +823,8 @@ function generator.generate(params)
     local size_class = params.size_class or random_choice({ "small", "medium", "large" })
     local difficulty = params.difficulty or "normal"
     local seed = params.seed or love.math.random(1, 999999)
+    local explicit_level = params.level
+    local is_basic = params.basic or false
     
     -- Use seed for reproducibility if provided
     if params.use_seed then
@@ -787,20 +833,20 @@ function generator.generate(params)
     
     -- Generate visual design
     local palette = random_choice(COLOR_PALETTES)
-    local hull_points, scale = generate_hull_shape(size_class)
-    local parts = generate_ship_parts(hull_points, scale, palette)
+    local hull_points, scale = generate_hull_shape(size_class, { basic = is_basic })
+    local parts = generate_ship_parts(hull_points, scale, palette, { basic = is_basic })
     
     -- Generate physics collider (slightly smaller than hull for gameplay feel)
     local physics_points = shrink_polygon(hull_points, 0.85)
     
     -- Generate stats
-    local stats = generate_stats(size_class, difficulty)
-    local health, hull = generate_health(size_class, difficulty)
-    local ai = generate_ai_params(size_class)
+    local stats = generate_stats(size_class, difficulty, { basic = is_basic })
+    local health, hull = generate_health(size_class, difficulty, { basic = is_basic })
+    local ai = generate_ai_params(size_class, { basic = is_basic })
     
     -- Generate weapon mount
     local weapon_mount = generate_weapon_mount(scale)
-    local weapon_id = choose_weapon(size_class)
+    local weapon_id = choose_weapon(size_class, { basic = is_basic })
     
     -- Generate unique ID
     local ship_id = string.format("proc_ship_%s_%d", size_class, seed)
@@ -825,6 +871,9 @@ function generator.generate(params)
                 local progression = constants.progression or {}
                 local diff_levels = progression.procedural_difficulty_levels or {}
                 local base_level = diff_levels[difficulty] or diff_levels.normal or 2
+                if explicit_level then
+                    base_level = math.max(1, math.floor(explicit_level + 0.5))
+                end
                 return {
                     base = base_level,
                     current = base_level,
@@ -880,6 +929,7 @@ function generator.generate(params)
                 restitution = 0.15,
             },
         },
+        _basic_variant = is_basic or nil,
     }
 end
 

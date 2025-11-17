@@ -34,6 +34,55 @@ local function clone_table(value)
     return copy
 end
 
+local function roll_level_value(override)
+    if override == nil then
+        return nil
+    end
+
+    if type(override) == "number" then
+        local value = math.max(1, math.floor(override + 0.5))
+        return {
+            current = value,
+            base = value,
+        }
+    end
+
+    if type(override) ~= "table" then
+        return nil
+    end
+
+    local rolled = clone_table(override) or {}
+
+    local minValue = rolled.min or rolled.minimum or rolled.lower or rolled[1]
+    local maxValue = rolled.max or rolled.maximum or rolled.upper or rolled[2] or minValue
+
+    if minValue or maxValue then
+        minValue = minValue or maxValue
+        maxValue = maxValue or minValue
+
+        minValue = math.max(1, math.floor(minValue + 0.5))
+        maxValue = math.max(minValue, math.floor(maxValue + 0.5))
+
+        local value = love.math.random(minValue, maxValue)
+        rolled.min = rolled.min or minValue
+        rolled.max = rolled.max or maxValue
+        rolled.current = value
+        rolled.base = rolled.base or value
+    else
+        local current = rolled.current or rolled.value or rolled.level
+        if current then
+            current = math.max(1, math.floor(current + 0.5))
+            rolled.current = current
+            rolled.base = rolled.base or current
+        end
+    end
+
+    rolled.current = rolled.current or rolled.base or 1
+    rolled.base = rolled.base or rolled.current
+
+    return rolled
+end
+
 local function apply_level_override(ship, override)
     if not override then
         return
@@ -188,17 +237,33 @@ return function(context)
         print(string.format("[PROCEDURAL SHIPS] Generating %d procedural ships...", count))
 
         for i = 1, count do
+            local levelData = roll_level_value(proceduralConfig.level)
+            local shipLevel = levelData and levelData.current or nil
+
             local spawn_x, spawn_y = pick_spawn_point()
             spawn_positions[#spawn_positions + 1] = { x = spawn_x, y = spawn_y }
 
             -- Generate a procedural ship blueprint
             local size_class = pick_size_class()
+            local ship_difficulty = difficulty
+            local is_basic = false
+
+            if shipLevel and shipLevel <= 2 then
+                size_class = "small"
+                ship_difficulty = "easy"
+                is_basic = true
+            elseif ship_difficulty == "easy" then
+                is_basic = true
+            end
+
             local ship_blueprint = ProceduralShipGenerator.generate({
                 size_class = size_class,
-                difficulty = difficulty,
+                difficulty = ship_difficulty,
+                level = shipLevel,
+                basic = is_basic,
                 seed = love.math.random(1, 999999),
             })
-            
+
             -- Instantiate the ship using the ship factory
             local instantiate_context = {
                 position = { x = spawn_x, y = spawn_y },
@@ -212,7 +277,11 @@ return function(context)
             ship.faction = ship.faction or "enemy"
 
             -- Apply level scaling if configured
-            apply_level_override(ship, proceduralConfig.level)
+            if levelData then
+                ship.level = clone_table(levelData)
+            else
+                apply_level_override(ship, proceduralConfig.level)
+            end
             LevelScaling.apply(ship)
 
             ship.spawnPosition = ship.spawnPosition or { x = spawn_x, y = spawn_y }

@@ -103,7 +103,8 @@ function weapon_beam.apply_hitscan_damage(damageEntity, target, baseDamage, sour
 
     local damageType = weapon and weapon.damageType
     local armorType = target.armorType
-    local multiplier = damage_util.resolve_multiplier(damageType, armorType)
+    local overrides = weapon and weapon.armorMultipliers
+    local multiplier = damage_util.resolve_multiplier(damageType, armorType, overrides)
     damage = damage * multiplier
     if damage <= 0 then
         return 0
