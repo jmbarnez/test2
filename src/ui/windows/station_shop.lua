@@ -230,12 +230,29 @@ local function ensure_shop_items(state)
     local modules_to_stock = {
         "ability_dash",
         "ability_afterburner",
+        "ability_temporal_field",
+        "ability_overdrive",
         "shield_t1",
     }
     for _, moduleId in ipairs(modules_to_stock) do
         local ok, blueprint = pcall(loader.load, "modules", moduleId)
         if ok and blueprint then
             Items.registerModuleBlueprint(blueprint)
+        end
+    end
+
+    local weapons_to_stock = {
+        "cannon",
+        "laser_beam",
+        "missile_launcher",
+        "firework_launcher",
+        "shock_burst_launcher",
+        "lightning_arc",
+    }
+    for _, weaponId in ipairs(weapons_to_stock) do
+        local ok, blueprint = pcall(loader.load, "weapons", weaponId)
+        if ok and blueprint then
+            Items.registerWeaponBlueprint(blueprint)
         end
     end
 
