@@ -14,6 +14,7 @@ local SQRT = math.sqrt
 local EPS = 1e-8
 
 local spawn_explosion_effect
+local apply_explosion_damage
 
 local function normalize(x, y)
     x, y = x or 0, y or 0
@@ -233,6 +234,7 @@ local function apply_homing(entity, dt, damageEntity, system)
 
             if system and system.explosions and homing.explosion and not homing._explosionSpawned then
                 spawn_explosion_effect(system.explosions, system.impactParticles, tx, ty, entity, homing.explosion)
+                apply_explosion_damage(system, damageEntity, tx, ty, entity, homing.explosion)
             end
 
             entity.pendingDestroy = true
@@ -419,6 +421,110 @@ spawn_explosion_effect = function(explosionPool, impactPool, x, y, projectile, c
     end
 
     return entry
+end
+
+local function should_damage_target(projectile, target)
+    if target == projectile then
+        return false
+    end
+    if not target or target.pendingDestroy then
+        return false
+    end
+    if projectile.projectile and projectile.projectile.owner == target then
+        return false
+    end
+    local ownerPlayerId = projectile.projectile and projectile.projectile.ownerPlayerId
+    if ownerPlayerId and target.playerId == ownerPlayerId then
+        return false
+    end
+    if projectile.faction and target.faction and projectile.faction == target.faction then
+        return false
+    end
+    if projectile.playerProjectile and target.player then
+        return false
+    end
+    if projectile.enemyProjectile and target.enemy then
+        return false
+    end
+    if not target.health then
+        return false
+    end
+    return true
+end
+
+apply_explosion_damage = function(system, damageEntityCallback, x, y, projectile, config)
+    if not (system and damageEntityCallback and config) then
+        return
+    end
+
+    if projectile._aoeApplied then
+        return
+    end
+
+    local baseDamage = config.damage or 0
+    local radius = config.damageRadius or config.radius or 0
+    if baseDamage <= 0 or radius <= 0 then
+        return
+    end
+
+    local world = system.world
+    if not (world and world.entities) then
+        return
+    end
+
+    local radiusSq = radius * radius
+    local projectileComponent = projectile.projectile or {}
+    local owner = projectileComponent.owner or projectile
+    local damageType = config.damageType or projectileComponent.damageType
+
+    local entities = world.entities
+    for i = 1, #entities do
+        local target = entities[i]
+        if should_damage_target(projectile, target) then
+            local tx, ty = resolve_entity_position(target)
+            if tx and ty then
+                local dx = tx - x
+                local dy = ty - y
+                local distSq = dx * dx + dy * dy
+                if distSq <= radiusSq then
+                    local distance = SQRT(distSq)
+                    local ratio = radius > 0 and (distance / radius) or 1
+                    if ratio <= 1 then
+                        local multiplier = 1
+                        local falloff = config.damageFalloff
+                        if falloff and falloff > 0 then
+                            local t = math.max(0, 1 - ratio)
+                            if t <= 0 then
+                                multiplier = 0
+                            else
+                                multiplier = t ^ falloff
+                            end
+                        end
+
+                        if multiplier > 0 then
+                            local amount = baseDamage * multiplier
+                            if damageType then
+                                local armorType = target.armorType
+                                local typeMultiplier = damage_util.resolve_multiplier(damageType, armorType)
+                                amount = amount * typeMultiplier
+                            end
+
+                            if amount > 0 then
+                                damageEntityCallback(target, amount, owner, {
+                                    x = x,
+                                    y = y,
+                                    radius = radius,
+                                    type = "explosion",
+                                })
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    projectile._aoeApplied = true
 end
 
 local function trigger_delayed_spawn(system, projectile, reason, physicsWorld)
@@ -651,6 +757,7 @@ return function(context)
 
             if projectile.homing and projectile.homing.explosion and not projectile.homing._explosionSpawned then
                 spawn_explosion_effect(self.explosions, self.impactParticles, x, y, projectile, projectile.homing.explosion)
+                apply_explosion_damage(self, damageEntity, x, y, projectile, projectile.homing.explosion)
             end
 
             -- Don't hit the shooter or same playerId

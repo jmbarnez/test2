@@ -162,8 +162,11 @@ function station_window.draw(context)
     end
 
     local padding = theme_spacing.medium or 16
-    local tab_spacing = theme_spacing.small or math.floor(padding * 0.5)
-    local tab_height = (fonts.body_bold or fonts.title or default_font):getHeight() + tab_spacing * 2
+    local tab_spacing = theme_spacing.xsmall or math.floor((theme_spacing.small or padding * 0.5) * 0.5)
+    local tab_font = fonts.body_bold or fonts.title or default_font
+    local tab_bar_padding = tab_spacing
+    local text_height = tab_font:getHeight()
+    local tab_height = text_height + tab_bar_padding * 2
 
     state.activeTab = state.activeTab or "shop"
 
@@ -172,28 +175,22 @@ function station_window.draw(context)
         { id = "quests", label = "Quests" },
     }
 
-    local tab_y = content.y + padding * 0.5
-    local tab_max_width = math.max(80, (content.width - padding * 2) / #tabs)
+    local tab_bar_height = tab_height
+    local content_full = frame.content_full or { x = content.x, y = content.y - padding, width = content.width + padding * 2 }
+    local tab_gap = math.max(2, tab_spacing)
+    local tab_bar_rect = {
+        x = content.x,
+        y = content_full.y + tab_gap,
+        width = content.width,
+        height = tab_bar_height,
+    }
 
-    love.graphics.setFont(fonts.body_bold or fonts.title or default_font)
+    love.graphics.setFont(tab_font)
 
-    local tabWidths = {}
-    local totalTabsWidth = 0
-    for index = 1, #tabs do
-        local tab = tabs[index]
-        local text_width = love.graphics.getFont():getWidth(tab.label)
-        local width = math.min(tab_max_width, text_width + padding * 2)
-        tabWidths[index] = width
-        totalTabsWidth = totalTabsWidth + width
-        if index < #tabs then
-            totalTabsWidth = totalTabsWidth + tab_spacing
-        end
-    end
-
-    local availableRight = content.x + content.width - padding
-    local startX = availableRight - totalTabsWidth
-    local minLeft = content.x + padding
-    local tab_x = math.max(minLeft, startX)
+    local tab_count = #tabs
+    local tab_width = tab_count > 0 and (tab_bar_rect.width / tab_count) or 0
+    local tab_y = tab_bar_rect.y
+    local tab_x = tab_bar_rect.x
 
     state._tabRects = state._tabRects or {}
     for i = 1, #state._tabRects do
@@ -203,8 +200,7 @@ function station_window.draw(context)
     for index = 1, #tabs do
         local tab = tabs[index]
         local label = tab.label
-        local width = tabWidths[index]
-        local text_width = love.graphics.getFont():getWidth(label)
+        local width = tab_width
         local rect = {
             x = tab_x,
             y = tab_y,
@@ -226,7 +222,7 @@ function station_window.draw(context)
         elseif hovered then
             bg_color = window_colors.row_hover or { 0.18, 0.22, 0.3, 1 }
         else
-            bg_color = window_colors.top_bar or window_colors.background or { 0.04, 0.05, 0.07, 1 }
+            bg_color = window_colors.button or window_colors.background or { 0.08, 0.1, 0.14, 1 }
         end
 
         set_color(bg_color)
@@ -242,12 +238,12 @@ function station_window.draw(context)
 
         local text_y = rect.y + (rect.height - love.graphics.getFont():getHeight()) * 0.5
         set_color(window_colors.title_text or window_colors.text or { 0.85, 0.9, 1.0, 1 })
-        love.graphics.print(label, rect.x + (rect.width - text_width) * 0.5, text_y)
+        love.graphics.printf(label, rect.x, text_y, rect.width, "center")
 
-        tab_x = tab_x + width + tab_spacing
+        tab_x = tab_x + width
     end
 
-    local content_top = tab_y + tab_height + padding * 0.5
+    local content_top = math.max(content.y, tab_bar_rect.y + tab_bar_rect.height + math.max(4, tab_spacing))
     local inner_content = {
         x = content.x,
         y = content_top,

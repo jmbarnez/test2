@@ -108,8 +108,8 @@ return {
                 faceTarget = true,
                 hitRadius = 14,
                 explosion = {
-                    radius = 72,
-                    startRadius = 24,
+                    radius = 110,
+                    startRadius = 36,
                     duration = 0.6,
                     color = { 1.0, 0.58, 0.24, 0.9 },
                     ringColor = { 1.0, 0.82, 0.45, 0.85 },
@@ -124,6 +124,10 @@ return {
                     sparkSizeMin = 2.4,
                     sparkSizeMax = 5.4,
                     sparkGlowScale = 1.8,
+                    damage = 140,
+                    damageRadius = 110,
+                    damageFalloff = 0.6,
+                    damageType = "explosive",
                 },
             },
             sfx = {

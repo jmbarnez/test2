@@ -7,6 +7,7 @@ local CargoRendering = require("src.ui.windows.cargo.rendering")
 local CargoData = require("src.ui.windows.cargo.data")
 local loader = require("src.blueprints.loader")
 local utf8 = require("utf8")
+local CargoTooltip = require("src.ui.windows.cargo.tooltip")
 
 ---@diagnostic disable-next-line: undefined-global
 local love = love
@@ -568,12 +569,7 @@ function station_shop.draw(context, params)
     local inner_height = math.max(0, content.height - padding * 2)
     local inner_bottom = inner_y + inner_height
 
-    set_color(window_colors.text or { 0.85, 0.9, 1.0, 1 })
-    love.graphics.setFont(fonts.body_bold or fonts.title or default_font)
-    love.graphics.printf("Station Shop", inner_x, inner_y, inner_width, "left")
-
-    local header_height = (fonts.body_bold or fonts.title or default_font):getHeight()
-    local cursor_y = inner_y + header_height + (theme_spacing.small or math.floor(padding * 0.5))
+    local cursor_y = inner_y + (theme_spacing.xsmall or math.max(4, math.floor((theme_spacing.small or 8) * 0.35)))
 
     local player, cargoComponent = get_player_and_cargo(context)
     if not player or not cargoComponent then
@@ -668,6 +664,10 @@ function station_shop.draw(context, params)
         local isHovered = point_in_rect(mouse_x, mouse_y, slotRect)
         CargoRendering.drawSlotBackground(slotX, slotY, slotSize, isHovered, false)
         CargoRendering.drawItemInSlot(item, slotX, slotY, slotSize, labelHeight, fonts)
+
+        if isHovered and item then
+            CargoTooltip.create(item)
+        end
 
         local controlsY = slotY + slotSize + 4 + labelHeight
         local controlsHeight = 20
