@@ -1,3 +1,4 @@
+local constants = require("src.constants.game")
 local theme = require("src.ui.theme")
 local geometry = require("src.util.geometry")
 local Items = require("src.items.registry")
@@ -14,7 +15,8 @@ local love = love
 
 local station_shop = {}
 
-local SCROLLBAR_WIDTH = 10
+local ui_constants = (constants.ui and constants.ui.shop) or {}
+local SCROLLBAR_WIDTH = ui_constants.scrollbar_width or 10
 
 local window_colors = theme.colors.window
 local theme_spacing = theme.spacing
@@ -248,6 +250,7 @@ local function ensure_shop_items(state)
         "firework_launcher",
         "shock_burst_launcher",
         "lightning_arc",
+        "gravitron_orb",
     }
     for _, weaponId in ipairs(weapons_to_stock) do
         local ok, blueprint = pcall(loader.load, "weapons", weaponId)
@@ -298,7 +301,7 @@ local function draw_controls(context, state, fonts, inner_x, cursor_y, inner_wid
     local buttonWidth = math.max(minSortWidth, math.min(sortTextWidth, inner_width))
     local searchWidth = inner_width - buttonWidth - spacingX
 
-    if searchWidth < 120 then
+    if searchWidth < (ui_constants.search_width_threshold or 120) then
         buttonWidth = math.min(buttonWidth, inner_width)
         searchWidth = math.max(0, inner_width - buttonWidth - spacingX)
         if searchWidth == 0 then
@@ -617,7 +620,7 @@ function station_shop.draw(context, params)
     local gridStartY = grid_top
     
     -- Extra vertical spacing to account for controls (quantity + buttons = ~52px total)
-    local rowSpacing = 60
+    local rowSpacing = ui_constants.row_spacing or 60
 
     if #displayItems == 0 then
         love.graphics.setFont(fonts.body or default_font)
@@ -869,7 +872,7 @@ function station_shop.wheelmoved(context, x, y)
     local maxScroll = 0
     
     -- Simple scroll step calculation
-    local step = 60
+    local step = ui_constants.scroll_step or 60
     local nextScroll = math.max(0, scroll - y * step)
     
     -- If scroll changed, update it

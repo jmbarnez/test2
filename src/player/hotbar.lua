@@ -1,8 +1,10 @@
+local constants = require("src.constants.game")
 local PlayerWeapons = require("src.player.weapons")
 
 local HotbarManager = {}
 
-local HOTBAR_SIZE = 10
+local hotbar_constants = (constants.ui and constants.ui.hotbar) or {}
+local HOTBAR_SIZE = hotbar_constants.slot_count or 10
 
 local function is_weapon_item(item)
     if type(item) ~= "table" then
@@ -44,34 +46,41 @@ local function normalize_weapon_id(item)
     return nil
 end
 
-local function select_weapon_for_item(player, item, slots)
-    if not (player and item and slots and slots.list) then
+local function activate_weapon_from_item(player, item)
+    if not (player and item) then
         return false
     end
 
-    local function select_index(index)
-        local result = PlayerWeapons.selectByIndex(player, index, { skipRefresh = true })
-        return result ~= nil
-    end
-
-    for i = 1, #slots.list do
-        local entry = slots.list[i]
-        if entry and entry.item == item then
-            return select_index(i)
-        end
-    end
-
     local blueprintId = normalize_weapon_id(item)
-    if blueprintId then
-        for i = 1, #slots.list do
-            local entry = slots.list[i]
-            if entry and entry.blueprintId == blueprintId then
-                return select_index(i)
-            end
-        end
+    if not blueprintId then
+        return false
     end
 
-    return false
+    local loader = require("src.blueprints.loader")
+    local context = { owner = player }
+    if item.mount then
+        context.mount = item.mount
+    end
+
+    local ok, weaponInstance = pcall(loader.instantiate, "weapons", blueprintId, context)
+    if not ok or not weaponInstance then
+        return false
+    end
+
+    if not weaponInstance.weapon then
+        return false
+    end
+
+    -- Set the weapon component on the player
+    player.weapon = weaponInstance.weapon
+    if weaponInstance.weaponMount then
+        player.weaponMount = weaponInstance.weaponMount
+    end
+
+    -- Make sure weapon is not firing initially
+    player.weapon.firing = false
+
+    return true
 end
 
 function HotbarManager.applySelectedWeapon(player)
@@ -90,16 +99,19 @@ function HotbarManager.applySelectedWeapon(player)
     end
 
     local selectedItem = hotbar.slots[selectedIndex]
-    local slots = PlayerWeapons.getSlots(player, { refresh = true })
 
+    -- If selected slot has a weapon item, activate it
     if is_weapon_item(selectedItem) then
-        if select_weapon_for_item(player, selectedItem, slots) then
+        if activate_weapon_from_item(player, selectedItem) then
             return true
         end
     end
 
-    if slots and slots.selectedIndex then
-        PlayerWeapons.selectByIndex(player, slots.selectedIndex, { skipRefresh = true })
+    -- If no weapon item in selected hotbar slot, clear the player's weapon
+    -- This allows other usable items or nothing at all
+    player.weapon = nil
+    if player.weaponMount then
+        player.weaponMount = nil
     end
 
     return false

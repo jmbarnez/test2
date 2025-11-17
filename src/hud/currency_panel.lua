@@ -1,3 +1,4 @@
+local constants = require("src.constants.game")
 local theme = require("src.ui.theme")
 local Util = require("src.hud.util")
 local PlayerCurrency = require("src.player.currency")
@@ -6,6 +7,8 @@ local PlayerCurrency = require("src.player.currency")
 local love = love
 
 local CurrencyPanel = {}
+
+local ui_constants = (constants.ui and constants.ui.currency_panel) or {}
 
 local function get_time()
     local loveTimer = love and love.timer
@@ -145,22 +148,22 @@ function CurrencyPanel.draw(context)
     local balance = tonumber(gain.balance) or 0
     local balanceText = string.format("Balance: %s", tostring(math.floor(balance + 0.5)))
 
-    local width = 180
-    local height = 62
+    local width = ui_constants.width or 180
+    local height = ui_constants.height or 62
     local padding = math.min(12, spacing.window_padding or 12)
 
     local screenWidth = lg.getWidth()
-    local minimapDiameter = 120
-    local minimapMargin = 24
-    local gap = 16
+    local minimapDiameter = ui_constants.minimap_diameter or 120
+    local minimapMargin = ui_constants.minimap_margin or 24
+    local gap = ui_constants.gap or 16
 
     local x = screenWidth - minimapDiameter - minimapMargin - width - gap
     if x < minimapMargin then
         x = minimapMargin
     end
 
-    local baseY = 122
-    local offsetY = (1 - animFactor) * 22
+    local baseY = ui_constants.base_y or 122
+    local offsetY = (1 - animFactor) * (ui_constants.offset_y or 22)
     local y = baseY - offsetY
 
     lg.push("all")

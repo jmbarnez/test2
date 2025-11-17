@@ -1,3 +1,5 @@
+local constants = require("src.constants.game")
+
 ---@diagnostic disable-next-line: undefined-global
 local love = love
 local math_util = require("src.util.math")
@@ -819,10 +821,15 @@ function generator.generate(params)
         components = {
             type = "procedural_ship",
             enemy = true,
-            level = {
-                base = difficulty == "easy" and 1 or (difficulty == "hard" and 3 or (difficulty == "extreme" and 5 or 2)),
-                current = difficulty == "easy" and 1 or (difficulty == "hard" and 3 or (difficulty == "extreme" and 5 or 2)),
-            },
+            level = (function()
+                local progression = constants.progression or {}
+                local diff_levels = progression.procedural_difficulty_levels or {}
+                local base_level = diff_levels[difficulty] or diff_levels.normal or 2
+                return {
+                    base = base_level,
+                    current = base_level,
+                }
+            end)(),
             position = { x = 0, y = 0 },
             velocity = { x = 0, y = 0 },
             rotation = 0,
@@ -841,14 +848,20 @@ function generator.generate(params)
                     points = physics_points,
                 },
             },
-            loot = {
-                entries = {
-                    {
-                        credit_reward = size_class == "small" and 50 or (size_class == "medium" and 100 or 200),
-                        xp_reward = size_class == "small" and 15 or (size_class == "medium" and 30 or 60),
+            loot = (function()
+                local economy = constants.economy or {}
+                local rewards = (economy.procedural_ship_rewards or {})[size_class] or {}
+                local credits = rewards.credits or (size_class == "small" and 50 or (size_class == "medium" and 100 or 200))
+                local xp = rewards.xp or (size_class == "small" and 15 or (size_class == "medium" and 30 or 60))
+                return {
+                    entries = {
+                        {
+                            credit_reward = credits,
+                            xp_reward = xp,
+                        },
                     },
-                },
-            },
+                }
+            end)(),
         },
         weapons = {
             {

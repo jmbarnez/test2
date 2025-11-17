@@ -1,4 +1,5 @@
 local UIStateManager = require("src.ui.state_manager")
+local constants = require("src.constants.game")
 ---@diagnostic disable: undefined-global
 
 local tiny = require("libs.tiny")
@@ -172,19 +173,22 @@ local function add_common_systems(state, context)
             if type(xpSpec) == "table" and xpSpec.amount then
                 local amount = tonumber(xpSpec.amount)
                 if amount and amount > 0 then
-                    local category = xpSpec.category or "combat"
-                    local skill = xpSpec.skill or "weapons"
+                    local progression_constants = constants.progression or {}
+                    local category = xpSpec.category or progression_constants.default_xp_category or "combat"
+                    local skill = xpSpec.skill or progression_constants.default_xp_skill or "weapons"
                     local playerId = resolve_loot_player_id(drop, entity)
                     if playerId then
                         PlayerManager.addSkillXP(state, category, skill, amount, playerId)
 
                         if position and FloatingText and FloatingText.add then
+                            local ui_constants = (constants.ui and constants.ui.floating_text) or {}
+                            local xp_style = ui_constants.xp or {}
                             FloatingText.add(state, position, string.format("+%d XP", amount), {
                                 offsetY = floating_text_position(localPlayer),
-                                color = { 0.3, 0.9, 0.4, 1 },
-                                rise = 40,
-                                scale = 1.1,
-                                font = "bold",
+                                color = xp_style.color or { 0.3, 0.9, 0.4, 1 },
+                                rise = xp_style.rise or 40,
+                                scale = xp_style.scale or 1.1,
+                                font = xp_style.font or "bold",
                             })
                         end
                     end
@@ -197,13 +201,16 @@ local function add_common_systems(state, context)
                     PlayerManager.adjustCurrency(state, credits)
 
                     if position and FloatingText and FloatingText.add then
+                        local ui_constants = (constants.ui and constants.ui.floating_text) or {}
+                        local credits_style = ui_constants.credits or {}
+                        local offset_y = credits_style.offset_y or 22
                         FloatingText.add(state, position, string.format("+%d credits", credits), {
-                            offsetY = floating_text_position(localPlayer, 22),
-                            color = { 1.0, 0.9, 0.2, 1 },
-                            rise = 40,
-                            scale = 1.1,
-                            font = "bold",
-                            icon = "currency",
+                            offsetY = floating_text_position(localPlayer, offset_y),
+                            color = credits_style.color or { 1.0, 0.9, 0.2, 1 },
+                            rise = credits_style.rise or 40,
+                            scale = credits_style.scale or 1.1,
+                            font = credits_style.font or "bold",
+                            icon = credits_style.icon or "currency",
                         })
                     end
                 end

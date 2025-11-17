@@ -7,6 +7,10 @@ local PlayerCurrency = {}
 
 local STARTING_CURRENCY = (constants.player and constants.player.starting_currency) or 0
 
+local ui_constants = (constants.ui and constants.ui.currency_panel) or {}
+local GAIN_VISIBLE_DURATION = ui_constants.gain_visible_duration or 2.6
+local GAIN_ANIM_DURATION = ui_constants.gain_anim_duration or 0.45
+
 ---@diagnostic disable-next-line: undefined-global
 local love = love
 
@@ -46,8 +50,8 @@ local function record_gain(state, delta, balance)
     end
 
     local now = get_time()
-    local visibleDuration = 2.6
-    local animDuration = 0.45
+    local visibleDuration = GAIN_VISIBLE_DURATION
+    local animDuration = GAIN_ANIM_DURATION
 
     local entry = container.active
     if type(entry) ~= "table" then

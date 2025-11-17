@@ -41,6 +41,13 @@ return {
             constantKey = "gravitron_orb",
             damageType = "kinetic",
             fireRate = 5.5,
+            charge = {
+                maxTime = 2.2,
+                minTime = 0.0,
+                minScale = 0.8,
+                maxScale = 2.4,
+                energyPerSecond = 32,
+            },
             projectileSpeed = 160,
             projectileLifetime = 3.8,
             projectileSize = 3.2,

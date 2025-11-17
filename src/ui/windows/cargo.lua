@@ -588,9 +588,13 @@ function cargo_window.draw(context)
         end
     end
 
+    -- Check for hotbar drags
+    local Hotbar = require("src.hud.hotbar")
+    local hotbarDrag = Hotbar.getDragState(context, player)
+    
     -- Initiate dragging when clicking on a module-capable item
     local clickOverSearchOrSort = (searchHovered or sortHovered)
-    if not dragItem and just_pressed and not clickOverSearchOrSort then
+    if not dragItem and not hotbarDrag and just_pressed and not clickOverSearchOrSort then
         if hoveredItem then
             state.draggedItem = hoveredItem
             state.dragSource = "cargo"
@@ -605,14 +609,34 @@ function cargo_window.draw(context)
     end
 
     -- Handle drop logic when releasing mouse button
-    if dragItem and just_released then
+    if (dragItem or hotbarDrag) and just_released then
         local handled = false
 
-        -- Check if dropping onto hotbar
-        local Hotbar = require("src.hud.hotbar")
-        local hotbarSlotIndex = Hotbar.getSlotAtPosition(mouse_x, mouse_y, context, player)
-        if hotbarSlotIndex and state.dragSource == "cargo" then
-            handled = Hotbar.moveFromCargo(player, dragItem, hotbarSlotIndex)
+        -- Handle hotbar to cargo drops
+        if hotbarDrag then
+            local overHotbarSlot = Hotbar.getSlotAtPosition(mouse_x, mouse_y, context, player)
+            if not overHotbarSlot then
+                local insideCargoArea = mouse_x >= itemArea.x and mouse_x <= itemArea.x + itemArea.width and
+                    mouse_y >= itemArea.y and mouse_y <= itemArea.y + itemArea.height
+                if insideCargoArea then
+                    handled = Hotbar.moveToCargo(player, hotbarDrag.slotIndex)
+                    if handled then
+                        Hotbar.clearDragState(context)
+                    end
+                else
+                    -- Dropped outside cargo window and not over hotbar, clear the drag
+                    Hotbar.clearDragState(context)
+                    handled = true
+                end
+            end
+        end
+
+        -- Check if dropping cargo onto hotbar
+        if not handled and dragItem then
+            local hotbarSlotIndex = Hotbar.getSlotAtPosition(mouse_x, mouse_y, context, player)
+            if hotbarSlotIndex and state.dragSource == "cargo" then
+                handled = Hotbar.moveFromCargo(player, dragItem, hotbarSlotIndex)
+            end
         end
 
         if not handled and modulePanelResult and modulePanelResult.hoveredSlot and can_drop_module_item(dragItem, modulePanelResult.hoveredSlot) then
@@ -686,8 +710,9 @@ function cargo_window.draw(context)
         end
     end
 
-    -- Draw dragged item overlay
-    if dragItem then
+    -- Draw dragged item overlay (from cargo or hotbar)
+    local displayDragItem = dragItem or (hotbarDrag and hotbarDrag.item)
+    if displayDragItem then
         local iconSize = 44
         local overlayX = mouse_x + 18
         local overlayY = mouse_y + 22
@@ -703,8 +728,8 @@ function cargo_window.draw(context)
         love.graphics.setLineWidth(1)
         love.graphics.rectangle("line", overlayX - 4 + 0.5, overlayY - 4 + 0.5, iconSize + 8 - 1, iconSize + 8 - 1, 4, 4)
 
-        if dragItem.icon then
-            CargoRendering.drawItemIcon(dragItem.icon, overlayX, overlayY, iconSize)
+        if displayDragItem.icon then
+            CargoRendering.drawItemIcon(displayDragItem.icon, overlayX, overlayY, iconSize)
         else
             set_color(window_colors.muted or { 0.5, 0.55, 0.6, 1 })
             love.graphics.setLineWidth(1.25)

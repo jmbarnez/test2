@@ -1,11 +1,15 @@
 --- Quest Generator: Produces simple, generic credit-only station contracts
 
+local constants = require("src.constants.game")
+
 ---@diagnostic disable-next-line: undefined-global
 local love = love
 
 local QuestGenerator = {}
 
-local DEFAULT_CONTRACTS = {
+local quests_constants = constants.quests or {}
+
+local DEFAULT_CONTRACTS = quests_constants.default_contracts or {
     {
         id = "mining_operation",
         title = "Mining Operation",
@@ -44,6 +48,8 @@ local DEFAULT_CONTRACTS = {
     },
 }
 
+local DEFAULT_OFFER_COUNT = quests_constants.default_offer_count or 3
+
 local function pick_random_index(max)
     if love and love.math and love.math.random then
         return love.math.random(1, max)
@@ -71,7 +77,7 @@ end
 ---@return table quests
 function QuestGenerator.generate(context, station, options)
     options = options or {}
-    local desired = math.max(1, math.floor(options.count or 3))
+    local desired = math.max(1, math.floor(options.count or DEFAULT_OFFER_COUNT))
     local quests = {}
     local remaining = {}
 

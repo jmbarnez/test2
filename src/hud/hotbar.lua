@@ -1,3 +1,4 @@
+local constants = require("src.constants.game")
 local theme = require("src.ui.theme")
 local HotbarManager = require("src.player.hotbar")
 local ItemIconRenderer = require("src.util.item_icon_renderer")
@@ -9,8 +10,9 @@ local Hotbar = {}
 
 local window_colors = theme.colors.window
 local theme_spacing = theme.spacing
+local hotbar_constants = (constants.ui and constants.ui.hotbar) or {}
 local set_color = theme.utils.set_color
-local HOTBAR_SLOTS = 10
+local HOTBAR_SLOTS = hotbar_constants.slot_count or 10
 local SELECTED_OUTLINE_COLOR = { 0.2, 0.85, 0.95, 1 }
 
 local function draw_item_icon(icon, x, y, size)
@@ -31,7 +33,7 @@ function Hotbar.getSlotRects(context, player)
     if not hotbar then return nil end
     
     local screenWidth, screenHeight = love.graphics.getWidth(), love.graphics.getHeight()
-    local baseSlotSize = (theme_spacing and theme_spacing.slot_size) or 48
+    local baseSlotSize = (theme_spacing and theme_spacing.slot_size) or (hotbar_constants.slot_size or 48)
     local slotSize = math.max(36, math.floor(baseSlotSize * 0.9))
     local padding = 6
     local gap = 5
@@ -146,13 +148,6 @@ function Hotbar.draw(context, player)
 
     local selectedDisplayIndex = math.min(selectedIndex, HOTBAR_SLOTS)
 
-    local uiInput = context.uiInput
-    local allowInteraction = not (uiInput and uiInput.mouseCaptured)
-
-    local mouseX, mouseY
-    if allowInteraction and love.mouse and love.mouse.getPosition then
-        mouseX, mouseY = love.mouse.getPosition()
-    end
     local hotbarState
     if type(state) == "table" then
         state.hotbarUI = state.hotbarUI or {}
@@ -162,20 +157,51 @@ function Hotbar.draw(context, player)
         hotbarState = Hotbar._fallbackState
     end
 
+    local ownsCapture = hotbarState and hotbarState.capturingMouse or false
+
+    local uiInput = context.uiInput
+    
+    -- Always get mouse position and state to check for hotbar hovers
+    local mouseX, mouseY
+    if love.mouse and love.mouse.getPosition then
+        mouseX, mouseY = love.mouse.getPosition()
+    end
+
     local isMouseDown = false
     local isRightMouseDown = false
-    if allowInteraction and love.mouse and love.mouse.isDown then
+    if love.mouse and love.mouse.isDown then
         isMouseDown = love.mouse.isDown(1) or false
         isRightMouseDown = love.mouse.isDown(2) or false
     end
 
     local wasMouseDown = hotbarState and hotbarState.wasMouseDown or false
     local wasRightMouseDown = hotbarState and hotbarState.wasRightMouseDown or false
-    local justPressed = allowInteraction and isMouseDown and not wasMouseDown
-    local justRightPressed = allowInteraction and isRightMouseDown and not wasRightMouseDown
+    
+    -- Check if mouse is over any hotbar slot
+    local mouseOverHotbar = false
+    if mouseX and mouseY then
+        local testSlotX = slotStartX
+        for i = 1, HOTBAR_SLOTS do
+            local slotX = slotStartX + (i - 1) * (slotSize + gap)
+            if mouseX >= slotX and mouseX <= slotX + slotSize and 
+               mouseY >= slotY and mouseY <= slotY + slotSize then
+                mouseOverHotbar = true
+                break
+            end
+        end
+    end
+    
+    -- Allow interaction if we own the capture, OR if mouse is over hotbar (hotbar can steal focus)
+    local allowInteraction = not (uiInput and uiInput.mouseCaptured and not ownsCapture) or mouseOverHotbar
+    local interactionEnabled = allowInteraction or ownsCapture
+    
+    local justPressed = interactionEnabled and isMouseDown and not wasMouseDown
+    local justReleased = interactionEnabled and not isMouseDown and wasMouseDown
+    local justRightPressed = interactionEnabled and isRightMouseDown and not wasRightMouseDown
 
     local hoveredIndex = nil
     local draggedIndex = hotbarState and hotbarState.draggedIndex
+    local pressIndex = hotbarState and hotbarState.pressIndex
 
     -- Icon
     for i = 1, HOTBAR_SLOTS do
@@ -187,37 +213,43 @@ function Hotbar.draw(context, player)
             isHovered = mouseX >= slotX and mouseX <= slotX + slotSize and mouseY >= slotY and mouseY <= slotY + slotSize
             if isHovered then
                 hoveredIndex = i
-                if allowInteraction and uiInput and (isMouseDown or justPressed) then
+                if uiInput and interactionEnabled and (isMouseDown or justPressed) then
                     uiInput.mouseCaptured = true
+                    if hotbarState then
+                        hotbarState.capturingMouse = true
+                    end
                 end
             end
         end
 
         -- Handle drag start
-        if allowInteraction and justPressed and isHovered and item then
+        if interactionEnabled and justPressed and isHovered and item then
             hotbarState.draggedIndex = i
             hotbarState.dragStartX = mouseX
             hotbarState.dragStartY = mouseY
         end
 
         -- Handle drag end / drop
-        if allowInteraction and not isMouseDown and wasMouseDown and hotbarState.draggedIndex then
+        if interactionEnabled and justReleased and hotbarState.draggedIndex then
             if isHovered and hotbarState.draggedIndex ~= i then
                 -- Swap slots
                 HotbarManager.swapSlots(player, hotbarState.draggedIndex, i)
                 hotbarState.draggedIndex = nil
+                hotbarState.capturingMouse = false
             elseif hotbarState.draggedIndex == i then
                 -- Just a click, select this slot
                 HotbarManager.setSelected(player, i)
                 selectedIndex = i
                 selectedItem = hotbar.slots[i]
-            else
                 hotbarState.draggedIndex = nil
+                hotbarState.capturingMouse = false
             end
+            -- If dropped outside hotbar, let other UI elements handle it (e.g., cargo window)
+            -- Don't clear drag state here - it will be cleared by whoever handles it
         end
 
         -- Handle right-click to remove item from hotbar
-        if allowInteraction and justRightPressed and isHovered and item then
+        if interactionEnabled and justRightPressed and isHovered and item then
             HotbarManager.moveToCargo(player, i)
         end
 
@@ -294,11 +326,31 @@ function Hotbar.draw(context, player)
     end
 
     if hotbarState then
-        hotbarState.wasMouseDown = allowInteraction and isMouseDown or false
-        hotbarState.wasRightMouseDown = allowInteraction and isRightMouseDown or false
-        -- Clear drag if mouse released
-        if not isMouseDown and wasMouseDown and hotbarState.draggedIndex then
-            hotbarState.draggedIndex = nil
+        hotbarState.wasMouseDown = interactionEnabled and isMouseDown or false
+        hotbarState.wasRightMouseDown = interactionEnabled and isRightMouseDown or false
+        -- Don't auto-clear drag state - let drop handlers (hotbar or cargo) clear it explicitly
+        -- Only release mouse capture if drag was already cleared by a handler
+        if not isMouseDown and not isRightMouseDown then
+            if hotbarState.capturingMouse and not hotbarState.draggedIndex then
+                hotbarState.capturingMouse = false
+                if uiInput and uiInput.mouseCaptured then
+                    uiInput.mouseCaptured = false
+                end
+            end
+            -- Safety: if drag persists after mouse release for too long, clear it
+            if hotbarState.draggedIndex and justReleased then
+                hotbarState.dragReleaseFrame = (hotbarState.dragReleaseFrame or 0) + 1
+                if hotbarState.dragReleaseFrame > 2 then
+                    hotbarState.draggedIndex = nil
+                    hotbarState.capturingMouse = false
+                    hotbarState.dragReleaseFrame = nil
+                    if uiInput and uiInput.mouseCaptured then
+                        uiInput.mouseCaptured = false
+                    end
+                end
+            else
+                hotbarState.dragReleaseFrame = nil
+            end
         end
     end
 
@@ -324,6 +376,60 @@ function Hotbar.draw(context, player)
                 body = body,
                 description = item.description,
             }
+        end
+    end
+end
+
+--- Get current hotbar drag state
+---@param context table
+---@param player table
+---@return table|nil dragInfo {item: table, slotIndex: number} or nil if not dragging
+function Hotbar.getDragState(context, player)
+    if not player then return nil end
+    
+    local state = context.state or context
+    local hotbarState
+    if type(state) == "table" then
+        hotbarState = state.hotbarUI
+    else
+        hotbarState = Hotbar._fallbackState
+    end
+    
+    if not hotbarState or not hotbarState.draggedIndex then
+        return nil
+    end
+    
+    local hotbar = HotbarManager.getHotbar(player)
+    if not hotbar then return nil end
+    
+    local draggedItem = hotbar.slots[hotbarState.draggedIndex]
+    if not draggedItem then return nil end
+    
+    return {
+        item = draggedItem,
+        slotIndex = hotbarState.draggedIndex,
+    }
+end
+
+--- Clear hotbar drag state (called externally when drag is handled)
+---@param context table
+function Hotbar.clearDragState(context)
+    local state = context.state or context
+    local hotbarState
+    if type(state) == "table" then
+        hotbarState = state.hotbarUI
+    else
+        hotbarState = Hotbar._fallbackState
+    end
+    
+    if hotbarState then
+        hotbarState.draggedIndex = nil
+        hotbarState.capturingMouse = false
+        
+        -- Release UI input capture if we own it
+        local uiInput = context.uiInput or (state and state.uiInput)
+        if uiInput and uiInput.mouseCaptured then
+            uiInput.mouseCaptured = false
         end
     end
 end

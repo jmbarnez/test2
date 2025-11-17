@@ -1,3 +1,4 @@
+local constants = require("src.constants.game")
 local FloatingText = require("src.effects.floating_text")
 
 ---@diagnostic disable-next-line: undefined-global
@@ -5,7 +6,8 @@ local love = love
 
 local damage_numbers = {}
 
-local DEFAULTS = {
+local ui_constants = (constants.ui and constants.ui.damage_numbers) or {}
+local DEFAULTS = ui_constants.defaults or {
     color = { 0.92, 0.36, 0.32, 1 },
     duration = 1.05,
     rise = 32,
@@ -13,7 +15,7 @@ local DEFAULTS = {
     refreshBuffer = 0.3,
 }
 
-local STYLE_PRESETS = {
+local STYLE_PRESETS = ui_constants.presets or {
     hull = {
         color = { 0.92, 0.36, 0.32, 1 },
     },

@@ -1,3 +1,4 @@
+local constants = require("src.constants.game")
 local PlayerManager = require("src.player.manager")
 local notifications = require("src.ui.notifications")
 local table_util = require("src.util.table")
@@ -98,11 +99,12 @@ function QuestTracker.complete(state, quest)
         PlayerManager.adjustCurrency(state, credits)
     end
 
+    local ui_constants = (constants.ui and constants.ui.notifications and constants.ui.notifications.quest_complete) or {}
     notifications.push(state, {
         text = string.format("Quest Complete: %s (+%d credits)", quest.title, credits),
         icon = "quest",
-        accent = { 0.3, 0.78, 0.46, 1 },
-        duration = 3.5,
+        accent = ui_constants.accent or { 0.3, 0.78, 0.46, 1 },
+        duration = ui_constants.duration or 3.5,
     })
     local ui = state.stationUI
     if ui then
