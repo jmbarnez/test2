@@ -8,8 +8,8 @@ local MAX_CHARGE_TIME = 3.0  -- Maximum charge time in seconds
 local MIN_ORB_SIZE = 8       -- Minimum orb radius
 local MAX_ORB_SIZE = 80 / 3  -- Maximum orb radius at full charge
 local ORB_SPEED = 250        -- Speed when released
-local BASE_DAMAGE = 20       -- Damage at min charge
-local MAX_DAMAGE = 180       -- Damage at full charge
+local BASE_DAMAGE = 1        -- Damage at min charge
+local MAX_DAMAGE = 125       -- Damage at full charge
 local DEFAULT_CHARGE_ENERGY_PER_SECOND = 18
 
 ---Initialize charge state
