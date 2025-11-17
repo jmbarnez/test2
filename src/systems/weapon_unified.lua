@@ -15,10 +15,10 @@ local BehaviorRegistry = require("src.weapons.behavior_registry")
 
 return function(context)
     context = context or {}
-    
-    return tiny.processingSystem {
+
+    local system = tiny.processingSystem {
         filter = tiny.requireAll("weapon", "position"),
-        
+
         process = function(self, entity, dt)
             local weapon = entity.weapon
             if not weapon then
@@ -32,16 +32,18 @@ return function(context)
                 return
             end
             
-            -- Prepare context for behavior
-            local behaviorContext = {
-                world = self.world,
-                physicsWorld = context.physicsWorld,
-                damageEntity = context.damageEntity,
-                camera = context.camera,
-                intentHolder = context.intentHolder,
-                state = context.state,
-                uiInput = context.uiInput,
-            }
+            -- Prepare context for behavior while reusing the same table to reduce GC churn
+            local behaviorContext = self.behaviorContext
+            for key in pairs(behaviorContext) do
+                behaviorContext[key] = nil
+            end
+            behaviorContext.world = self.world
+            behaviorContext.physicsWorld = context.physicsWorld
+            behaviorContext.damageEntity = context.damageEntity
+            behaviorContext.camera = context.camera
+            behaviorContext.intentHolder = context.intentHolder
+            behaviorContext.state = context.state
+            behaviorContext.uiInput = context.uiInput
             
             -- Call update if behavior has it
             if behavior.update then
@@ -54,4 +56,8 @@ return function(context)
             end
         end,
     }
+
+    system.behaviorContext = {}
+
+    return system
 end

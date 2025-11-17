@@ -15,6 +15,34 @@ local function resolve_module_path(category, id)
     return string.format("src.blueprints.%s.%s", category, id)
 end
 
+local function load_blueprint_chunk(module_path)
+    if package and package.loaded then
+        package.loaded[module_path] = nil
+    end
+
+    if package and package.searchpath then
+        local file_path = package.searchpath(module_path, package.path)
+        if file_path then
+            local chunk, err = loadfile(file_path)
+            if not chunk then
+                return nil, err
+            end
+            return chunk
+        end
+    end
+
+    if love and love.filesystem and love.filesystem.load then
+        local fs_path = module_path:gsub("%.", "/") .. ".lua"
+        local chunk, err = love.filesystem.load(fs_path)
+        if not chunk then
+            return nil, err
+        end
+        return chunk
+    end
+
+    return nil, string.format("Unable to locate module '%s'", module_path)
+end
+
 local function fetch_entry(category, id)
     local key = module_key(category, id)
     local entry = registry[key]
@@ -23,7 +51,12 @@ local function fetch_entry(category, id)
     end
 
     local module_path = resolve_module_path(category, id)
-    local ok, mod = pcall(require, module_path)
+    local chunk, load_err = load_blueprint_chunk(module_path)
+    if not chunk then
+        error(string.format("Failed to load blueprint '%s/%s': %s", category, id, load_err), 3)
+    end
+
+    local ok, mod = pcall(chunk, module_path)
     if not ok then
         error(string.format("Failed to load blueprint '%s/%s': %s", category, id, mod), 3)
     end
@@ -33,7 +66,7 @@ local function fetch_entry(category, id)
         error(string.format("Blueprint module '%s/%s' must return a table or function, got %s", category, id, kind), 3)
     end
 
-    entry = { kind = kind, value = mod }
+    entry = { kind = kind, value = mod, module_path = module_path }
     registry[key] = entry
     return entry
 end
@@ -115,7 +148,10 @@ end
 
 --- Clear module registry (forces re-require on next load)
 function loader.clear_module_cache()
-    for key in pairs(registry) do
+    for key, entry in pairs(registry) do
+        if entry.module_path and package and package.loaded then
+            package.loaded[entry.module_path] = nil
+        end
         registry[key] = nil
     end
 end

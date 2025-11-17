@@ -1,5 +1,7 @@
 local tiny = {}
 
+local EntityIds = require("src.util.entity_ids")
+
 local World = {}
 World.__index = World
 
@@ -82,6 +84,13 @@ end
 function World:add(entity)
     if entity == nil then
         error("Attempted to add a nil entity", 2)
+    end
+    if type(entity) == "table" then
+        if type(entity.entityId) == "string" and entity.entityId ~= "" then
+            EntityIds.assign(entity, entity.entityId)
+        else
+            EntityIds.ensure(entity)
+        end
     end
     entity.world = self
     table.insert(self.to_add, entity)

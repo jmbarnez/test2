@@ -1,13 +1,12 @@
 local table_util = require("src.util.table")
 local ShipRuntime = require("src.ships.runtime")
 local ComponentRegistry = require("src.util.component_registry")
+local EntityIds = require("src.util.entity_ids")
 
 ---@diagnostic disable-next-line: undefined-global
 local love = love
 
 local EntitySerializer = {}
-
-local nextEntityId = 1
 
 local function sanitize_id_fragment(fragment)
     if type(fragment) ~= "string" then
@@ -187,16 +186,26 @@ local function resolve_archetype(entity, blueprint)
 end
 
 local function resolve_entity_id(state, entity, blueprint, archetype)
+    if type(entity) ~= "table" then
+        return nil
+    end
+
     if type(entity.entityId) == "string" and entity.entityId ~= "" then
+        EntityIds.register(entity, entity.entityId)
         return entity.entityId
     end
 
     if type(entity.id) == "string" and entity.id ~= "" then
-        return entity.id
+        return EntityIds.assign(entity, entity.id)
     end
 
-    if type(entity._saveId) == "string" then
-        return entity._saveId
+    if type(entity._saveId) == "string" and entity._saveId ~= "" then
+        return EntityIds.assign(entity, entity._saveId)
+    end
+
+    local assigned = EntityIds.ensure(entity)
+    if assigned then
+        return assigned
     end
 
     state = state or {}
@@ -215,11 +224,10 @@ local function resolve_entity_id(state, entity, blueprint, archetype)
     end
 
     fragment = sanitize_id_fragment(fragment)
-    local generated = string.format("%s_%05d", fragment, nextEntityId)
-    nextEntityId = nextEntityId + 1
+    local generated = string.format("%s_%05d", fragment, love and love.math and love.math.random(10000, 99999) or math.random(10000, 99999))
 
     state._entitySaveIds[entity] = generated
-    entity._saveId = generated
+    EntityIds.assign(entity, generated)
 
     return generated
 end

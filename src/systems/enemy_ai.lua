@@ -1,6 +1,99 @@
 ---@diagnostic disable: undefined-global
 
 local tiny = require("libs.tiny")
+local BehaviorRegistry = require("src.ai.enemy_behaviors")
+local util = require("src.ai.enemy_behaviors.util")
+local BehaviorTree = require("src.ai.behavior_tree")
+
+local BTStatus = BehaviorTree.Status
+
+local function ensure_behavior_runtime(ai)
+    local runtime = ai._behaviorRuntime
+    if not runtime then
+        runtime = {
+            activeKey = nil,
+            states = {},
+        }
+        ai._behaviorRuntime = runtime
+    end
+    return runtime
+end
+
+local function clear_table(tbl)
+    for key in pairs(tbl) do
+        tbl[key] = nil
+    end
+end
+
+return function(systemContext)
+    systemContext = systemContext or {}
+
+    local system = tiny.processingSystem {
+        filter = tiny.requireAll("enemy", "body", "position", "ai"),
+
+        onAddToWorld = function(self)
+            self.runtimeContext = self.runtimeContext or {}
+        end,
+
+        process = function(self, entity, dt)
+            local body = entity.body
+            if not body or body:isDestroyed() then
+                return
+            end
+
+            local ai = entity.ai
+            if not ai then
+                util.disable_weapon(entity)
+                return
+            end
+
+            local plugin, resolvedKey = BehaviorRegistry.resolve(ai.behavior)
+            if not plugin or type(plugin.tick) ~= "function" then
+                util.disable_weapon(entity)
+                return
+            end
+
+            local runtime = ensure_behavior_runtime(ai)
+
+            if runtime.activeKey ~= resolvedKey then
+                local previousKey = runtime.activeKey
+
+                if previousKey then
+                    local previousPlugin = BehaviorRegistry.get(previousKey)
+                    if previousPlugin and type(previousPlugin.onExit) == "function" then
+                        previousPlugin.onExit(entity, runtime.states[previousKey], systemContext)
+                    end
+                end
+
+                runtime.activeKey = resolvedKey
+                runtime.states[resolvedKey] = runtime.states[resolvedKey] or {}
+
+                if type(plugin.onEnter) == "function" then
+                    plugin.onEnter(entity, runtime.states[resolvedKey], systemContext)
+                end
+            end
+
+            local data = runtime.states[resolvedKey]
+
+            local runtimeContext = self.runtimeContext
+            clear_table(runtimeContext)
+            runtimeContext.world = self.world
+            runtimeContext.dt = dt
+
+            local status = plugin.tick(entity, data, systemContext, runtimeContext, dt)
+
+            if status == BTStatus.failure then
+                util.disable_weapon(entity)
+            end
+        end,
+    }
+
+    system.runtimeContext = system.runtimeContext or {}
+
+    return system
+end
+
+--[[ Legacy implementation retained for reference.
 local math_util = require("src.util.math")
 local vector = require("src.util.vector")
 local BehaviorTree = require("src.ai.behavior_tree")
@@ -534,18 +627,24 @@ local function create_behavior_tree(context)
         local ai = entity.ai or {}
         ensure_home(ai, entity)
 
+        local retaliationTarget = entity.retaliationTarget
+        if retaliationTarget and not is_target_valid(retaliationTarget) then
+            retaliationTarget = nil
+            entity.retaliationTarget = nil
+        end
+
         local detectionRange, engagementRange, preferredDistance, weaponRange = compute_ranges(entity)
         update_range_profile(blackboard, detectionRange, engagementRange, preferredDistance, weaponRange)
 
         local target = entity.currentTarget
 
-        if not is_target_valid(target) then
-            local preferred
-            if entity.retaliationTarget and is_target_valid(entity.retaliationTarget) then
-                preferred = entity.retaliationTarget
-            else
-                preferred = get_local_player(context)
+        if retaliationTarget then
+            if target ~= retaliationTarget then
+                target = retaliationTarget
+                entity.currentTarget = retaliationTarget
             end
+        elseif not is_target_valid(target) then
+            local preferred = get_local_player(context)
             target = find_target(blackboard.world, ai.targetTag or "player", preferred, position, detectionRange, blackboard.context)
             entity.currentTarget = target
         end
@@ -603,7 +702,15 @@ local function create_behavior_tree(context)
 
         local disengageRange = ai.disengageRange or stats.disengage_range or (detectionRange and detectionRange * 1.25)
         local dropRange = disengageRange or detectionRange or engagementRange
-        if dropRange and dropRange > 0 and distance > dropRange then
+        local retaliationTarget = entity.retaliationTarget
+        if retaliationTarget and not is_target_valid(retaliationTarget) then
+            retaliationTarget = nil
+            entity.retaliationTarget = nil
+        end
+
+        local hasRetaliationLock = retaliationTarget and retaliationTarget == target
+
+        if dropRange and dropRange > 0 and distance > dropRange and not hasRetaliationLock then
             if not (entity.retaliationTimer and entity.retaliationTimer > 0 and entity.retaliationTarget and is_target_valid(entity.retaliationTarget)) then
                 entity.retaliationTarget = entity.retaliationTarget or entity.currentTarget
                 entity.retaliationTimer = entity.retaliationTimer or ai.retaliationDuration or stats.retaliation_duration or 3
@@ -783,3 +890,5 @@ return function(context)
         end,
     }
 end
+
+]]

@@ -9,6 +9,7 @@ local Modules = require("src.ships.modules")
 local Items = require("src.items.registry")
 local PlayerManager = require("src.player.manager")
 local EntitySerializer = require("src.util.entity_serializer")
+local EntityIds = require("src.util.entity_ids")
 local QuestTracker = require("src.quests.tracker")
 local loader = require("src.blueprints.loader")
 local ComponentRegistry = require("src.util.component_registry")
@@ -131,7 +132,12 @@ local function instantiate_entity_from_snapshot(state, snapshot)
     end
 
     local entity = entityOrError
-    entity.entityId = snapshot.id or entity.entityId
+    local snapshotId = snapshot.id
+    if type(snapshotId) == "string" and snapshotId ~= "" then
+        EntityIds.assign(entity, snapshotId)
+    else
+        EntityIds.ensure(entity)
+    end
     entity.blueprint = entity.blueprint or blueprint
     apply_snapshot_payload(entity, snapshot)
 

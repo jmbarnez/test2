@@ -25,7 +25,7 @@ return {
             alpha_range = { 0.6, 0.85 },
         },
         {
-            parallax = 0.055,
+            parallax = 0.028,
             count = 6000,
             size_range = { 1.4, 2.8 },
             alpha_range = { 0.75, 1.0 },
