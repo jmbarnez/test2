@@ -238,27 +238,35 @@ function gameplay:update(dt)
     -- Fixed timestep physics for deterministic simulation
     -- Physics MUST update BEFORE world systems to ensure systems read fresh state
     local physicsWorld = self.physicsWorld
-    if physicsWorld then
-        local FIXED_DT = constants.physics.fixed_timestep or (1/60)
+    local world = self.world
+    local simulatedTime = 0
+    if physicsWorld and world then
+        local FIXED_DT = constants.physics.fixed_timestep or (1 / 60)
         local MAX_STEPS = constants.physics.max_steps or 4
-        
+
         self.physicsAccumulator = (self.physicsAccumulator or 0) + dt
-        
+
         local steps = 0
         while self.physicsAccumulator >= FIXED_DT and steps < MAX_STEPS do
             physicsWorld:update(FIXED_DT)
+            world:update(FIXED_DT)
             self.physicsAccumulator = self.physicsAccumulator - FIXED_DT
             steps = steps + 1
         end
-        
+
+        if steps > 0 then
+            simulatedTime = steps * FIXED_DT
+        end
+
         -- Cap accumulator to prevent spiral of death
         if self.physicsAccumulator > FIXED_DT * MAX_STEPS then
             self.physicsAccumulator = 0
         end
+    elseif world then
+        -- No physics world available; fall back to variable timestep updates
+        world:update(dt)
+        simulatedTime = dt
     end
-
-    -- Update ECS systems (reads freshly updated physics state)
-    self.world:update(dt)
 
     -- Update game subsystems
     Docking.updateState(self)
@@ -268,7 +276,11 @@ function gameplay:update(dt)
     end
 
     FloatingText.update(self, dt)
-    Entities.updateHealthTimers(self.world, dt)
+    if simulatedTime > 0 then
+        Entities.updateHealthTimers(world, simulatedTime)
+    elseif not physicsWorld then
+        Entities.updateHealthTimers(world, dt)
+    end
     View.updateCamera(self)
 
     Metrics.finalizeUpdate(self, updateStart)

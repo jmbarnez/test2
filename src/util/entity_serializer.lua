@@ -81,111 +81,6 @@ local function prune_empty(tbl, seen)
     return tbl
 end
 
-local function copy_position(entity)
-    local px, py
-
-    if entity.position then
-        px = entity.position.x or px
-        py = entity.position.y or py
-    end
-
-    local body = entity.body
-    if body and not body:isDestroyed() then
-        px = body:getX()
-        py = body:getY()
-    end
-
-    if px or py then
-        return { x = px or 0, y = py or 0 }
-    end
-
-    return nil
-end
-
-local function copy_velocity(entity)
-    local vx, vy
-
-    if entity.velocity then
-        vx = entity.velocity.x or vx
-        vy = entity.velocity.y or vy
-    end
-
-    local body = entity.body
-    if body and not body:isDestroyed() then
-        local bodyVx, bodyVy = body:getLinearVelocity()
-        vx = bodyVx
-        vy = bodyVy
-    end
-
-    if vx or vy then
-        return { x = vx or 0, y = vy or 0 }
-    end
-
-    return nil
-end
-
-local function copy_angular_velocity(entity)
-    if entity.angularVelocity then
-        return entity.angularVelocity
-    end
-
-    if entity.body and not entity.body:isDestroyed() then
-        return entity.body:getAngularVelocity()
-    end
-
-    return nil
-end
-
-local function copy_health(entity)
-    if type(entity.health) ~= "table" then
-        return nil
-    end
-
-    return prune_empty({
-        current = entity.health.current,
-        max = entity.health.max,
-        regen = entity.health.regen,
-        showTimer = entity.health.showTimer,
-    })
-end
-
-local function copy_shield(entity)
-    if type(entity.shield) ~= "table" then
-        return nil
-    end
-
-    return prune_empty({
-        current = entity.shield.current,
-        max = entity.shield.max,
-        regen = entity.shield.regen,
-        percent = entity.shield.percent,
-        isDepleted = entity.shield.isDepleted,
-    })
-end
-
-local function copy_energy(entity)
-    if type(entity.energy) ~= "table" then
-        return nil
-    end
-
-    return prune_empty({
-        current = entity.energy.current,
-        max = entity.energy.max,
-    })
-end
-
-local function copy_thrust(entity)
-    if entity.currentThrust or entity.maxThrust or entity.isThrusting then
-        return prune_empty({
-            current = entity.currentThrust,
-            max = entity.maxThrust,
-            isThrusting = not not entity.isThrusting,
-        })
-    end
-
-    return nil
-end
-
 local function serialize_cargo_items(cargo)
     if type(cargo) ~= "table" or type(cargo.items) ~= "table" then
         return nil
@@ -236,16 +131,7 @@ local function serialize_pickup(entity)
 
     return prune_empty({
         pickup = copy_serializable(pickup),
-        position = copy_position(entity),
-        velocity = copy_velocity(entity),
-        rotation = entity.rotation,
     })
-end
-
-local function serialize_generic_entity(entity)
-    -- Use component registry for generic serialization
-    -- This eliminates the need to manually list every component
-    return ComponentRegistry.serializeEntity(entity)
 end
 
 local function should_skip_entity(entity)
@@ -338,6 +224,26 @@ local function resolve_entity_id(state, entity, blueprint, archetype)
     return generated
 end
 
+local function build_component_payload(entity, blueprint)
+    local payload = ComponentRegistry.serializeEntity(entity) or {}
+
+    if entity.pickup then
+        local pickupData = serialize_pickup(entity)
+        if pickupData then
+            payload = table_util.deep_merge(payload, pickupData)
+        end
+    end
+
+    if blueprint and blueprint.category == "ships" then
+        local shipData = serialize_ship_entity(entity)
+        if shipData then
+            payload = table_util.deep_merge(payload, shipData)
+        end
+    end
+
+    return prune_empty(payload)
+end
+
 function EntitySerializer.serialize_entity(state, entity)
     if should_skip_entity(entity) then
         return nil
@@ -346,28 +252,7 @@ function EntitySerializer.serialize_entity(state, entity)
     local blueprint = entity.blueprint
     local archetype = resolve_archetype(entity, blueprint)
 
-    local payload
-    if blueprint and blueprint.category == "ships" then
-        payload = serialize_ship_entity(entity)
-    elseif entity.pickup then
-        payload = serialize_pickup(entity)
-    else
-        payload = serialize_generic_entity(entity)
-    end
-
-    payload = payload or {}
-
-    if not payload.position then
-        payload.position = copy_position(entity)
-    end
-    if not payload.velocity then
-        payload.velocity = copy_velocity(entity)
-    end
-    if payload.rotation == nil then
-        payload.rotation = entity.rotation
-    end
-
-    payload = prune_empty(payload)
+    local payload = build_component_payload(entity, blueprint)
 
     if not payload or next(payload) == nil then
         return nil

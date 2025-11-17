@@ -4,6 +4,7 @@ local tiny = require("libs.tiny")
 local math_util = require("src.util.math")
 local vector = require("src.util.vector")
 local BehaviorTree = require("src.ai.behavior_tree")
+local PlayerManager = require("src.player.manager")
 
 local TAU = math_util.TAU
 local BTStatus = BehaviorTree.Status
@@ -69,13 +70,75 @@ local function is_target_valid(target)
     return not dead
 end
 
+local function resolve_state_from_context(context)
+    if not context then
+        return nil
+    end
+
+    local resolver = context.resolveState
+    if type(resolver) == "function" then
+        local ok, state = pcall(resolver, context)
+        if not ok then
+            ok, state = pcall(resolver)
+        end
+        if ok and type(state) == "table" then
+            return state
+        end
+    end
+
+    if type(context.state) == "table" then
+        return context.state
+    end
+
+    if type(context) == "table" then
+        return context
+    end
+
+    return nil
+end
+
+local function gather_player_candidates(context)
+    local state = resolve_state_from_context(context)
+    if not state then
+        return nil
+    end
+
+    local candidates = {}
+    local seen = {}
+
+    local function add(entity)
+        if entity and entity.player and not seen[entity] then
+            candidates[#candidates + 1] = entity
+            seen[entity] = true
+        end
+    end
+
+    add(state.player)
+    add(state.playerShip)
+
+    if type(state.players) == "table" then
+        for _, entity in pairs(state.players) do
+            add(entity)
+        end
+    end
+
+    local playerMap = PlayerManager.collectAllPlayers(state)
+    if type(playerMap) == "table" then
+        for _, entity in pairs(playerMap) do
+            add(entity)
+        end
+    end
+
+    return candidates
+end
+
 ---@param world table
 ---@param tag string
 ---@param preferred table|nil
 ---@param origin { x:number, y:number }|nil
 ---@param detectionRange number|nil
 ---@return table|nil
-local function find_target(world, tag, preferred, origin, detectionRange)
+local function find_target(world, tag, preferred, origin, detectionRange, context)
     if preferred and is_target_valid(preferred) and has_tag(preferred, tag) and within_range(origin, preferred, detectionRange) then
         return preferred
     end
@@ -89,8 +152,19 @@ local function find_target(world, tag, preferred, origin, detectionRange)
     local bestCandidate, bestDistSq = nil, huge
     local entities = world.entities
 
-    for i = 1, #entities do
-        local candidate = entities[i]
+    local candidateLists
+    if tag == "player" then
+        local players = gather_player_candidates(context)
+        if players and #players > 0 then
+            candidateLists = { players, entities }
+        end
+    end
+
+    if not candidateLists then
+        candidateLists = { entities }
+    end
+
+    local function process_candidate(candidate)
         if candidate and has_tag(candidate, tag) and is_target_valid(candidate) then
             if hasOrigin then
                 local pos = candidate.position
@@ -104,7 +178,20 @@ local function find_target(world, tag, preferred, origin, detectionRange)
                     end
                 end
             else
-                return candidate
+                bestCandidate = candidate
+                return true
+            end
+        end
+        return false
+    end
+
+    for idx = 1, #candidateLists do
+        local list = candidateLists[idx]
+        if list then
+            for i = 1, #list do
+                if process_candidate(list[i]) then
+                    return bestCandidate
+                end
             end
         end
     end
@@ -459,7 +546,7 @@ local function create_behavior_tree(context)
             else
                 preferred = get_local_player(context)
             end
-            target = find_target(blackboard.world, ai.targetTag or "player", preferred, position, detectionRange)
+            target = find_target(blackboard.world, ai.targetTag or "player", preferred, position, detectionRange, blackboard.context)
             entity.currentTarget = target
         end
 
