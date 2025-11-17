@@ -1,7 +1,7 @@
 local table_util = require("src.util.table")
 
 local weapon_defaults = {
-    projectileSpeed = 450,
+    projectileSpeed = 900,
     damage = 66,
     fireRate = 2.0,
     projectileLifetime = 2.0,

@@ -19,74 +19,74 @@ local function load_shader(label, source)
     return shaderOrError
 end
 
-local offline_shader = load_shader("offline", [[
+local portal_shader = load_shader("portal", [[
     extern vec2 portalCenter;
     extern float radius;
     extern float time;
-    extern vec4 innerColor;
-    extern vec4 outerColor;
-    extern vec4 rimColor;
     extern float energy;
+    extern vec4 coreColor;
+    extern vec4 midColor;
+    extern vec4 rimColor;
 
-    vec4 effect(vec4 color, Image tex, vec2 texture_coords, vec2 screen_coords) {
-        vec2 rel = (screen_coords - portalCenter) / max(radius, 0.0001);
-        float r = length(rel);
-        float angle = atan(rel.y, rel.x);
-        float swirl = sin(angle * 3.0 - time * 0.7);
-        float ripple = sin(r * 18.0 - time * 1.4 + swirl * 0.25);
-        float fade = smoothstep(1.0, 0.2, r);
-        float flux = 0.35 + 0.25 * sin(time * 0.8 + ripple * 0.6);
-        float pulse = pow(max(0.0, 1.0 - r), 1.6) * (0.7 + 0.3 * energy);
-        vec3 base = mix(outerColor.rgb, innerColor.rgb, clamp(pulse + swirl * 0.05 + flux * 0.2, 0.0, 1.0));
-        float alpha = (innerColor.a * pulse + outerColor.a * fade * 0.35) * (0.65 + energy * 0.2);
-        float rim = smoothstep(1.0, 0.85, r) * rimColor.a * 0.8;
-        vec3 colorMix = mix(base, rimColor.rgb, rim);
-        return vec4(colorMix, clamp(alpha + rim, 0.0, 1.0));
+    float hash(vec2 p) {
+        return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
     }
-]])
-
-local online_shader = load_shader("online", [[
-    extern vec2 portalCenter;
-    extern float radius;
-    extern float time;
-    extern vec4 innerColor;
-    extern vec4 outerColor;
-    extern vec4 rimColor;
-    extern float energy;
 
     float noise(vec2 p) {
-        return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+        vec2 i = floor(p);
+        vec2 f = fract(p);
+        float a = hash(i);
+        float b = hash(i + vec2(1.0, 0.0));
+        float c = hash(i + vec2(0.0, 1.0));
+        float d = hash(i + vec2(1.0, 1.0));
+        vec2 u = f * f * (3.0 - 2.0 * f);
+        return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
     }
 
     float fbm(vec2 p) {
-        float v = 0.0;
-        float a = 0.5;
-        vec2 shift = vec2(100.0);
-        mat2 rot = mat2(cos(0.5), sin(0.5), -sin(0.5), cos(0.5));
+        float value = 0.0;
+        float amplitude = 0.5;
+        mat2 rot = mat2(0.8660254, 0.5, -0.5, 0.8660254);
         for (int i = 0; i < 4; ++i) {
-            v += a * noise(p);
-            p = rot * p * 2.0 + shift;
-            a *= 0.5;
+            value += amplitude * noise(p);
+            p = rot * p * 2.0 + vec2(40.0);
+            amplitude *= 0.5;
         }
-        return v;
+        return value;
     }
 
     vec4 effect(vec4 color, Image tex, vec2 texture_coords, vec2 screen_coords) {
         vec2 rel = (screen_coords - portalCenter) / max(radius, 0.0001);
         float r = length(rel);
+        if (r > 1.12) {
+            return vec4(0.0);
+        }
+
         float angle = atan(rel.y, rel.x);
-        float swirl = sin(angle * 5.0 + time * 2.2);
-        float spiral = sin(r * 22.0 - time * 6.5 + swirl);
-        float turbulence = fbm(rel * 3.5 + time * 0.35);
-        float flux = 0.6 + 0.4 * sin(time * (3.0 + energy * 4.0) + turbulence * 3.5);
-        float core = pow(max(0.0, 1.0 - r), 1.2 + energy * 0.6);
-        float band = smoothstep(0.95, 0.2, r);
-        float intensity = clamp(core + spiral * 0.15 + turbulence * 0.25 + flux * 0.3, 0.0, 1.0);
-        vec3 base = mix(outerColor.rgb, innerColor.rgb, intensity);
-        float alpha = (innerColor.a * core + outerColor.a * band * 0.6) * (0.8 + energy * 0.4);
-        float rim = smoothstep(1.02, 0.8, r) * rimColor.a;
-        vec3 colorMix = mix(base, rimColor.rgb, rim * (0.7 + 0.3 * energy));
-        return vec4(colorMix, clamp(alpha + rim, 0.0, 1.0));
+        float swirlSpeed = 0.8 + energy * 0.6;
+        float swirl = angle * (3.0 + energy * 2.0) - time * swirlSpeed;
+
+        float turbulence = fbm(rel * (3.6 + energy * 1.4) + time * 0.25);
+        float bands = sin(r * (18.0 + energy * 4.0) - time * (2.4 + energy * 1.2) + swirl);
+        float sparks = sin(angle * 12.0 + time * 3.0 + fbm(rel * 8.0));
+
+        float core = exp(-r * (3.6 - energy * 0.5));
+        float pulse = 0.65 + 0.35 * sin(time * (1.7 + energy * 1.3));
+        float intensity = clamp(core * (1.1 + energy * 0.7) + turbulence * 0.35 + bands * 0.12, 0.0, 1.2);
+        intensity = mix(intensity, 1.0, pow(max(0.0, 1.0 - r), 6.0) * (0.5 + energy * 0.5));
+
+        vec3 base = mix(midColor.rgb, coreColor.rgb, clamp(intensity, 0.0, 1.0));
+        base += (0.08 + 0.15 * energy) * (sparks * 0.5 + turbulence * 0.4);
+
+        float rim = smoothstep(0.82, 0.98, r) * rimColor.a;
+        vec3 colorMix = mix(base, rimColor.rgb, rim * (0.6 + 0.2 * energy));
+        float alpha = clamp(core * coreColor.a * (1.0 + energy * 0.5) + pulse * 0.25, 0.0, 1.0);
+        alpha += rim * 0.4;
+        alpha *= (1.0 - smoothstep(1.0, 1.12, r));
+
+        colorMix = clamp(colorMix, 0.0, 1.0);
+
+        return vec4(colorMix, alpha) * color;
     }
 ]])
 
@@ -136,20 +136,24 @@ end
 --- Draw warpgate portal using shader or fallback mode.
 local function draw_portal(entity, palette)
     local warpgate = entity.warpgate or {}
-    local online = warpgate.online and warpgate.status ~= "offline"
     local radius = entity.portalRadius or (entity.mountRadius and entity.mountRadius * 0.45) or 120
-    local shader = online and online_shader or offline_shader
+    local shader = portal_shader
 
-    local energyCurrent = warpgate.energy or (online and warpgate.energyMax) or 0
-    local energyMax = warpgate.energyMax or (warpgate.maxEnergy) or 1
-    local energy = math.max(0, math.min(1, energyCurrent / math.max(energyMax, 1)))
-    if online and energy <= 0 then
-        energy = 0.65
+    local energyCurrent = warpgate.energy or warpgate.energyMax or warpgate.maxEnergy or 0
+    local energyMax = warpgate.energyMax or warpgate.maxEnergy or 1
+    local energy = 0
+    if energyMax > 0 then
+        energy = energyCurrent / energyMax
     end
+    if warpgate.status == "offline" then
+        energy = 0
+    end
+    energy = math.max(0, math.min(1, energy))
+    local shaderEnergy = 0.25 + energy * 0.75
 
-    local innerColor = online and palette.portalCore or palette.portalOffline
-    local outerColor = online and palette.portal or palette.spine
-    local rimColor = palette.portalRim or palette.accent
+    local coreColor = drawable_helpers.normalise_color(palette.portalCore, { 0.55, 0.92, 1.0, 1.0 })
+    local midColor = drawable_helpers.normalise_color(palette.portal or palette.portalOffline, { 0.16, 0.42, 0.94, 0.92 })
+    local rimColor = drawable_helpers.normalise_color(palette.portalRim or palette.accent, { 0.7, 0.95, 1.0, 1.0 })
 
     love.graphics.push()
     local centerX, centerY = love.graphics.transformPoint(0, 0)
@@ -158,32 +162,32 @@ local function draw_portal(entity, palette)
         shader:send("portalCenter", { centerX, centerY })
         shader:send("radius", radius)
         shader:send("time", love.timer.getTime())
-        shader:send("innerColor", innerColor)
-        shader:send("outerColor", outerColor)
+        shader:send("energy", shaderEnergy)
+        shader:send("coreColor", coreColor)
+        shader:send("midColor", midColor)
         shader:send("rimColor", rimColor)
-        shader:send("energy", energy)
         love.graphics.setShader(shader)
         love.graphics.setColor(1, 1, 1, 1)
-        love.graphics.circle("fill", 0, 0, radius * 1.05)
+        love.graphics.circle("fill", 0, 0, radius * 1.1)
         love.graphics.setShader()
     else
-        love.graphics.setColor(innerColor[1], innerColor[2], innerColor[3], innerColor[4] or 1)
+        love.graphics.setColor(coreColor[1], coreColor[2], coreColor[3], coreColor[4] or 1)
         love.graphics.circle("fill", 0, 0, radius)
     end
 
-    love.graphics.setLineWidth(math.max(2, radius * 0.08))
-    love.graphics.setColor(rimColor[1], rimColor[2], rimColor[3], rimColor[4] or 1)
-    love.graphics.circle("line", 0, 0, radius * 1.08)
+    love.graphics.setLineWidth(math.max(2, radius * 0.06))
+    love.graphics.setColor(rimColor[1], rimColor[2], rimColor[3], (rimColor[4] or 1) * 0.85)
+    love.graphics.circle("line", 0, 0, radius * 1.05)
 
-    if online then
+    if energy > 0.05 then
         love.graphics.setBlendMode("add")
-        local arcColor = palette.glow or palette.portal
-        love.graphics.setColor(arcColor[1], arcColor[2], arcColor[3], (arcColor[4] or 1) * 0.85)
+        local arcColor = coreColor
+        love.graphics.setColor(arcColor[1], arcColor[2], arcColor[3], (arcColor[4] or 1) * 0.3)
         local arcRadius = radius * 1.18
-        local span = math.pi * 0.7
+        local span = math.pi * 0.55
         local time = love.timer.getTime()
-        for i = 1, 3 do
-            local offset = (time * 0.4 + i * 2.1) % (math.pi * 2)
+        for i = 1, 4 do
+            local offset = (time * (0.35 + i * 0.05) + i * 1.42) % (math.pi * 2)
             love.graphics.arc("line", "open", 0, 0, arcRadius, offset, offset + span)
         end
         love.graphics.setBlendMode("alpha")
@@ -204,13 +208,12 @@ function warpgate_renderer.draw(entity, context)
     local palette = ensure_palette(entity.drawable)
     local defaults = resolve_defaults(entity.drawable, palette)
 
-    draw_portal(entity, palette)
     draw_structure(entity, palette, defaults)
+    draw_portal(entity, palette)
 
     love.graphics.pop()
 
     ship_renderer.draw_shield_pulses(entity)
-    ship_renderer.draw_health_bar(entity)
 end
 
 return warpgate_renderer

@@ -55,12 +55,60 @@ function projectile_renderer.draw(entity)
     local coreScale = drawable.coreScale or 0.65
     local highlightScale = drawable.highlightScale or 0.35
 
-    local shape = drawable.shape or drawable.form or "orb"
+    local shape = drawable.shape or drawable.form or drawable.type or "orb"
 
     love.graphics.push("all")
     love.graphics.setBlendMode("add")
 
-    if shape == "beam" then
+    if shape == "charging_orb" or shape == "charged_orb" then
+        -- Render charging/charged orb with pulsing energy rings
+        local radius = drawable.radius or size
+        local chargePercent = drawable.chargePercent or 0
+        local time = love.timer and love.timer.getTime and love.timer.getTime() or 0
+        local pulse = 1 + 0.05 * math.sin(time * 8.0)
+        
+        -- Outer glow (larger for charged orbs)
+        local glowScale = shape == "charging_orb" and 1.3 or 1.5
+        love.graphics.setColor(glowColor[1], glowColor[2], glowColor[3], outerAlpha * 0.7)
+        love.graphics.circle("fill", x, y, radius * glowScale * pulse)
+        
+        -- Energy rings (more rings as charge increases)
+        local numRings = math.floor(chargePercent * 3) + 1
+        for i = 1, numRings do
+            local ringRadius = radius * (0.8 + i * 0.15) * pulse
+            local ringAlpha = (0.6 - i * 0.15) * chargePercent
+            love.graphics.setColor(color[1], color[2], color[3], ringAlpha)
+            love.graphics.setLineWidth(2 + i * 0.5)
+            love.graphics.circle("line", x, y, ringRadius)
+        end
+        
+        -- Middle glow
+        love.graphics.setColor(glowColor[1], glowColor[2], glowColor[3], innerAlpha)
+        love.graphics.circle("fill", x, y, radius * 0.85)
+        
+        -- Core with intensity based on charge
+        local coreIntensity = 0.5 + chargePercent * 0.5
+        love.graphics.setColor(color[1] * coreIntensity, color[2] * coreIntensity, color[3] * coreIntensity, coreAlpha)
+        love.graphics.circle("fill", x, y, radius * 0.65)
+        
+        -- Bright center
+        love.graphics.setColor(1, 1, 1, highlightAlpha * chargePercent)
+        love.graphics.circle("fill", x, y, radius * 0.25)
+        
+        -- Energy particles orbiting (only when charging)
+        if shape == "charging_orb" and chargePercent > 0.1 then
+            local numParticles = math.floor(chargePercent * 8) + 2
+            for i = 1, numParticles do
+                local angle = (time * 2 + i * (math.pi * 2 / numParticles)) % (math.pi * 2)
+                local particleRadius = radius * 0.9
+                local px = x + math.cos(angle) * particleRadius
+                local py = y + math.sin(angle) * particleRadius
+                love.graphics.setColor(glowColor[1], glowColor[2], glowColor[3], 0.8)
+                love.graphics.circle("fill", px, py, 2 + chargePercent * 2)
+            end
+        end
+        
+    elseif shape == "beam" then
         local vx = entity.velocity and entity.velocity.x or 0
         local vy = entity.velocity and entity.velocity.y or 0
         local angle

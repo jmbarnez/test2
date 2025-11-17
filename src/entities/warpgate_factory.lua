@@ -127,27 +127,36 @@ function warpgate_factory.instantiate(blueprint, context)
     entity.rotation = entity.rotation or 0
 
     local health = entity.health
-    if type(health) ~= "table" then
-        health = {
-            current = math.huge,
-            max = math.huge,
-            showTimer = 0,
-        }
-        entity.health = health
+    if health == false then
+        entity.health = nil
     else
-        health.current = health.current or health.max or math.huge
-        health.max = health.max or math.huge
-        health.showTimer = health.showTimer or 0
-    end
+        if type(health) ~= "table" then
+            health = {
+                current = math.huge,
+                max = math.huge,
+                showTimer = 0,
+            }
+            entity.health = health
+        else
+            health.current = health.current or health.max or math.huge
+            health.max = health.max or math.huge
+            health.showTimer = health.showTimer or 0
+        end
 
-    if type(health.shield) ~= "table" then
-        health.shield = {
-            current = 0,
-            max = 0,
-        }
-    else
-        health.shield.current = health.shield.current or 0
-        health.shield.max = health.shield.max or 0
+        if health then
+            local shield = health.shield
+            if shield == false then
+                health.shield = nil
+            elseif type(shield) ~= "table" then
+                health.shield = {
+                    current = 0,
+                    max = 0,
+                }
+            else
+                shield.current = shield.current or 0
+                shield.max = shield.max or 0
+            end
+        end
     end
 
     apply_blueprint_overrides(entity, context)

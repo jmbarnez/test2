@@ -1,45 +1,169 @@
 local math = math
+local table_insert = table.insert
+
+local PI = math.pi
+local cos = math.cos
+local sin = math.sin
+
+local function clone_part(part)
+    local copy = {}
+    for key, value in pairs(part) do
+        copy[key] = value
+    end
+    return copy
+end
 
 local function regular_polygon(sides, radius, offset_angle)
     local points = {}
-    local step = (math.pi * 2) / sides
+    local step = (PI * 2) / sides
     local offset = offset_angle or 0
 
     for i = 0, sides - 1 do
         local angle = offset + step * i
-        points[#points + 1] = math.cos(angle) * radius
-        points[#points + 1] = math.sin(angle) * radius
+        points[#points + 1] = cos(angle) * radius
+        points[#points + 1] = sin(angle) * radius
     end
 
     return points
 end
 
-local SCALE = 0.58
+local function build_ring(sides, outer_radius, inner_radius, offset_angle)
+    local outer = regular_polygon(sides, outer_radius, offset_angle)
+    local inner = regular_polygon(sides, inner_radius, offset_angle)
+    local points = {}
 
-local outer_radius = 340 * SCALE
-local mid_radius = 260 * SCALE
-local inner_radius = 190 * SCALE
-local spine_radius = 420 * SCALE
-local core_radius = 150 * SCALE
+    for i = 1, #outer do
+        points[#points + 1] = outer[i]
+    end
 
-local outer_ring = regular_polygon(48, outer_radius)
-local mid_ring = regular_polygon(24, mid_radius, math.pi / 24)
-local inner_ring = regular_polygon(12, inner_radius)
-local spine_points = regular_polygon(6, spine_radius, math.pi / 6)
+    for i = #inner, 2, -2 do
+        points[#points + 1] = inner[i - 1]
+        points[#points + 1] = inner[i]
+    end
 
-local spoke = {
-    -28, -spine_radius,
-    28, -spine_radius,
-    42, -inner_radius,
-    -42, -inner_radius,
+    return points
+end
+
+local frame_outer = 230
+local frame_inner = 184
+local trim_outer = 176
+local trim_inner = 154
+local channel_outer = 168
+local channel_inner = 146
+local portal_radius = 140
+
+local anchor_distance = (trim_inner + portal_radius) * 0.5
+
+local parts = {}
+
+table_insert(parts, {
+    name = "outer_glow",
+    type = "ellipse",
+    mode = "fill",
+    radius = frame_outer * 1.12,
+    fill = "glow",
+    alpha = 0.1,
+    stroke = false,
+    blend = "add",
+})
+
+table_insert(parts, {
+    name = "frame_shell",
+    type = "polygon",
+    points = build_ring(48, frame_outer, frame_inner, PI / 48),
+    fill = "frame",
+    stroke = "trim",
+    strokeWidth = 5,
+})
+
+table_insert(parts, {
+    name = "frame_trim",
+    type = "polygon",
+    points = build_ring(48, trim_outer, trim_inner, 0),
+    fill = "trim",
+    alpha = 0.9,
+    stroke = "accent",
+    strokeWidth = 3,
+})
+
+table_insert(parts, {
+    name = "energy_channel",
+    type = "polygon",
+    points = build_ring(48, channel_outer, channel_inner, PI / 48),
+    fill = "conduit",
+    stroke = "accent",
+    strokeWidth = 2,
+    alpha = 0.85,
+    blend = "add",
+})
+
+local strut_shape = {
+    -20, -frame_inner,
+    20, -frame_inner,
+    36, -channel_outer,
+    16, -portal_radius * 0.98,
+    -16, -portal_radius * 0.98,
+    -36, -channel_outer,
 }
 
-local conduit = {
-    -18, -inner_radius,
-    18, -inner_radius,
-    36, -core_radius * 0.65,
-    -36, -core_radius * 0.65,
+for i = 0, 5 do
+    local angle = i * (PI / 3)
+    local strut = clone_part({
+        name = "support_strut_" .. tostring(i + 1),
+        type = "polygon",
+        points = strut_shape,
+        rotation = angle,
+        fill = "frame",
+        stroke = "trim",
+        strokeWidth = 3,
+    })
+
+    table_insert(parts, strut)
+end
+
+local conduit_shape = {
+    -10, -channel_outer,
+    10, -channel_outer,
+    24, -channel_inner,
+    -24, -channel_inner,
 }
+
+for i = 0, 5 do
+    local angle = (i * (PI / 3)) + (PI / 6)
+    local conduit = clone_part({
+        name = "conduit_arc_" .. tostring(i + 1),
+        type = "polygon",
+        points = conduit_shape,
+        rotation = angle,
+        fill = "conduit",
+        stroke = "accent",
+        strokeWidth = 2,
+        alpha = 0.8,
+        blend = "add",
+    })
+
+    table_insert(parts, conduit)
+end
+
+for i = 0, 5 do
+    local angle = i * (PI / 3)
+    local anchor_x = cos(angle) * anchor_distance
+    local anchor_y = sin(angle) * anchor_distance
+
+    table_insert(parts, {
+        name = "anchor_glow_" .. tostring(i + 1),
+        type = "ellipse",
+        radiusX = 16,
+        radiusY = 34,
+        offset = { x = anchor_x, y = anchor_y },
+        rotation = angle,
+        fill = "accent",
+        alpha = 0.78,
+        stroke = "trim",
+        strokeWidth = 2,
+        blend = "add",
+    })
+end
 
 return {
     category = "warpgates",
@@ -52,86 +176,35 @@ return {
     components = {
         warpgate = {
             gateId = "alpha",
-            online = false,
-            energy = 0,
-            status = "offline",
+            online = true,
+            status = "online",
+            energy = 1,
+            energyMax = 1,
         },
+        health = false,
         position = { x = 0, y = 0 },
         velocity = { x = 0, y = 0 },
         rotation = 0,
-        mountRadius = spine_radius,
-        portalRadius = core_radius * 0.9,
+        mountRadius = frame_outer,
+        hoverRadius = frame_outer,
+        targetRadius = frame_outer,
+        portalRadius = portal_radius,
         drawable = {
             type = "warpgate",
             defaultStrokeWidth = 3,
             colors = {
-                frame = { 0.08, 0.13, 0.2, 1 },
-                trim = { 0.28, 0.42, 0.78, 1 },
-                glow = { 0.36, 0.86, 1.0, 0.9 },
-                conduit = { 0.18, 0.6, 0.92, 1 },
-                spine = { 0.12, 0.16, 0.24, 1 },
-                accent = { 0.62, 0.92, 1.0, 0.85 },
-                portal = { 0.3, 0.86, 1.0, 0.9 },
-                portalRim = { 0.78, 0.98, 1.0, 1.0 },
-                portalOffline = { 0.12, 0.18, 0.3, 0.92 },
-                portalCore = { 0.42, 0.74, 1.0, 0.95 },
+                frame = { 0.06, 0.08, 0.13, 1 },
+                trim = { 0.28, 0.5, 0.92, 1 },
+                glow = { 0.34, 0.8, 1.0, 0.82 },
+                conduit = { 0.18, 0.62, 0.98, 1 },
+                spine = { 0.09, 0.14, 0.2, 1 },
+            accent = { 0.6, 0.92, 1.0, 0.9 },
+                portal = { 0.26, 0.72, 1.0, 0.85 },
+                portalRim = { 0.76, 0.98, 1.0, 1.0 },
+                portalOffline = { 0.16, 0.24, 0.38, 0.88 },
+                portalCore = { 0.44, 0.86, 1.0, 0.96 },
             },
-            parts = {
-                {
-                    name = "support_spine",
-                    type = "polygon",
-                    points = spine_points,
-                    fill = "spine",
-                    stroke = "trim",
-                    strokeWidth = 6,
-                },
-                {
-                    name = "outer_ring",
-                    type = "polygon",
-                    points = outer_ring,
-                    fill = "frame",
-                    stroke = "trim",
-                    strokeWidth = 6,
-                },
-                {
-                    name = "mid_ring",
-                    type = "polygon",
-                    points = mid_ring,
-                    fill = "frame",
-                    stroke = "trim",
-                    strokeWidth = 4,
-                },
-                {
-                    name = "inner_ring",
-                    type = "polygon",
-                    points = inner_ring,
-                    fill = "conduit",
-                    stroke = "accent",
-                    strokeWidth = 3,
-                    blend = "add",
-                },
-                {
-                    name = "spokes",
-                    type = "polygon",
-                    points = spoke,
-                    mirror = true,
-                    rotations = 3,
-                    fill = "frame",
-                    stroke = "trim",
-                    strokeWidth = 3,
-                },
-                {
-                    name = "conduits",
-                    type = "polygon",
-                    points = conduit,
-                    mirror = true,
-                    rotations = 6,
-                    fill = "conduit",
-                    stroke = "accent",
-                    strokeWidth = 2,
-                    blend = "add",
-                },
-            },
+            parts = parts,
         },
     },
 }

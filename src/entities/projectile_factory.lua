@@ -416,27 +416,6 @@ function ProjectileFactory.spawn(tinyWorld, physicsWorld, shooter, startX, start
         projectile.homing = homingConfig
     end
 
-    local gravityWell = projectile.gravityWell
-    if gravityWell then
-        gravityWell.owner = shooter
-        if gravityWell.excludePlayers == nil then
-            gravityWell.excludePlayers = true
-        end
-        if gravityWell.excludeOwner == nil then
-            gravityWell.excludeOwner = true
-        end
-    elseif weapon.gravityWell then
-        local copy = deep_copy(weapon.gravityWell)
-        copy.owner = shooter
-        if copy.excludePlayers == nil then
-            copy.excludePlayers = true
-        end
-        if copy.excludeOwner == nil then
-            copy.excludeOwner = true
-        end
-        projectile.gravityWell = copy
-    end
-
     if physicsWorld then
         local bodyType = (physicsConfig and physicsConfig.type) or "dynamic"
         local body = love.physics.newBody(physicsWorld, startX, startY, bodyType)
