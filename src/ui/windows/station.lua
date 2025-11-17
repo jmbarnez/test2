@@ -172,22 +172,39 @@ function station_window.draw(context)
         { id = "quests", label = "Quests" },
     }
 
-    local tab_x = content.x + padding
     local tab_y = content.y + padding * 0.5
     local tab_max_width = math.max(80, (content.width - padding * 2) / #tabs)
+
+    love.graphics.setFont(fonts.body_bold or fonts.title or default_font)
+
+    local tabWidths = {}
+    local totalTabsWidth = 0
+    for index = 1, #tabs do
+        local tab = tabs[index]
+        local text_width = love.graphics.getFont():getWidth(tab.label)
+        local width = math.min(tab_max_width, text_width + padding * 2)
+        tabWidths[index] = width
+        totalTabsWidth = totalTabsWidth + width
+        if index < #tabs then
+            totalTabsWidth = totalTabsWidth + tab_spacing
+        end
+    end
+
+    local availableRight = content.x + content.width - padding
+    local startX = availableRight - totalTabsWidth
+    local minLeft = content.x + padding
+    local tab_x = math.max(minLeft, startX)
 
     state._tabRects = state._tabRects or {}
     for i = 1, #state._tabRects do
         state._tabRects[i] = nil
     end
 
-    love.graphics.setFont(fonts.body_bold or fonts.title or default_font)
-
     for index = 1, #tabs do
         local tab = tabs[index]
         local label = tab.label
+        local width = tabWidths[index]
         local text_width = love.graphics.getFont():getWidth(label)
-        local width = math.min(tab_max_width, text_width + padding * 2)
         local rect = {
             x = tab_x,
             y = tab_y,

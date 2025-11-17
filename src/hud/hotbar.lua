@@ -77,9 +77,10 @@ function Hotbar.draw(context, player)
 
     local slotsForLayout = HOTBAR_SLOTS
     local screenWidth, screenHeight = love.graphics.getWidth(), love.graphics.getHeight()
-    local slotSize = (theme_spacing and theme_spacing.slot_size) or 48
-    local padding = 8
-    local gap = 6
+    local baseSlotSize = (theme_spacing and theme_spacing.slot_size) or 48
+    local slotSize = math.max(36, math.floor(baseSlotSize * 0.9))
+    local padding = 6
+    local gap = 5
 
     local barWidth = slotsForLayout * slotSize + (slotsForLayout - 1) * gap + padding * 2
     local titleHeight = 0
@@ -93,54 +94,13 @@ function Hotbar.draw(context, player)
 
     local barHeight = slotSize + padding * 2 + titleHeight
     local x = (screenWidth - barWidth) * 0.5
-    local y = screenHeight - barHeight - 20
+    local y = screenHeight - barHeight - 16
 
     -- Background
     set_color(window_colors.shadow or { 0, 0, 0, 0.4 })
     love.graphics.rectangle("fill", x, y + 2, barWidth, barHeight, 4, 4)
     set_color(window_colors.background or { 0.02, 0.02, 0.04, 0.9 })
     love.graphics.rectangle("fill", x, y, barWidth, barHeight, 4, 4)
-
-    local statusBarHeight = math.max(16, math.floor(slotSize * 0.35))
-    local statusBarGap = 6
-    local statusBarY = y - statusBarGap - statusBarHeight
-
-    set_color(window_colors.shadow or { 0, 0, 0, 0.35 })
-    love.graphics.rectangle("fill", x, statusBarY + 2, barWidth, statusBarHeight, 4, 4)
-    set_color(window_colors.surface or window_colors.background or { 0.05, 0.07, 0.10, 0.95 })
-    love.graphics.rectangle("fill", x, statusBarY, barWidth, statusBarHeight, 4, 4)
-
-    local statusEffects = (player and player.statusEffects) or (player and player.status_effects)
-    if type(statusEffects) == "table" and next(statusEffects) ~= nil then
-        local icons = {}
-        local count = 0
-        for _, effect in pairs(statusEffects) do
-            count = count + 1
-            icons[count] = effect
-            if count >= 8 then
-                break
-            end
-        end
-
-        if count > 0 then
-            local iconSize = math.min(statusBarHeight - 8, slotSize * 0.5)
-            local totalWidth = count * iconSize + (count - 1) * 4
-            local startX = x + (barWidth - totalWidth) * 0.5
-            local iconY = statusBarY + (statusBarHeight - iconSize) * 0.5
-
-            for i = 1, count do
-                local effect = icons[i]
-                local iconX = startX + (i - 1) * (iconSize + 4)
-                set_color(window_colors.surface_subtle or { 0.03, 0.04, 0.07, 0.9 })
-                love.graphics.rectangle("fill", iconX, iconY, iconSize, iconSize, 3, 3)
-
-                local icon = effect.icon
-                if icon then
-                    draw_item_icon(icon, iconX + 2, iconY + 2, iconSize - 4)
-                end
-            end
-        end
-    end
 
     local contentY = y + padding
 

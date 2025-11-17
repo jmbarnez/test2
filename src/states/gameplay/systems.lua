@@ -2,9 +2,7 @@ local UIStateManager = require("src.ui.state_manager")
 ---@diagnostic disable: undefined-global
 
 local tiny = require("libs.tiny")
-local Intent = require("src.input.intent")
 local GameContext = require("src.states.gameplay.context")
-local createLocalInputSystem = require("src.systems.input_local")
 local createMovementSystem = require("src.systems.movement")
 local createRenderSystem = require("src.renderers.render")
 local createPlayerControlSystem = require("src.systems.player_control")
@@ -127,7 +125,6 @@ local function ensure_world(state)
     if not state.world then
         state.world = tiny.world()
     end
-    Intent.ensureContainer(state)
 end
 
 local function reset_ui_input(state)
@@ -227,11 +224,6 @@ function Systems.initialize(state, damageCallback)
 
     state.damageEntity = baseContext.damageEntity
 
-    state.inputSystem = state.world:addSystem(createLocalInputSystem(GameContext.extend(baseContext, {
-        camera = state.camera,
-        uiInput = state.uiInput,
-    })))
-
     state.controlSystem = state.world:addSystem(createPlayerControlSystem(GameContext.extend(baseContext, {
         camera = state.camera,
         engineTrail = state.engineTrail,
@@ -276,7 +268,6 @@ function Systems.teardown(state)
         state.uiInput = nil
     end
 
-    state.controlSystem = nil
     state.spawnerSystem = nil
     state.enemySpawnerSystem = nil
     state.proceduralShipSpawnerSystem = nil

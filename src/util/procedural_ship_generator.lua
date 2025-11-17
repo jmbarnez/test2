@@ -4,6 +4,52 @@ local math_util = require("src.util.math")
 
 local generator = {}
 
+local function clamp(value, min_value, max_value)
+    if value < min_value then
+        return min_value
+    end
+    if value > max_value then
+        return max_value
+    end
+    return value
+end
+
+local function adjust_color(color, delta, alpha)
+    local base = color or { 1, 1, 1, 1 }
+    local r = base[1] or 1
+    local g = base[2] or r
+    local b = base[3] or r
+    local a = base[4] or 1
+
+    if delta and delta ~= 0 then
+        if delta > 0 then
+            r = r + (1 - r) * delta
+            g = g + (1 - g) * delta
+            b = b + (1 - b) * delta
+        else
+            local factor = 1 + delta
+            r = r * factor
+            g = g * factor
+            b = b * factor
+        end
+    end
+
+    if alpha ~= nil then
+        a = alpha
+    end
+
+    return {
+        clamp(r, 0, 1),
+        clamp(g, 0, 1),
+        clamp(b, 0, 1),
+        clamp(a, 0, 1),
+    }
+end
+
+local function random_bool(chance)
+    return love.math.random() < (chance or 0.5)
+end
+
 local TAU = math_util.TAU
 
 -- Color palettes for variety
@@ -193,6 +239,81 @@ local HULL_TEMPLATES = {
             -shoulder * scale, -0.3 * scale,
         }
     end,
+    -- Chevron (wide striker)
+    chevron = function(scale)
+        local spread = 0.8 + love.math.random() * 0.18
+        local mid = 0.5 + love.math.random() * 0.12
+        local tail = 1.1 + love.math.random() * 0.24
+        return {
+            0, -1.25 * scale,
+            spread * scale, -0.25 * scale,
+            mid * scale, 0.0 * scale,
+            0.55 * scale, tail * scale,
+            -0.55 * scale, tail * scale,
+            -mid * scale, 0.0 * scale,
+            -spread * scale, -0.25 * scale,
+        }
+    end,
+    -- Hexagon (armored platform)
+    hexagon = function(scale)
+        local width = 0.92 + love.math.random() * 0.16
+        local upper = 0.45 + love.math.random() * 0.12
+        local tail = 1.05 + love.math.random() * 0.2
+        return {
+            0, -1.05 * scale,
+            width * scale, -0.38 * scale,
+            width * scale, upper * scale,
+            0.45 * scale, tail * scale,
+            -0.45 * scale, tail * scale,
+            -width * scale, upper * scale,
+            -width * scale, -0.38 * scale,
+        }
+    end,
+    -- Trident (split prow)
+    trident = function(scale)
+        local nose = 1.3 + love.math.random() * 0.2
+        local inner = 0.36 + love.math.random() * 0.12
+        local outer = 0.78 + love.math.random() * 0.18
+        local tail = 1.05 + love.math.random() * 0.22
+        return {
+            0, -nose * scale,
+            inner * scale, -0.55 * scale,
+            outer * scale, 0.15 * scale,
+            0.52 * scale, tail * scale,
+            -0.52 * scale, tail * scale,
+            -outer * scale, 0.15 * scale,
+            -inner * scale, -0.55 * scale,
+        }
+    end,
+    -- Blade (long interceptor)
+    blade = function(scale)
+        local nose = 1.45 + love.math.random() * 0.25
+        local waist = 0.22 + love.math.random() * 0.08
+        local mid = 0.42 + love.math.random() * 0.1
+        local tail = 1.1 + love.math.random() * 0.24
+        return {
+            0, -nose * scale,
+            waist * scale, -0.25 * scale,
+            mid * scale, tail * scale,
+            -mid * scale, tail * scale,
+            -waist * scale, -0.25 * scale,
+        }
+    end,
+    -- X-wing (cross guard)
+    x_wing = function(scale)
+        local wing = 1.0 + love.math.random() * 0.2
+        local mid = 0.5 + love.math.random() * 0.12
+        local tail = 1.15 + love.math.random() * 0.2
+        return {
+            0, -1.15 * scale,
+            wing * scale, -0.45 * scale,
+            mid * scale, -0.1 * scale,
+            0.7 * scale, tail * scale,
+            -0.7 * scale, tail * scale,
+            -mid * scale, -0.1 * scale,
+            -wing * scale, -0.45 * scale,
+        }
+    end,
 }
 
 local HULL_TEMPLATE_KEYS = {
@@ -206,6 +327,11 @@ local HULL_TEMPLATE_KEYS = {
     "manta",
     "hammerhead",
     "kite",
+    "chevron",
+    "hexagon",
+    "trident",
+    "blade",
+    "x_wing",
 }
 
 local function random_choice(tbl)
@@ -254,7 +380,173 @@ local function generate_engine_points(hull_points, scale)
         -rear_width * scale, 0.8 * scale,
         rear_width * scale, 0.8 * scale,
         0, (0.8 + engine_length) * scale,
+    }, engine_length
+end
+
+local function add_decals(parts, palette, scale)
+    palette = palette or {}
+
+    if random_bool(0.65) then
+        local stripe_width = (0.22 + love.math.random() * 0.18) * scale
+        local stripe_top = (0.25 + love.math.random() * 0.35) * scale
+        local stripe_bottom = (0.55 + love.math.random() * 0.35) * scale
+
+        parts[#parts + 1] = {
+            name = "stripe_primary",
+            type = "polygon",
+            points = {
+                -stripe_width, -stripe_top,
+                stripe_width, -stripe_top,
+                stripe_width * 0.65, stripe_bottom,
+                -stripe_width * 0.65, stripe_bottom,
+            },
+            fill = adjust_color(palette.accent, 0.18, 0.78),
+            stroke = adjust_color(palette.core, -0.1, 0.9),
+            strokeWidth = 1.2,
+        }
+    end
+
+    if random_bool(0.45) then
+        local tip_length = (0.18 + love.math.random() * 0.2) * scale
+        local tip_width = (0.24 + love.math.random() * 0.12) * scale
+
+        parts[#parts + 1] = {
+            name = "nose_cap",
+            type = "polygon",
+            points = {
+                0, -(1.05 + tip_length) * scale,
+                tip_width * 0.5, -1.0 * scale,
+                -tip_width * 0.5, -1.0 * scale,
+            },
+            fill = adjust_color(palette.core, 0.25, 0.85),
+            stroke = adjust_color(palette.accent, 0.15, 0.9),
+            strokeWidth = 1.1,
+        }
+    end
+
+    if random_bool(0.5) then
+        local side_anchor = (0.6 + love.math.random() * 0.2) * scale
+        local side_width = (0.08 + love.math.random() * 0.06) * scale
+        local side_top = (0.1 + love.math.random() * 0.25) * scale
+        local side_bottom = (0.55 + love.math.random() * 0.25) * scale
+
+        parts[#parts + 1] = {
+            name = "side_stripe",
+            type = "polygon",
+            mirror = true,
+            points = {
+                side_anchor - side_width, -side_top,
+                side_anchor + side_width, -side_top * 0.7,
+                side_anchor + side_width * 0.8, side_bottom,
+                side_anchor - side_width * 0.6, side_bottom,
+            },
+            fill = adjust_color(palette.hull, 0.1, 0.65),
+            stroke = adjust_color(palette.accent, 0.05, 0.75),
+            strokeWidth = 0.9,
+        }
+    end
+end
+
+local function add_greebles(parts, palette, scale)
+    palette = palette or {}
+
+    if random_bool(0.55) then
+        local base = (0.65 + love.math.random() * 0.18) * scale
+        local tip = base + (0.16 + love.math.random() * 0.1) * scale
+        local front_y = (0.18 + love.math.random() * 0.18) * scale
+        local back_y = (0.6 + love.math.random() * 0.25) * scale
+
+        parts[#parts + 1] = {
+            name = "wing_fin",
+            type = "polygon",
+            mirror = true,
+            points = {
+                base, front_y,
+                tip, front_y + 0.08 * scale,
+                tip - 0.04 * scale, back_y,
+                base - 0.06 * scale, back_y - 0.12 * scale,
+            },
+            fill = adjust_color(palette.hull, -0.08, 0.92),
+            stroke = adjust_color(palette.accent, 0.12, 0.85),
+            strokeWidth = 1.1,
+        }
+    end
+
+    if random_bool(0.35) then
+        local mast_base = (1.02 + love.math.random() * 0.12) * scale
+        local mast_tip = mast_base + (0.24 + love.math.random() * 0.12) * scale
+
+        parts[#parts + 1] = {
+            name = "nose_antenna",
+            type = "polygon",
+            points = {
+                -0.05 * scale, -mast_base,
+                0.05 * scale, -mast_base,
+                0.02 * scale, -mast_tip,
+                -0.02 * scale, -mast_tip,
+            },
+            fill = adjust_color(palette.accent, 0.22, 0.7),
+            stroke = false,
+        }
+    end
+end
+
+local function add_thruster_layers(parts, palette, scale, engine_length)
+    palette = palette or {}
+    engine_length = engine_length or 0.4
+
+    local base_y = (0.8 + engine_length) * scale
+
+    local glow_color = adjust_color(palette.engine, 0.35, 0.45)
+    local glow_radius_x = (0.24 + love.math.random() * 0.12) * scale
+    local glow_radius_y = (0.32 + engine_length * 0.6 + love.math.random() * 0.08) * scale
+
+    parts[#parts + 1] = {
+        name = "engine_glow",
+        type = "ellipse",
+        centerX = 0,
+        centerY = base_y,
+        radiusX = glow_radius_x,
+        radiusY = glow_radius_y,
+        fill = glow_color,
+        stroke = false,
+        blend = "add",
     }
+
+    if random_bool(0.85) then
+        local core_color = adjust_color(palette.engine, 0.55, 0.85)
+        local core_radius = (0.1 + love.math.random() * 0.08) * scale
+
+        parts[#parts + 1] = {
+            name = "engine_core",
+            type = "ellipse",
+            centerX = 0,
+            centerY = base_y + 0.04 * scale,
+            radiusX = core_radius,
+            radiusY = core_radius * (1.2 + love.math.random() * 0.4),
+            fill = core_color,
+            stroke = false,
+            blend = "add",
+        }
+    end
+
+    if random_bool(0.55) then
+        local trail_length = (0.4 + engine_length * 0.6 + love.math.random() * 0.2) * scale
+        local trail_width = (0.12 + love.math.random() * 0.05) * scale
+
+        parts[#parts + 1] = {
+            name = "engine_trail",
+            type = "polygon",
+            points = {
+                -trail_width, base_y,
+                trail_width, base_y,
+                0, base_y + trail_length,
+            },
+            fill = adjust_color(palette.engine, 0.5, 0.28),
+            stroke = false,
+            blend = "add",
+        }
+    end
 end
 
 local function generate_ship_parts(hull_points, scale, palette)
@@ -283,7 +575,7 @@ local function generate_ship_parts(hull_points, scale, palette)
     })
     
     -- Engine glow
-    local engine_points = generate_engine_points(hull_points, scale)
+    local engine_points, engine_length = generate_engine_points(hull_points, scale)
     table.insert(parts, {
         name = "engine",
         type = "polygon",
@@ -292,7 +584,11 @@ local function generate_ship_parts(hull_points, scale, palette)
         stroke = palette.accent,
         strokeWidth = 1,
     })
-    
+
+    add_decals(parts, palette, scale)
+    add_greebles(parts, palette, scale)
+    add_thruster_layers(parts, palette, scale, engine_length)
+
     return parts
 end
 
@@ -396,6 +692,60 @@ local function generate_weapon_mount(scale)
     }
 end
 
+local WEAPON_LOADOUTS = {
+    {
+        id = "laser_turret", -- Pulse laser turret
+        weight = 5,
+    },
+    {
+        id = "laser_beam",
+        weight = 2,
+        min_size = "medium",
+    },
+    {
+        id = "cannon",
+        weight = 3,
+        min_size = "small",
+    },
+}
+
+local SIZE_ORDER = {
+    small = 1,
+    medium = 2,
+    large = 3,
+}
+
+local function choose_weapon(size_class)
+    local class_rank = SIZE_ORDER[size_class] or 2
+    local total = 0
+    for i = 1, #WEAPON_LOADOUTS do
+        local loadout = WEAPON_LOADOUTS[i]
+        local min_rank = loadout.min_size and SIZE_ORDER[loadout.min_size] or 1
+        if class_rank >= min_rank then
+            total = total + (loadout.weight or 1)
+        end
+    end
+
+    if total <= 0 then
+        return "laser_turret"
+    end
+
+    local roll = love.math.random() * total
+    local cumulative = 0
+    for i = 1, #WEAPON_LOADOUTS do
+        local loadout = WEAPON_LOADOUTS[i]
+        local min_rank = loadout.min_size and SIZE_ORDER[loadout.min_size] or 1
+        if class_rank >= min_rank then
+            cumulative = cumulative + (loadout.weight or 1)
+            if roll <= cumulative then
+                return loadout.id
+            end
+        end
+    end
+
+    return "laser_turret"
+end
+
 local function generate_ai_params(size_class)
     local ai = {
         behavior = "hunter",
@@ -448,6 +798,7 @@ function generator.generate(params)
     
     -- Generate weapon mount
     local weapon_mount = generate_weapon_mount(scale)
+    local weapon_id = choose_weapon(size_class)
     
     -- Generate unique ID
     local ship_id = string.format("proc_ship_%s_%d", size_class, seed)
@@ -501,7 +852,7 @@ function generator.generate(params)
         },
         weapons = {
             {
-                id = "laser_turret",
+                id = weapon_id,
                 useDefaultWeapon = true,
                 mount = weapon_mount,
             },

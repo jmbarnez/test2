@@ -350,7 +350,8 @@ local function initialize_energy(entity)
     energy.current = maxEnergy > 0 and math_util.clamp(tonumber(energy.current) or maxEnergy, 0, maxEnergy) or 0
     energy.regen = math.max(0, tonumber(energy.regen) or 0)
     energy.thrustDrain = math.max(0, tonumber(energy.thrustDrain) or stats.main_thrust or 0)
-    energy.rechargeDelay, energy.rechargeTimer = 0, 0
+    energy.rechargeDelay = math.max(0, tonumber(energy.rechargeDelay) or 0)
+    energy.rechargeTimer = energy.rechargeDelay
     energy.isDepleted = energy.current <= 0
     energy.percent = maxEnergy > 0 and (energy.current / maxEnergy) or 0
 end
@@ -370,9 +371,15 @@ local function update_energy(entity, dt)
 
     local current = tonumber(energy.current) or maxEnergy
     local regenRate = math.max(0, tonumber(energy.regen) or 0)
+    local rechargeTimer = math.max(0, tonumber(energy.rechargeTimer) or 0)
 
-    -- Only regenerate for players
-    if entity.player and regenRate > 0 then
+    if rechargeTimer > 0 then
+        rechargeTimer = math.max(0, rechargeTimer - dt)
+        energy.rechargeTimer = rechargeTimer
+    end
+
+    -- Only regenerate for players, and only after recharge delay expires
+    if rechargeTimer <= 0 and entity.player and regenRate > 0 then
         current = math.min(maxEnergy, current + regenRate * dt)
     else
         current = math.min(maxEnergy, current)

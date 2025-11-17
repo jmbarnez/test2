@@ -5,6 +5,7 @@
 
 local tiny = require("libs.tiny")
 local explosion_renderer = require("src.renderers.explosion")
+local temporal_field_renderer = require("src.renderers.temporal_field")
 
 ---@diagnostic disable-next-line: undefined-global
 local love = love
@@ -18,9 +19,23 @@ return function(context)
     -- Get reference to projectile system for its particles
     local projectileSystem = context and context.projectileSystem
     local weaponBeamSystem = context and context.weaponBeamSystem
+    local camera = context and (context.camera or (context.state and context.state.camera))
     
     return tiny.system {
         draw = function(self)
+            -- Draw temporal field bubbles for entities with active fields
+            local world = self.world
+            if world and world.entities then
+                local entities = world.entities
+                for i = 1, #entities do
+                    local entity = entities[i]
+                    if entity and entity._temporalField and entity._temporalField.active then
+                        temporal_field_renderer.draw_temporal_field(entity, camera)
+                    end
+                end
+            end
+            
+            -- Continue with other effects
             -- Draw projectile impact particles
             if projectileSystem then
                 local impactParticles = projectileSystem.impactParticles

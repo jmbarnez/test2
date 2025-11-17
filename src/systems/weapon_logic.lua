@@ -2,7 +2,6 @@
 
 local tiny = require("libs.tiny")
 local vector = require("src.util.vector")
-local Intent = require("src.input.intent")
 local weapon_common = require("src.util.weapon_common")
 local weapon_beam = require("src.util.weapon_beam")
 
@@ -68,8 +67,6 @@ return function(context)
             local activeTarget
             local isLocalPlayer = false
 
-            local intent = Intent.get(intentHolder, entity.playerId)
-
             if entity.player then
                 if localPlayerId then
                     isLocalPlayer = entity.playerId == localPlayerId
@@ -77,11 +74,7 @@ return function(context)
                     isLocalPlayer = entity == localPlayerEntity
                 end
 
-                if intent then
-                    fire = not not intent.firePrimary
-                    targetX = intent.aimX or targetX
-                    targetY = intent.aimY or targetY
-                elseif not isLocalPlayer then
+                if not isLocalPlayer then
                     fire = weapon.firing or weapon.alwaysFire
                     if weapon.fireMode == "hitscan" and weapon.beamTimer and weapon.beamTimer > 0 then
                         fire = true
@@ -91,8 +84,8 @@ return function(context)
                 fire = weapon.firing or weapon.alwaysFire
             end
 
-            if (not targetX or not targetY)
-                and isLocalPlayer
+            -- Poll mouse position for local player aiming
+            if isLocalPlayer
                 and love and love.mouse and love.mouse.getPosition
                 and not mouseCaptured
             then
@@ -107,8 +100,8 @@ return function(context)
                         my = cam.y or 0
                     end
                 end
-                targetX = targetX or mx
-                targetY = targetY or my
+                targetX = mx
+                targetY = my
             end
 
             if isLocalPlayer and not fire and love and love.mouse and love.mouse.isDown then

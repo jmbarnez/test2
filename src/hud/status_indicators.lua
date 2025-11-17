@@ -7,6 +7,151 @@ local g = love and love.graphics
 
 local StatusIndicators = {}
 
+local function set_rgba(color, alphaScale)
+    if not g then
+        return
+    end
+
+    if not color then
+        local alpha = alphaScale or 1
+        g.setColor(1, 1, 1, alpha)
+        return
+    end
+
+    local r = color[1] or 1
+    local c_g = color[2] or r
+    local b = color[3] or r
+    local a = color[4] or 1
+
+    if alphaScale then
+        a = a * alphaScale
+    end
+
+    g.setColor(math.min(1, r), math.min(1, c_g), math.min(1, b), math.max(0, math.min(1, a)))
+end
+
+local ICON_DRAWERS = {}
+
+function ICON_DRAWERS.alert(cx, cy, size, color)
+    set_rgba(color)
+    local half = size * 0.45
+    local height = size * 0.9
+    g.polygon("fill", cx, cy - height * 0.5, cx - half, cy + height * 0.5, cx + half, cy + height * 0.5)
+
+    set_rgba({ 0, 0, 0, 0.9 })
+    local barWidth = math.max(2, size * 0.16)
+    g.rectangle("fill", cx - barWidth * 0.5, cy - height * 0.1, barWidth, height * 0.38, 1, 1)
+    g.rectangle("fill", cx - barWidth * 0.5, cy + height * 0.3, barWidth, height * 0.12, 1, 1)
+end
+
+function ICON_DRAWERS.reticle(cx, cy, size, color)
+    set_rgba(color)
+    local radius = size * 0.45
+    g.setLineWidth(math.max(1, size * 0.12))
+    g.circle("line", cx, cy, radius)
+
+    g.setLineWidth(math.max(1, size * 0.08))
+    local arm = radius * 0.75
+    g.line(cx - arm, cy, cx - radius, cy)
+    g.line(cx + arm, cy, cx + radius, cy)
+    g.line(cx, cy - arm, cx, cy - radius)
+    g.line(cx, cy + arm, cx, cy + radius)
+
+    g.setLineWidth(1)
+end
+
+function ICON_DRAWERS.heart(cx, cy, size, color)
+    set_rgba(color)
+    local radius = size * 0.32
+    g.circle("fill", cx - radius, cy - radius * 0.4, radius)
+    g.circle("fill", cx + radius, cy - radius * 0.4, radius)
+    g.polygon("fill",
+        cx - radius * 2, cy - radius * 0.1,
+        cx, cy + radius * 2.4,
+        cx + radius * 2, cy - radius * 0.1
+    )
+end
+
+function ICON_DRAWERS.heat(cx, cy, size, color)
+    set_rgba(color)
+    g.setLineWidth(math.max(1, size * 0.14))
+    local waveHeight = size * 0.4
+    local spacing = size * 0.3
+    for i = -1, 1 do
+        local offset = i * spacing
+        local top = cy - waveHeight * 0.5
+        local bottom = cy + waveHeight * 0.5
+        g.line(cx + offset - size * 0.2, bottom, cx + offset, top)
+        g.line(cx + offset, top, cx + offset + size * 0.2, bottom)
+    end
+    g.setLineWidth(1)
+end
+
+function ICON_DRAWERS.shield(cx, cy, size, color)
+    set_rgba(color)
+    local radius = size * 0.48
+    g.setLineWidth(math.max(1, size * 0.1))
+    g.circle("line", cx, cy, radius)
+    g.circle("line", cx, cy, radius * 0.65)
+    g.setLineWidth(1)
+end
+
+function ICON_DRAWERS.bolt(cx, cy, size, color)
+    set_rgba(color)
+    local half = size * 0.5
+    g.polygon("fill",
+        cx - half * 0.25, cy - half,
+        cx + half * 0.15, cy - half * 0.15,
+        cx - half * 0.05, cy - half * 0.15,
+        cx + half * 0.25, cy + half,
+        cx - half * 0.15, cy + half * 0.15,
+        cx + half * 0.05, cy + half * 0.15
+    )
+end
+
+function ICON_DRAWERS.offline(cx, cy, size, color)
+    set_rgba(color)
+    local radius = size * 0.45
+    g.setLineWidth(math.max(1, size * 0.12))
+    g.circle("line", cx, cy, radius)
+    g.setLineWidth(math.max(1, size * 0.18))
+    g.line(cx - radius * 0.7, cy + radius * 0.7, cx + radius * 0.7, cy - radius * 0.7)
+    g.setLineWidth(1)
+end
+
+function ICON_DRAWERS.fault(cx, cy, size, color)
+    set_rgba(color)
+    local half = size * 0.45
+    g.polygon("fill",
+        cx, cy - half,
+        cx + half, cy,
+        cx, cy + half,
+        cx - half, cy
+    )
+
+    set_rgba({ 0, 0, 0, 0.85 })
+    local barWidth = math.max(2, size * 0.16)
+    g.rectangle("fill", cx - barWidth * 0.5, cy - half * 0.4, barWidth, half * 0.65, 1, 1)
+    g.rectangle("fill", cx - barWidth * 0.5, cy + half * 0.15, barWidth, half * 0.25, 1, 1)
+end
+
+local function draw_indicator_icon(iconKey, cx, cy, size, color)
+    if not g then
+        return
+    end
+
+    local drawer = ICON_DRAWERS[iconKey]
+    if not drawer then
+        return
+    end
+
+    g.push("all")
+    g.setLineJoin("bevel")
+    g.setLineStyle("smooth")
+    drawer(cx, cy, size, color)
+    g.pop()
+end
+
 -- Configuration for status thresholds
 local THRESHOLDS = {
     CRITICAL_HEALTH = 0.15,  -- 15% or below
@@ -49,7 +194,8 @@ local INDICATORS = {
         flash = false,
     },
     low_shield = {
-        label = "Low Shield",\n+        icon = "shield",
+        label = "Low Shield",
+        icon = "shield",
         color = { 0.2, 0.8, 1.0, 1.0 },
         priority = 5,
         flash = false,
@@ -195,27 +341,29 @@ local function draw_indicator_badge(x, y, width, height, indicator, time)
     g.setLineWidth(2)
     g.rectangle("line", x + 1, y + 1, width - 2, height - 2, 3, 3)
 
-    -- Icon
-    if indicator.icon and fonts.body then
-        g.setFont(fonts.body)
+    -- Icon and label
+    if indicator.icon then
+        local iconSize = math.max(14, height - 12)
+        local iconCx = x + 12 + iconSize * 0.5
+        local iconCy = y + height * 0.5
+
         local iconColor = indicator.color
         if indicator.flash then
             local phase = math.sin(time * indicator.flashSpeed) * 0.5 + 0.5
             iconColor = {
-                indicator.color[1] * (0.7 + phase * 0.3),
-                indicator.color[2] * (0.7 + phase * 0.3),
-                indicator.color[3] * (0.7 + phase * 0.3),
-                1.0
+                indicator.color[1] * (0.75 + phase * 0.25),
+                indicator.color[2] * (0.75 + phase * 0.25),
+                indicator.color[3] * (0.75 + phase * 0.25),
+                indicator.color[4] or 1.0,
             }
         end
-        set_color(iconColor)
-        local iconW = fonts.body:getWidth(indicator.icon)
-        g.print(indicator.icon, x + 8, y + (height - fonts.body:getHeight()) * 0.5)
 
-        -- Label
+        draw_indicator_icon(indicator.icon, iconCx, iconCy, iconSize, iconColor)
+
         if fonts.small then
             g.setFont(fonts.small)
-            local labelX = x + 8 + iconW + 6
+            local labelX = iconCx + iconSize * 0.6 + 8
+            set_color(theme.colors.hud.status_text or { 0.85, 0.89, 0.93, 1 })
             g.print(indicator.label, labelX, y + (height - fonts.small:getHeight()) * 0.5)
         end
     end

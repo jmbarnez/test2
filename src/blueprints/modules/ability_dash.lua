@@ -1,3 +1,9 @@
+local BehaviorRegistry = require("src.abilities.behavior_registry")
+local dash_behavior = require("src.abilities.behaviors.dash")
+
+-- Register the dash behavior
+BehaviorRegistry.register("dash", dash_behavior)
+
 local blueprint = {
     category = "modules",
     id = "ability_dash",

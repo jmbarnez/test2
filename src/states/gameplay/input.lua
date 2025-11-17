@@ -66,6 +66,21 @@ function Input.wheelmoved(state, x, y)
     end
 
     cam.zoom = clampedZoom
+    
+    -- Clear any active afterburner zoom restoration to prevent rubberbanding
+    local PlayerManager = require("src.player.manager")
+    local player = PlayerManager.getCurrentShip(state)
+    if player and player._abilityState then
+        for _, abilityState in pairs(player._abilityState) do
+            if abilityState and abilityState._afterburnerZoomData then
+                abilityState._afterburnerZoomData = nil
+            end
+        end
+    end
+    if state._afterburnerZoomOwner then
+        state._afterburnerZoomOwner = nil
+    end
+    
     View.updateCamera(state)
 end
 

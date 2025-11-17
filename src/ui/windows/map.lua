@@ -660,34 +660,48 @@ function map_window.draw(context)
         return false
     end
 
-    if context and context.uiInput then
-        if frame.dragging or state.mapDragging then
-            context.uiInput.mouseCaptured = true
-        end
-    end
-
     local baseScale = math.min(rect.width / bounds.width, rect.height / bounds.height)
     local scale = baseScale * state.zoom
 
     clamp_center(state, bounds, rect, scale)
 
-    if justPressed and point_in_rect(mouseX, mouseY, rect) then
-        state.mapDragging = true
-        state.mapDragStartMouseX = mouseX
-        state.mapDragStartMouseY = mouseY
-        state.mapDragStartCenterX = state.centerX
-        state.mapDragStartCenterY = state.centerY
-    elseif not isMouseDown then
+    local insideMap = point_in_rect(mouseX, mouseY, rect)
+
+    if isMouseDown then
+        if not state.mapDragging and insideMap then
+            state.mapDragging = true
+            state.mapDragStartMouseX = mouseX
+            state.mapDragStartMouseY = mouseY
+            state.mapDragStartCenterX = state.centerX
+            state.mapDragStartCenterY = state.centerY
+        end
+    else
         state.mapDragging = false
     end
 
     if state.mapDragging and isMouseDown then
-        local dx = (mouseX - (state.mapDragStartMouseX or mouseX)) / scale
-        local dy = (mouseY - (state.mapDragStartMouseY or mouseY)) / scale
+        local startMouseX = state.mapDragStartMouseX or mouseX
+        local startMouseY = state.mapDragStartMouseY or mouseY
+        local startCenterX = state.mapDragStartCenterX or state.centerX
+        local startCenterY = state.mapDragStartCenterY or state.centerY
 
-        state.centerX = (state.mapDragStartCenterX or state.centerX) - dx
-        state.centerY = (state.mapDragStartCenterY or state.centerY) - dy
+        local dx = (mouseX - startMouseX) / scale
+        local dy = (mouseY - startMouseY) / scale
+
+        state.centerX = startCenterX - dx
+        state.centerY = startCenterY - dy
         clamp_center(state, bounds, rect, scale)
+    else
+        state.mapDragStartMouseX = nil
+        state.mapDragStartMouseY = nil
+        state.mapDragStartCenterX = nil
+        state.mapDragStartCenterY = nil
+    end
+
+    if context and context.uiInput then
+        if frame.dragging or state.mapDragging then
+            context.uiInput.mouseCaptured = true
+        end
     end
 
     state._was_mouse_down = isMouseDown

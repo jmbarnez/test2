@@ -6,6 +6,7 @@ local PlayerManager = require("src.player.manager")
 local CargoRendering = require("src.ui.windows.cargo.rendering")
 local CargoData = require("src.ui.windows.cargo.data")
 local loader = require("src.blueprints.loader")
+local utf8 = require("utf8")
 
 ---@diagnostic disable-next-line: undefined-global
 local love = love
@@ -18,6 +19,443 @@ local window_colors = theme.colors.window
 local theme_spacing = theme.spacing
 local set_color = theme.utils.set_color
 local point_in_rect = geometry.point_in_rect
+
+local SORT_MODES = {
+    name = {
+        id = "name",
+        label = "Name A-Z",
+        next = "price_asc",
+    },
+    price_asc = {
+        id = "price_asc",
+        label = "Price ↑",
+        next = "price_desc",
+    },
+    price_desc = {
+        id = "price_desc",
+        label = "Price ↓",
+        next = "name",
+    },
+}
+
+local function normalize_category_id(value)
+    if type(value) ~= "string" or value == "" then
+        return nil
+    end
+    return value:lower()
+end
+
+local function format_category_label(id)
+    if not id or id == "" then
+        return "Other"
+    end
+    local label = tostring(id)
+    label = label:gsub("[:_]+", " ")
+    label = label:gsub("%s+", " ")
+    label = label:gsub("(%a)(%w*)", function(first, rest)
+        return first:upper() .. rest:lower()
+    end)
+    return label
+end
+
+local function resolve_item_definition(item)
+    if not item then
+        return nil
+    end
+    return Items.get(item.id)
+end
+
+local function resolve_item_value(item, definition)
+    if item and item.value ~= nil then
+        return item.value
+    end
+    if definition and definition.value ~= nil then
+        return definition.value
+    end
+    return 0
+end
+
+local function resolve_item_category(item, definition)
+    if not item then
+        return "other"
+    end
+    local category = item.blueprintCategory
+        or (definition and definition.blueprintCategory)
+        or item.type
+        or (definition and definition.type)
+        or "other"
+    return normalize_category_id(category) or "other"
+end
+
+local function ensure_category_options(state, shopItems)
+    local seen = {}
+    local options = {
+        { id = "all", label = "All Items" },
+    }
+
+    for i = 1, #shopItems do
+        local item = shopItems[i]
+        local definition = resolve_item_definition(item)
+        local categoryId = resolve_item_category(item, definition)
+        if categoryId ~= "all" and not seen[categoryId] then
+            seen[categoryId] = true
+            options[#options + 1] = {
+                id = categoryId,
+                label = format_category_label(categoryId),
+            }
+        end
+    end
+
+    table.sort(options, function(a, b)
+        if a.id == "all" then
+            return true
+        end
+        if b.id == "all" then
+            return false
+        end
+        return a.label < b.label
+    end)
+
+    state.shopCategory = state.shopCategory or "all"
+    local validSelected = state.shopCategory == "all"
+    if not validSelected then
+        for i = 1, #options do
+            if options[i].id == state.shopCategory then
+                validSelected = true
+                break
+            end
+        end
+    end
+    if not validSelected then
+        state.shopCategory = "all"
+    end
+
+    return options
+end
+
+local function matches_search(item, definition, lowerQuery)
+    if not lowerQuery or lowerQuery == "" then
+        return true
+    end
+
+    local name = (item and item.name) or (definition and definition.name) or ""
+    if name:lower():find(lowerQuery, 1, true) then
+        return true
+    end
+
+    local description = definition and definition.description
+    if type(description) == "string" and description:lower():find(lowerQuery, 1, true) then
+        return true
+    end
+
+    local id = item and item.id
+    if type(id) == "string" and id:lower():find(lowerQuery, 1, true) then
+        return true
+    end
+
+    return false
+end
+
+local function matches_category(item, definition, selectedCategory)
+    if not selectedCategory or selectedCategory == "all" then
+        return true
+    end
+    local categoryId = resolve_item_category(item, definition)
+    return categoryId == selectedCategory
+end
+
+local function filter_shop_items(shopItems, state)
+    local filtered = {}
+    local lowerQuery = state.shopSearchQuery and state.shopSearchQuery:lower()
+    local selectedCategory = state.shopCategory or "all"
+
+    for i = 1, #shopItems do
+        local item = shopItems[i]
+        local definition = resolve_item_definition(item)
+        if matches_category(item, definition, selectedCategory) and matches_search(item, definition, lowerQuery) then
+            filtered[#filtered + 1] = item
+        end
+    end
+
+    return filtered
+end
+
+local function sort_shop_items(items, sortMode)
+    local info = SORT_MODES[sortMode] or SORT_MODES.name
+    if info.id == "name" then
+        table.sort(items, function(a, b)
+            local nameA = tostring((a and a.name) or ""):lower()
+            local nameB = tostring((b and b.name) or ""):lower()
+            if nameA == nameB then
+                return tostring(a and a.id or "") < tostring(b and b.id or "")
+            end
+            return nameA < nameB
+        end)
+    elseif info.id == "price_asc" then
+        table.sort(items, function(a, b)
+            local defA = resolve_item_definition(a)
+            local defB = resolve_item_definition(b)
+            local valueA = resolve_item_value(a, defA)
+            local valueB = resolve_item_value(b, defB)
+            if valueA == valueB then
+                local nameA = tostring((a and a.name) or "")
+                local nameB = tostring((b and b.name) or "")
+                return nameA < nameB
+            end
+            return valueA < valueB
+        end)
+    elseif info.id == "price_desc" then
+        table.sort(items, function(a, b)
+            local defA = resolve_item_definition(a)
+            local defB = resolve_item_definition(b)
+            local valueA = resolve_item_value(a, defA)
+            local valueB = resolve_item_value(b, defB)
+            if valueA == valueB then
+                local nameA = tostring((a and a.name) or "")
+                local nameB = tostring((b and b.name) or "")
+                return nameA < nameB
+            end
+            return valueA > valueB
+        end)
+    end
+end
+
+local function ensure_shop_items(state)
+    if state._shopItems then
+        return state._shopItems
+    end
+
+    -- Pre-register module blueprints for the shop
+    local modules_to_stock = {
+        "ability_dash",
+        "ability_afterburner",
+        "shield_t1",
+    }
+    for _, moduleId in ipairs(modules_to_stock) do
+        local ok, blueprint = pcall(loader.load, "modules", moduleId)
+        if ok and blueprint then
+            Items.registerModuleBlueprint(blueprint)
+        end
+    end
+
+    local items = {}
+    for id, definition in Items.iterateDefinitions() do
+        if type(definition) == "table" and definition.id and definition.value ~= nil then
+            local instance = Items.instantiate(definition.id)
+            if instance then
+                items[#items + 1] = instance
+            end
+        end
+    end
+
+    state._shopItems = items
+    return items
+end
+
+local function clear_search_focus(context, state)
+    if not state.shopSearchActive then
+        return
+    end
+    state.shopSearchActive = false
+    local uiInput = context and context.uiInput
+    if uiInput then
+        uiInput.keyboardCaptured = false
+    end
+end
+
+local function draw_controls(context, state, fonts, inner_x, cursor_y, inner_width, mouse_x, mouse_y, just_pressed)
+    local uiInput = context and context.uiInput
+    state.shopSearchQuery = state.shopSearchQuery or ""
+    state.shopSortMode = state.shopSortMode or "name"
+    state.shopCategory = state.shopCategory or "all"
+
+    local searchHeight = (fonts.body and fonts.body:getHeight() or 16) + 12
+    local spacingX = theme_spacing.small or 8
+    local sortInfo = SORT_MODES[state.shopSortMode] or SORT_MODES.name
+    local sortLabel = "Sort: " .. sortInfo.label
+
+    local fontForWidth = fonts.body or love.graphics.getFont()
+    local sortTextWidth = fontForWidth:getWidth(sortLabel) + 24
+    local minSortWidth = 110
+    local buttonWidth = math.max(minSortWidth, math.min(sortTextWidth, inner_width))
+    local searchWidth = inner_width - buttonWidth - spacingX
+
+    if searchWidth < 120 then
+        buttonWidth = math.min(buttonWidth, inner_width)
+        searchWidth = math.max(0, inner_width - buttonWidth - spacingX)
+        if searchWidth == 0 then
+            spacingX = 0
+        end
+    end
+
+    local searchRect = {
+        x = inner_x,
+        y = cursor_y,
+        width = searchWidth,
+        height = searchHeight,
+    }
+
+    local sortRect = {
+        x = searchRect.x + searchRect.width + spacingX,
+        y = cursor_y,
+        width = buttonWidth,
+        height = searchHeight,
+    }
+
+    love.graphics.setFont(fonts.body or love.graphics.getFont())
+
+    local searchHovered = searchRect.width > 0 and searchRect.height > 0 and point_in_rect(mouse_x, mouse_y, searchRect)
+    local sortHovered = point_in_rect(mouse_x, mouse_y, sortRect)
+    local categoryClicked = false
+
+    if just_pressed then
+        if searchHovered and searchRect.width > 0 then
+            state.shopSearchActive = true
+            if uiInput then
+                uiInput.keyboardCaptured = true
+            end
+        elseif sortHovered then
+            local nextMode = sortInfo.next or "name"
+            if nextMode ~= state.shopSortMode then
+                state.shopSortMode = nextMode
+                state.scroll = 0
+            end
+            state.shopSearchActive = false
+            if uiInput then
+                uiInput.keyboardCaptured = false
+            end
+        end
+    end
+
+    if searchRect.width > 0 then
+        set_color(window_colors.input_background or { 0.06, 0.07, 0.1, 1 })
+        love.graphics.rectangle("fill", searchRect.x, searchRect.y, searchRect.width, searchRect.height, 4, 4)
+
+        set_color(window_colors.border or { 0.08, 0.08, 0.12, 0.8 })
+        love.graphics.setLineWidth(1)
+        love.graphics.rectangle("line", searchRect.x + 0.5, searchRect.y + 0.5, searchRect.width - 1, searchRect.height - 1, 4, 4)
+
+        local queryText = state.shopSearchQuery or ""
+        local placeholder = "Search shop"
+
+        if queryText == "" and not state.shopSearchActive then
+            set_color(window_colors.muted or { 0.5, 0.5, 0.55, 1 })
+            love.graphics.print(placeholder, searchRect.x + 8, searchRect.y + (searchRect.height - (fonts.body and fonts.body:getHeight() or 16)) * 0.5)
+        else
+            set_color(window_colors.text or { 0.85, 0.85, 0.9, 1 })
+            love.graphics.print(queryText, searchRect.x + 8, searchRect.y + (searchRect.height - (fonts.body and fonts.body:getHeight() or 16)) * 0.5)
+
+            if state.shopSearchActive then
+                local textWidth = (fonts.body or love.graphics.getFont()):getWidth(queryText)
+                local caretX = searchRect.x + 8 + textWidth + 2
+                local caretY = searchRect.y + 6
+                local caretHeight = searchRect.height - 12
+                set_color(window_colors.caret or window_colors.text or { 0.85, 0.85, 0.9, 1 })
+                love.graphics.rectangle("fill", caretX, caretY, 2, caretHeight)
+            end
+        end
+
+        if searchHovered then
+            love.graphics.setLineWidth(2)
+            set_color(window_colors.accent or { 0.2, 0.5, 0.9, 1 })
+            love.graphics.rectangle("line", searchRect.x + 0.5, searchRect.y + 0.5, searchRect.width - 1, searchRect.height - 1, 4, 4)
+        end
+    end
+
+    set_color(sortHovered and (window_colors.button_hover or window_colors.row_hover or { 0.12, 0.16, 0.22, 1 })
+        or window_colors.button or { 0.12, 0.16, 0.22, 1 })
+    love.graphics.rectangle("fill", sortRect.x, sortRect.y, sortRect.width, sortRect.height, 4, 4)
+
+    set_color(window_colors.border or { 0.08, 0.08, 0.12, 0.8 })
+    love.graphics.setLineWidth(1)
+    love.graphics.rectangle("line", sortRect.x + 0.5, sortRect.y + 0.5, sortRect.width - 1, sortRect.height - 1, 4, 4)
+
+    set_color(window_colors.text or { 0.85, 0.85, 0.9, 1 })
+    love.graphics.printf(sortLabel, sortRect.x, sortRect.y + (sortRect.height - (fonts.body and fonts.body:getHeight() or 16)) * 0.5, sortRect.width, "center")
+
+    if sortHovered then
+        love.graphics.setLineWidth(2)
+        set_color(window_colors.accent or { 0.2, 0.5, 0.9, 1 })
+        love.graphics.rectangle("line", sortRect.x + 0.5, sortRect.y + 0.5, sortRect.width - 1, sortRect.height - 1, 4, 4)
+    end
+
+    local categories = ensure_category_options(state, ensure_shop_items(state))
+    local catFont = fonts.small or fonts.body or love.graphics.getFont()
+    love.graphics.setFont(catFont)
+
+    local catSpacingX = theme_spacing.small or 8
+    local catSpacingY = theme_spacing.small or 8
+    local catHeight = catFont:getHeight() + 12
+    local rowStartX = inner_x
+    local rowY = cursor_y + searchHeight + catSpacingY
+    local maxX = inner_x + inner_width
+    local maxBottom = rowY
+
+    for i = 1, #categories do
+        local category = categories[i]
+        local textWidth = catFont:getWidth(category.label)
+        local catWidth = math.min(textWidth + 20, inner_width)
+        if rowStartX + catWidth > maxX then
+            rowStartX = inner_x
+            rowY = maxBottom + catSpacingY
+        end
+
+        local rect = {
+            x = rowStartX,
+            y = rowY,
+            width = catWidth,
+            height = catHeight,
+        }
+
+        local isActive = state.shopCategory == category.id
+        local isHovered = point_in_rect(mouse_x, mouse_y, rect)
+
+        local fill
+        if isActive then
+            fill = window_colors.accent_secondary or window_colors.accent or { 0.26, 0.42, 0.78, 1 }
+        elseif isHovered then
+            fill = window_colors.row_hover or { 0.18, 0.22, 0.3, 1 }
+        else
+            fill = window_colors.button or window_colors.background or { 0.08, 0.1, 0.14, 1 }
+        end
+
+        set_color(fill)
+        love.graphics.rectangle("fill", rect.x, rect.y, rect.width, rect.height, 4, 4)
+
+        set_color(window_colors.border or { 0.08, 0.08, 0.12, 0.8 })
+        love.graphics.setLineWidth(1)
+        love.graphics.rectangle("line", rect.x + 0.5, rect.y + 0.5, rect.width - 1, rect.height - 1, 4, 4)
+
+        set_color(window_colors.title_text or window_colors.text or { 0.85, 0.9, 1.0, 1 })
+        love.graphics.print(category.label, rect.x + (rect.width - textWidth) * 0.5, rect.y + (rect.height - catFont:getHeight()) * 0.5)
+
+        if just_pressed and isHovered then
+            categoryClicked = true
+            if state.shopCategory ~= category.id then
+                state.shopCategory = category.id
+                state.scroll = 0
+            end
+            state.shopSearchActive = false
+            if uiInput then
+                uiInput.keyboardCaptured = false
+            end
+        end
+
+        rowStartX = rect.x + rect.width + catSpacingX
+        maxBottom = math.max(maxBottom, rect.y + rect.height)
+    end
+
+    if just_pressed and not searchHovered and not sortHovered and not categoryClicked then
+        clear_search_focus(context, state)
+    end
+
+    local totalHeight = searchHeight
+    if #categories > 0 then
+        totalHeight = math.max(totalHeight, maxBottom - cursor_y)
+    end
+
+    return totalHeight
+end
 
 local function draw_button(rect, label, fonts, hovered, disabled, kind)
     if not rect then
@@ -108,38 +546,6 @@ local function get_player_item_quantity(cargoComponent, itemId)
     return 0
 end
 
-local function ensure_shop_items(state)
-    if state._shopItems then
-        return state._shopItems
-    end
-
-    -- Pre-register module blueprints for the shop
-    local modules_to_stock = {
-        "ability_dash",
-        "ability_afterburner",
-        "shield_t1",
-    }
-    for _, moduleId in ipairs(modules_to_stock) do
-        local ok, blueprint = pcall(loader.load, "modules", moduleId)
-        if ok and blueprint then
-            Items.registerModuleBlueprint(blueprint)
-        end
-    end
-
-    local items = {}
-    for id, definition in Items.iterateDefinitions() do
-        if type(definition) == "table" and definition.id and definition.value ~= nil then
-            local instance = Items.instantiate(definition.id)
-            if instance then
-                items[#items + 1] = instance
-            end
-        end
-    end
-
-    state._shopItems = items
-    return items
-end
-
 ---@param context table
 ---@param params table
 function station_shop.draw(context, params)
@@ -160,6 +566,7 @@ function station_shop.draw(context, params)
     local inner_y = content.y + padding
     local inner_width = math.max(0, scrollbarX - inner_x - padding)
     local inner_height = math.max(0, content.height - padding * 2)
+    local inner_bottom = inner_y + inner_height
 
     set_color(window_colors.text or { 0.85, 0.9, 1.0, 1 })
     love.graphics.setFont(fonts.body_bold or fonts.title or default_font)
@@ -176,13 +583,18 @@ function station_shop.draw(context, params)
         return
     end
 
-    local available_height = math.max(0, inner_height - (cursor_y - content.y))
-    if available_height <= 0 then
-        return
-    end
+    local shopItems = ensure_shop_items(state)
+    local displayItems = filter_shop_items(shopItems, state)
+    sort_shop_items(displayItems, state.shopSortMode)
+
+    local controlsHeight = draw_controls(context, state, fonts, inner_x, cursor_y, inner_width, mouse_x, mouse_y, just_pressed)
+    cursor_y = cursor_y + controlsHeight + (theme_spacing.small or 8)
 
     local grid_top = cursor_y
-    local grid_height = available_height
+    local grid_height = math.max(0, inner_bottom - grid_top)
+    if grid_height <= 0 then
+        return
+    end
 
     local slotsPerRow, slotsPerColumn, totalVisibleSlots, slotSize, slotWithLabelHeight, labelHeight =
         CargoRendering.calculateGridLayout(inner_width, grid_height, fonts)
@@ -194,10 +606,26 @@ function station_shop.draw(context, params)
     -- Extra vertical spacing to account for controls (quantity + buttons = ~52px total)
     local rowSpacing = 60
 
-    local shopItems = ensure_shop_items(state)
-    
+    if #displayItems == 0 then
+        love.graphics.setFont(fonts.body or default_font)
+        set_color(window_colors.muted or { 0.6, 0.65, 0.7, 1 })
+        love.graphics.printf("No items match your filters.", inner_x, cursor_y + (grid_height * 0.5) - (fonts.body and fonts.body:getHeight() or default_font:getHeight()), inner_width, "center")
+
+        love.graphics.setScissor()
+
+        local bottomBar = params.bottom_bar
+        if bottomBar then
+            local currencyValue = PlayerManager.getCurrency(context)
+            if currencyValue ~= nil then
+                local currencyText = CargoData.formatCurrency(currencyValue)
+                CargoRendering.drawCurrency(bottomBar, 0, currencyText, fonts)
+            end
+        end
+        return
+    end
+
     -- Calculate total content height
-    local totalRows = math.ceil(#shopItems / slotsPerRow)
+    local totalRows = math.ceil(#displayItems / slotsPerRow)
     local contentHeight = totalRows * (slotWithLabelHeight + slotPadding + rowSpacing)
     
     -- Initialize scroll state
@@ -214,8 +642,8 @@ function station_shop.draw(context, params)
     }
     love.graphics.setScissor(viewportRect.x, viewportRect.y, viewportRect.w, viewportRect.h)
 
-    for index = 1, #shopItems do
-        local item = shopItems[index]
+    for index = 1, #displayItems do
+        local item = displayItems[index]
         local slotIndex = index - 1
         local row = math.floor(slotIndex / slotsPerRow)
         local col = slotIndex % slotsPerRow
@@ -363,6 +791,49 @@ function station_shop.draw(context, params)
             CargoRendering.drawCurrency(bottomBar, 0, currencyText, fonts)
         end
     end
+end
+
+function station_shop.textinput(context, text)
+    if type(text) ~= "string" or text == "" then
+        return false
+    end
+
+    local state = context and context.stationUI
+    if not (state and state.visible and state.shopSearchActive) then
+        return false
+    end
+
+    state.shopSearchQuery = (state.shopSearchQuery or "") .. text
+    state.scroll = 0
+    return true
+end
+
+function station_shop.keypressed(context, key)
+    local state = context and context.stationUI
+    if not state or not state.visible then
+        return false
+    end
+
+    if key == "escape" then
+        local wasActive = state.shopSearchActive
+        clear_search_focus(context, state)
+        return wasActive
+    end
+
+    if not state.shopSearchActive then
+        return false
+    end
+
+    if key == "backspace" then
+        local query = state.shopSearchQuery or ""
+        local byteoffset = utf8.offset(query, -1)
+        if byteoffset then
+            state.shopSearchQuery = string.sub(query, 1, byteoffset - 1)
+        end
+        return true
+    end
+
+    return false
 end
 
 --- Handles mouse wheel scrolling

@@ -34,6 +34,57 @@ local function clone_table(value)
     return copy
 end
 
+local function apply_level_override(ship, override)
+    if not override then
+        return
+    end
+
+    ship.level = ship.level or {}
+
+    if type(override) == "number" then
+        local value = math.max(1, math.floor(override + 0.5))
+        ship.level.current = value
+        ship.level.base = ship.level.base or value
+        return
+    end
+
+    if type(override) ~= "table" then
+        return
+    end
+
+    local minValue = override.min or override.minimum or override.lower or override[1]
+    local maxValue = override.max or override.maximum or override.upper or override[2] or minValue
+
+    if minValue or maxValue then
+        minValue = minValue or maxValue
+        maxValue = maxValue or minValue
+
+        minValue = math.max(1, math.floor(minValue + 0.5))
+        maxValue = math.max(minValue, math.floor(maxValue + 0.5))
+
+        local rolled = love.math.random(minValue, maxValue)
+        ship.level.min = ship.level.min or minValue
+        ship.level.max = ship.level.max or maxValue
+        ship.level.current = rolled
+        ship.level.base = ship.level.base or rolled
+    end
+
+    local current = override.current or override.value or override.level
+    if current then
+        current = math.max(1, math.floor(current + 0.5))
+        ship.level.current = current
+        ship.level.base = ship.level.base or current
+    end
+
+    for key, value in pairs(override) do
+        if key ~= "min" and key ~= "max" and key ~= 1 and key ~= 2 then
+            if ship.level[key] == nil then
+                ship.level[key] = type(value) == "table" and clone_table(value) or value
+            end
+        end
+    end
+end
+
 return function(context)
     context = context or {}
 
@@ -161,17 +212,7 @@ return function(context)
             ship.faction = ship.faction or "enemy"
 
             -- Apply level scaling if configured
-            local override_level = proceduralConfig.level
-            if override_level then
-                ship.level = ship.level or {}
-                if type(override_level) == "number" then
-                    ship.level.current = override_level
-                elseif type(override_level) == "table" then
-                    for k, v in pairs(override_level) do
-                        ship.level[k] = v
-                    end
-                end
-            end
+            apply_level_override(ship, proceduralConfig.level)
             LevelScaling.apply(ship)
 
             ship.spawnPosition = ship.spawnPosition or { x = spawn_x, y = spawn_y }

@@ -198,6 +198,7 @@ return {
                 { weapon = "shock_burst_launcher" },
                 { weapon = "lightning_arc" },
                 { module = "ability_afterburner", installed = true },
+                { module = "ability_temporal_field" },
                 { module = "shield_t1" },
             },
         },

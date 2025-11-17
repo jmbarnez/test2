@@ -33,18 +33,13 @@ return function(context)
                 return
             end
 
-            local intents = context.intents or (context.intentHolder and context.intentHolder.playerIntents)
             local intentHolder = context.intentHolder or context.state
             local localPlayerId = intentHolder and intentHolder.localPlayerId
             local uiInput = context.uiInput
 
-            local intent = intents and entity.playerId and intents[entity.playerId]
-
+            -- Poll mouse for aiming (local player only)
             local aimX, aimY
-            if intent and intent.hasAim then
-                aimX = intent.aimX
-                aimY = intent.aimY
-            elseif entity.playerId and localPlayerId and entity.playerId == localPlayerId and context.camera and love.mouse then
+            if entity.playerId and localPlayerId and entity.playerId == localPlayerId and context.camera and love.mouse then
                 if love.mouse.getPosition and not (uiInput and uiInput.mouseCaptured) then
                     local mx, my = love.mouse.getPosition()
                     local cam = context.camera
@@ -77,10 +72,30 @@ return function(context)
             local max_speed = stats.max_speed or entity.max_speed
             local max_accel = stats.max_acceleration
 
+            -- Poll local player input directly
             local move_x, move_y = 0, 0
-            if intent then
-                move_x = intent.moveX * (intent.moveMagnitude or 0)
-                move_y = intent.moveY * (intent.moveMagnitude or 0)
+            if entity.playerId and localPlayerId and entity.playerId == localPlayerId then
+                if not (uiInput and uiInput.keyboardCaptured) then
+                    if love.keyboard.isDown("a", "left") then
+                        move_x = move_x - 1
+                    end
+                    if love.keyboard.isDown("d", "right") then
+                        move_x = move_x + 1
+                    end
+                    if love.keyboard.isDown("w", "up") then
+                        move_y = move_y - 1
+                    end
+                    if love.keyboard.isDown("s", "down") then
+                        move_y = move_y + 1
+                    end
+                    
+                    -- Normalize movement vector
+                    if move_x ~= 0 or move_y ~= 0 then
+                        local length = math.sqrt(move_x * move_x + move_y * move_y)
+                        move_x = move_x / length
+                        move_y = move_y / length
+                    end
+                end
             end
 
             local applyingThrust = move_x ~= 0 or move_y ~= 0

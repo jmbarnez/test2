@@ -1,14 +1,39 @@
 local tiny = require("libs.tiny")
-local AudioManager = require("src.audio.manager")
+local BehaviorRegistry = require("src.abilities.behavior_registry")
+local ability_common = require("src.util.ability_common")
 local constants = require("src.constants.game")
 
+-- Register fallback behaviors for backward compatibility
+local base_afterburner = require("src.abilities.behaviors.base_afterburner")
+local base_dash = require("src.abilities.behaviors.base_dash")
+local base_temporal_field = require("src.abilities.behaviors.base_temporal_field")
+
+BehaviorRegistry.registerFallback("afterburner", {
+    update = base_afterburner.update,
+    activate = base_afterburner.activate,
+    deactivate = base_afterburner.deactivate,
+})
+
+BehaviorRegistry.registerFallback("dash", {
+    update = base_dash.update,
+    activate = base_dash.activate,
+    deactivate = base_dash.deactivate,
+})
+
+BehaviorRegistry.registerFallback("temporal_field", {
+    update = base_temporal_field.update,
+    activate = base_temporal_field.activate,
+    deactivate = base_temporal_field.deactivate,
+})
+
+-- Legacy handlers kept for backward compatibility (will be removed in future)
 local ability_handlers = {}
-local resolve_context_state
+local resolve_context_state = ability_common.resolve_context_state
+local update_afterburner_zoom
 
 local function drain_energy(entity, cost)
-    if not cost or cost <= 0 then
-        return true
-    end
+    return ability_common.drain_energy(entity, cost)
+end
 
 ability_handlers.afterburner = function(context, entity, body, ability, state)
     if not (body and not body:isDestroyed()) then
@@ -121,15 +146,30 @@ ability_handlers.afterburner = function(context, entity, body, ability, state)
         targetZoom = math.max(minZoom, math.min(maxZoom, targetZoom))
 
         if math.abs(targetZoom - previousZoom) > 1e-4 then
+            local zoomSpeed = ability.zoomLerpSpeed or ability.zoomSmoothSpeed or 6
+            local returnSpeed = ability.zoomReturnSpeed or zoomSpeed
+            local zoomEpsilon = ability.zoomEpsilon or 1e-3
+
             stash.camera = {
                 previousZoom = previousZoom,
                 appliedZoom = targetZoom,
+                zoomSpeed = zoomSpeed,
+                returnSpeed = returnSpeed,
+                zoomEpsilon = zoomEpsilon,
+                minZoom = minZoom,
+                maxZoom = maxZoom,
             }
-            camera.zoom = targetZoom
+
+            state._afterburnerZoomData = {
+                target = targetZoom,
+                speed = zoomSpeed,
+                epsilon = zoomEpsilon,
+                minZoom = minZoom,
+                maxZoom = maxZoom,
+                clearOnReach = true,
+            }
+
             ctxState._afterburnerZoomOwner = entity
-            if type(ctxState.updateCamera) == "function" then
-                ctxState:updateCamera()
-            end
         end
     end
 
@@ -213,14 +253,24 @@ ability_handlers.afterburner = function(context, entity, body, ability, state)
             if original and original.camera and resolvedState._afterburnerZoomOwner == restoreEntity then
                 local camera = resolvedState.camera
                 if camera then
-                    local currentZoom = camera.zoom or 1
-                    local appliedZoom = original.camera.appliedZoom or currentZoom
-                    if math.abs(currentZoom - appliedZoom) < 1e-4 then
-                        camera.zoom = original.camera.previousZoom or currentZoom
-                        if type(resolvedState.updateCamera) == "function" then
-                            resolvedState:updateCamera()
-                        end
+                    local viewConfig = constants.view or {}
+                    local minZoom = original.camera.minZoom or viewConfig.min_zoom or 0.3
+                    local maxZoom = original.camera.maxZoom or viewConfig.max_zoom or 2.5
+                    if minZoom > maxZoom then
+                        minZoom, maxZoom = maxZoom, minZoom
                     end
+
+                    local returnSpeed = original.camera.returnSpeed or original.camera.zoomSpeed or 6
+                    local zoomEpsilon = original.camera.zoomEpsilon or 1e-3
+
+                    restoreState._afterburnerZoomData = {
+                        target = original.camera.previousZoom or (camera.zoom or 1),
+                        speed = returnSpeed,
+                        epsilon = zoomEpsilon,
+                        minZoom = minZoom,
+                        maxZoom = maxZoom,
+                        clearOnReach = true,
+                    }
                 end
                 resolvedState._afterburnerZoomOwner = nil
             elseif resolvedState._afterburnerZoomOwner == restoreEntity then
@@ -234,24 +284,53 @@ ability_handlers.afterburner = function(context, entity, body, ability, state)
 
     return true
 end
-
-    local energy = entity and entity.energy
-    if not energy then
-        return true
-    end
-
-    local current = tonumber(energy.current) or 0
-    if current < cost then
+ability_handlers.temporal_field = function(context, entity, body, ability, state)
+    if not (body and not body:isDestroyed()) then
         return false
     end
 
-    energy.current = current - cost
-    local maxEnergy = tonumber(energy.max) or 0
-    if maxEnergy > 0 then
-        energy.percent = math.max(0, energy.current / maxEnergy)
+    local duration = ability.duration or 0
+    if duration <= 0 then
+        return false
     end
-    energy.rechargeTimer = (energy.rechargeDelay or 0)
-    energy.isDepleted = energy.current <= 0
+
+    local field = entity._temporalField
+    if not field then
+        field = {
+            owner = entity,
+        }
+        entity._temporalField = field
+    end
+
+    field.active = true
+    field.radius = ability.radius or field.radius or 0
+    field.slowFactor = ability.projectileSlowFactor or field.slowFactor or 1
+    field.cooldownReduction = ability.cooldownReductionRate or field.cooldownReduction or 0
+
+    local x, y = body:getPosition()
+    field.x = x
+    field.y = y
+
+    state.activeTimer = duration
+    state._temporalFieldRemaining = duration
+
+    if not state._sfxPlayed then
+        AudioManager.play_sfx(ability.sfx or "sfx:laser_turret_fire", {
+            pitch = ability.sfxPitch or 0.7,
+            volume = ability.sfxVolume or 0.6,
+        })
+        state._sfxPlayed = true
+    end
+
+    state._restoreFn = function(_, restoreEntity, _, _, restoreState)
+        if restoreEntity and restoreEntity._temporalField then
+            restoreEntity._temporalField.active = false
+        end
+        restoreState._sfxPlayed = nil
+        restoreState._temporalFieldRemaining = nil
+        restoreState._restoreFn = nil
+    end
+
     return true
 end
 
@@ -294,6 +373,89 @@ resolve_context_state = function(context)
     end
 
     return nil
+end
+
+update_afterburner_zoom = function(context, ability, state, dt)
+    local zoomData = state._afterburnerZoomData
+    if not zoomData then
+        return
+    end
+
+    local ctxState = resolve_context_state(context)
+    local camera = ctxState and ctxState.camera
+    if not camera then
+        state._afterburnerZoomData = nil
+        return
+    end
+
+    local target = zoomData.target
+    if target == nil then
+        state._afterburnerZoomData = nil
+        return
+    end
+
+    local viewConfig = constants.view or {}
+    local minZoom = zoomData.minZoom or ability.minZoom or viewConfig.min_zoom or 0.3
+    local maxZoom = zoomData.maxZoom or ability.maxZoom or viewConfig.max_zoom or 2.5
+    if minZoom > maxZoom then
+        minZoom, maxZoom = maxZoom, minZoom
+    end
+
+    local speed = zoomData.speed or ability.zoomLerpSpeed or 6
+    local epsilon = zoomData.epsilon or ability.zoomEpsilon or 1e-3
+    local clampedTarget = math.max(minZoom, math.min(maxZoom, target))
+    local currentZoom = camera.zoom or 1
+
+    if not speed or speed <= 0 then
+        if math.abs(clampedTarget - currentZoom) > 1e-4 then
+            camera.zoom = clampedTarget
+            if type(ctxState.updateCamera) == "function" then
+                ctxState:updateCamera()
+            end
+        end
+        if zoomData.clearOnReach ~= false then
+            state._afterburnerZoomData = nil
+        end
+        return
+    end
+
+    local delta = clampedTarget - currentZoom
+    if math.abs(delta) <= epsilon then
+        if math.abs(clampedTarget - currentZoom) > 1e-4 then
+            camera.zoom = clampedTarget
+            if type(ctxState.updateCamera) == "function" then
+                ctxState:updateCamera()
+            end
+        end
+        if zoomData.clearOnReach ~= false then
+            state._afterburnerZoomData = nil
+        end
+        return
+    end
+
+    local dtValue = math.max(dt or 0, 0)
+    local factor = 1 - math.exp(-dtValue * speed)
+    if factor <= 0 then
+        return
+    end
+
+    local newZoom = currentZoom + delta * factor
+    if math.abs(clampedTarget - newZoom) <= epsilon then
+        newZoom = clampedTarget
+    else
+        newZoom = math.max(minZoom, math.min(maxZoom, newZoom))
+    end
+
+    if math.abs(newZoom - currentZoom) > 1e-4 then
+        camera.zoom = newZoom
+        if type(ctxState.updateCamera) == "function" then
+            ctxState:updateCamera()
+        end
+    end
+
+    if math.abs(newZoom - clampedTarget) <= epsilon and zoomData.clearOnReach ~= false then
+        state._afterburnerZoomData = nil
+    end
 end
 
 ability_handlers.dash = function(context, entity, body, ability, state)
@@ -353,18 +515,8 @@ ability_handlers.dash = function(context, entity, body, ability, state)
     return true
 end
 
-local function resolve_intent(context, entity)
-    local holder = context.intentHolder or context.state
-    if not holder then
-        return nil
-    end
-
-    local intents = holder.playerIntents
-    if not intents then
-        return nil
-    end
-
-    return entity.playerId and intents[entity.playerId] or nil
+local function is_ability_key_down(context, entity, ability)
+    return ability_common.is_ability_key_down(context, entity, ability)
 end
 
 ---@class AbilityModulesSystemContext
@@ -390,8 +542,14 @@ return function(context)
                 return
             end
 
-            local intent = entity.player and resolve_intent(context, entity) or nil
             local body = entity.body
+
+            local temporalField = entity._temporalField
+            if temporalField and temporalField.active and body and not body:isDestroyed() then
+                local fx, fy = body:getPosition()
+                temporalField.x = fx
+                temporalField.y = fy
+            end
 
             for index = 1, #abilityModules do
                 local entry = abilityModules[index]
@@ -400,11 +558,32 @@ return function(context)
                 local state = abilityState[key]
 
                 if ability and state then
+                    if ability.type == "afterburner" or ability.id == "afterburner" then
+                        update_afterburner_zoom(context, ability, state, dt)
+                    end
+
                     if state.cooldown and state.cooldown > 0 then
                         state.cooldown = math.max(0, state.cooldown - dt)
+                        if entity._temporalField and entity._temporalField.active then
+                            local reduction = entity._temporalField.cooldownReduction or 0.15
+                            state.cooldown = math.max(0, state.cooldown - reduction * dt)
+                        end
                     end
+
                     if state.activeTimer and state.activeTimer > 0 then
                         state.activeTimer = math.max(0, state.activeTimer - dt)
+                        if state._temporalFieldRemaining then
+                            state._temporalFieldRemaining = math.max(0, state._temporalFieldRemaining - dt)
+                            if state._temporalFieldRemaining <= 0 then
+                                if entity._temporalField then
+                                    entity._temporalField.active = false
+                                end
+                                state._sfxPlayed = nil
+                                state._restoreFn = nil
+                                state._temporalFieldRemaining = nil
+                            end
+                        end
+
                         if state.activeTimer <= 0 and state._dash_restore then
                             if body and not body:isDestroyed() then
                                 if state._dash_prevDamping ~= nil then
@@ -431,14 +610,8 @@ return function(context)
                     end
 
                     local isDown = false
-                    if entity.player and intent then
-                        local intentIndex = ability.intentIndex or 1
-                        if intentIndex == 1 then
-                            isDown = not not intent.ability1
-                        else
-                            local field = "ability" .. tostring(intentIndex)
-                            isDown = not not intent[field]
-                        end
+                    if entity.player then
+                        isDown = is_ability_key_down(context, entity, ability)
                     elseif entity.enemy and state.aiTrigger then
                         -- AI-driven ability trigger for enemies
                         isDown = true
@@ -452,6 +625,14 @@ return function(context)
                     local justReleased = (not isDown) and state.wasDown
                     state.wasDown = isDown
 
+                    -- Try to get behavior plugin
+                    local behavior = BehaviorRegistry.resolve(ability)
+                    
+                    -- Call behavior update
+                    if behavior and behavior.update then
+                        behavior.update(context, entity, ability, state, dt)
+                    end
+
                     if holdActivation then
                         local drainPerSecond = ability.energyPerSecond or ability.energyDrain or ability.energyCost or 0
                         local energyTick = drainPerSecond * (dt or 0)
@@ -459,10 +640,17 @@ return function(context)
                         if isDown then
                             if drain_energy(entity, energyTick) then
                                 if not state.holdActive then
-                                    local handler = ability_handlers[ability.type or ability.id]
                                     local activated = true
-                                    if handler then
-                                        activated = handler(context, entity, body, ability, state)
+                                    
+                                    -- Use behavior plugin if available
+                                    if behavior and behavior.activate then
+                                        activated = behavior.activate(context, entity, body, ability, state)
+                                    else
+                                        -- Fallback to legacy handler
+                                        local handler = ability_handlers[ability.type or ability.id]
+                                        if handler then
+                                            activated = handler(context, entity, body, ability, state)
+                                        end
                                     end
 
                                     if activated then
@@ -481,14 +669,22 @@ return function(context)
                                     end
                                 end
                             else
-                                if state.holdActive and state._restoreFn then
-                                    state._restoreFn(context, entity, body, dt, state)
+                                if state.holdActive then
+                                    -- Use behavior deactivate if available
+                                    if behavior and behavior.deactivate then
+                                        behavior.deactivate(context, entity, body, ability, state)
+                                    elseif state._restoreFn then
+                                        state._restoreFn(context, entity, body, dt, state)
+                                    end
                                 end
                                 state.holdActive = false
                                 state._afterburnerActive = nil
                             end
                         elseif state.holdActive then
-                            if state._restoreFn then
+                            -- Use behavior deactivate if available
+                            if behavior and behavior.deactivate then
+                                behavior.deactivate(context, entity, body, ability, state)
+                            elseif state._restoreFn then
                                 state._restoreFn(context, entity, body, dt, state)
                             end
                             state.holdActive = false
@@ -499,10 +695,17 @@ return function(context)
                     else
                         if justPressed and (state.cooldown or 0) <= 0 then
                             if drain_energy(entity, ability.energyCost) then
-                                local handler = ability_handlers[ability.type or ability.id]
                                 local activated = true
-                                if handler then
-                                    activated = handler(context, entity, body, ability, state)
+                                
+                                -- Use behavior plugin if available
+                                if behavior and behavior.activate then
+                                    activated = behavior.activate(context, entity, body, ability, state)
+                                else
+                                    -- Fallback to legacy handler
+                                    local handler = ability_handlers[ability.type or ability.id]
+                                    if handler then
+                                        activated = handler(context, entity, body, ability, state)
+                                    end
                                 end
 
                                 if activated then
@@ -510,8 +713,13 @@ return function(context)
                                     state.cooldown = ability.cooldown or 0
                                 end
                             end
-                        elseif justReleased and state._restoreFn then
-                            state._restoreFn(context, entity, body, dt, state)
+                        elseif justReleased then
+                            -- Use behavior deactivate if available
+                            if behavior and behavior.deactivate and ability.type ~= "temporal_field" then
+                                behavior.deactivate(context, entity, body, ability, state)
+                            elseif state._restoreFn and ability.type ~= "temporal_field" then
+                                state._restoreFn(context, entity, body, dt, state)
+                            end
                         end
                     end
                 end

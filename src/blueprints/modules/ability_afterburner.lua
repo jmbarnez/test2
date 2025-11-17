@@ -1,3 +1,9 @@
+local BehaviorRegistry = require("src.abilities.behavior_registry")
+local afterburner_behavior = require("src.abilities.behaviors.afterburner")
+
+-- Register the afterburner behavior
+BehaviorRegistry.register("afterburner", afterburner_behavior)
+
 local blueprint = {
     category = "modules",
     id = "ability_afterburner",
@@ -24,9 +30,19 @@ local blueprint = {
                 trailStrength = 1.6,
                 trailBurstParticles = 200,
                 trailBurstStrength = 1.4,
-                zoomMultiplier = 0.55,
+                trailColors = {
+                    1.0, 0.96, 0.45, 1.0,
+                    1.0, 0.88, 0.28, 0.88,
+                    1.0, 0.78, 0.18, 0.7,
+                    1.0, 0.66, 0.1, 0.52,
+                    1.0, 0.54, 0.05, 0.32,
+                    1.0, 0.42, 0.02, 0.18,
+                },
+                trailDrawColor = { 1.0, 0.9, 0.3, 1.0 },
+                zoomTarget = 0.35,
                 minZoom = 0.3,
                 maxZoom = 2.5,
+                zoomReturnSpeed = 8,
                 sfx = "sfx:engine_afterburn",
                 sfxPitch = 1.05,
                 sfxVolume = 0.95,

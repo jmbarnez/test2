@@ -842,8 +842,53 @@ return function(context)
                 apply_homing(entity, dt, damageEntity, self)
             end
 
-            -- Sync position
+            -- Check for temporal field effects
+            local insideTemporalField = false
             local x, y = body:getPosition()
+            local world = self.world
+            if world and world.entities then
+                local entities = world.entities
+                for i = 1, #entities do
+                    local fieldEntity = entities[i]
+                    local field = fieldEntity and fieldEntity._temporalField
+                    if field and field.active and field.radius and field.radius > 0 then
+                        local dx = x - (field.x or 0)
+                        local dy = y - (field.y or 0)
+                        local distSq = dx * dx + dy * dy
+                        local radius = field.radius or 0
+                        local radiusSq = radius * radius
+
+                        if distSq <= radiusSq then
+                            insideTemporalField = true
+                            local slowFactor = field.slowFactor or 0.35
+                            slowFactor = math.max(0, math.min(slowFactor, 1))
+
+                            if not entity._originalVelocity then
+                                local ovx, ovy = body:getLinearVelocity()
+                                entity._originalVelocity = { x = ovx, y = ovy }
+                            end
+
+                            local original = entity._originalVelocity
+                            if original then
+                                body:setLinearVelocity(original.x * slowFactor, original.y * slowFactor)
+                            end
+
+                            break
+                        end
+                    end
+                end
+            end
+
+            if not insideTemporalField then
+                if entity._inTemporalField and entity._originalVelocity then
+                    body:setLinearVelocity(entity._originalVelocity.x, entity._originalVelocity.y)
+                end
+                entity._originalVelocity = nil
+            end
+
+            entity._inTemporalField = insideTemporalField
+
+            -- Sync position
             local pos = entity.position
             pos.x, pos.y = x, y
 

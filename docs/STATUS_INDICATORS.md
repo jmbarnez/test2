@@ -16,7 +16,7 @@ Status indicators automatically detect and display warnings when the player's vi
 
 ### Critical Health
 - **Threshold**: 15% hull or below
-- **Icon**: ⚠
+- **Icon**: Custom alert triangle
 - **Color**: Red (#FF2626)
 - **Behavior**: Flashing animation
 - **Priority**: 1 (highest)
@@ -24,7 +24,7 @@ Status indicators automatically detect and display warnings when the player's vi
 
 ### Low Health
 - **Threshold**: 35% hull or below
-- **Icon**: ♥
+- **Icon**: Custom heart glyph
 - **Color**: Orange (#FF8033)
 - **Behavior**: Steady display
 - **Priority**: 2
@@ -32,7 +32,7 @@ Status indicators automatically detect and display warnings when the player's vi
 
 ### Low Shield
 - **Threshold**: 25% shield or below
-- **Icon**: ⬡
+- **Icon**: Stylized shield outline
 - **Color**: Cyan (#33CCFF)
 - **Behavior**: Steady display
 - **Priority**: 3
@@ -40,11 +40,17 @@ Status indicators automatically detect and display warnings when the player's vi
 
 ### Low Energy
 - **Threshold**: 20% energy or below
-- **Icon**: ⚡
+- **Icon**: Vector lightning bolt
 - **Color**: Yellow (#E6E64D)
 - **Behavior**: Steady display
 - **Priority**: 4
 - **Label**: "Low Energy"
+
+### Additional Indicators
+- **Target Lock**: Reticle icon flashes when enemies have a lock
+- **Overheating**: Wavy heat lines show when weapon/ship heat > 80%
+- **Weapons Offline**: Struck-through circle indicates weapon disablement
+- **Systems Failure**: Diamond fault icon pulses during critical malfunctions
 
 ## Configuration
 
@@ -91,7 +97,7 @@ local INDICATORS = {
     -- ... existing indicators
     new_condition = {
         label = "Warning Label",
-        icon = "●",  -- Unicode icon
+        icon = "custom_key",  -- Icon key registered in ICON_DRAWERS
         color = { 1.0, 0.5, 0.0, 1.0 },  -- RGBA color
         priority = 5,  -- Lower number = higher priority
         flash = false,  -- Set true for flashing effect
