@@ -9,25 +9,25 @@ local base_dash = require("src.abilities.behaviors.base_dash")
 local base_temporal_field = require("src.abilities.behaviors.base_temporal_field")
 local base_overdrive = require("src.abilities.behaviors.base_overdrive")
 
-BehaviorRegistry.registerFallback("afterburner", {
+BehaviorRegistry:registerFallback("afterburner", {
     update = base_afterburner.update,
     activate = base_afterburner.activate,
     deactivate = base_afterburner.deactivate,
 })
 
-BehaviorRegistry.registerFallback("dash", {
+BehaviorRegistry:registerFallback("dash", {
     update = base_dash.update,
     activate = base_dash.activate,
     deactivate = base_dash.deactivate,
 })
 
-BehaviorRegistry.registerFallback("temporal_field", {
+BehaviorRegistry:registerFallback("temporal_field", {
     update = base_temporal_field.update,
     activate = base_temporal_field.activate,
     deactivate = base_temporal_field.deactivate,
 })
 
-BehaviorRegistry.registerFallback("overdrive", {
+BehaviorRegistry:registerFallback("overdrive", {
     update = base_overdrive.update,
     activate = base_overdrive.activate,
     deactivate = base_overdrive.deactivate,
@@ -633,7 +633,7 @@ return function(context)
                     state.wasDown = isDown
 
                     -- Try to get behavior plugin
-                    local behavior = BehaviorRegistry.resolve(ability)
+                    local behavior = BehaviorRegistry:resolve(ability)
                     
                     -- Call behavior update
                     if behavior and behavior.update then

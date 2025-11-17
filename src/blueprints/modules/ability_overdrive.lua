@@ -2,7 +2,7 @@ local BehaviorRegistry = require("src.abilities.behavior_registry")
 local overdrive_behavior = require("src.abilities.behaviors.overdrive")
 
 -- Register the overdrive behavior
-BehaviorRegistry.register("overdrive", overdrive_behavior)
+BehaviorRegistry:register("overdrive", overdrive_behavior)
 
 local blueprint = {
     category = "modules",

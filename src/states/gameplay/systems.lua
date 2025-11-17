@@ -12,8 +12,7 @@ local createEnemySpawner = require("src.spawners.enemy")
 local createProceduralShipSpawner = require("src.spawners.procedural_ships")
 local createStationSpawner = require("src.spawners.station")
 local createWarpgateSpawner = require("src.spawners.warpgate")
-local createEnemyAISystem = require("src.systems.enemy_ai")
-local createWeaponLogicSystem = require("src.systems.weapon_logic")
+local createEnemyBehaviorSystem = require("src.ai.enemy_behaviors.system")
 local createWeaponUnifiedSystem = require("src.systems.weapon_unified")
 local createWeaponBeamVFXSystem = require("src.systems.weapon_beam_vfx")
 
@@ -64,7 +63,7 @@ local Systems = {}
 --       onLootDropped = ...
 --   }))
 --   createDestructionSystem(GameContext.extend(sharedContext))
---   createEnemyAISystem(baseContext)
+--   createEnemyBehaviorSystem(baseContext)
 --   createRenderSystem(baseContext)
 --   createEffectsRendererSystem(GameContext.extend(baseContext, {
 --       projectileSystem = state.projectileSystem,
@@ -97,8 +96,7 @@ local function add_common_systems(state, context)
     state.movementSystem = state.world:addSystem(createMovementSystem())
     local sharedContext = context or GameContext.compose(state)
     state.pickupSystem = state.world:addSystem(createPickupSystem(GameContext.extend(sharedContext)))
-    state.weaponLogicSystem = state.world:addSystem(createWeaponLogicSystem(GameContext.extend(sharedContext)))
-    
+
     -- Unified weapon system (behavior plugin architecture)
     state.weaponUnifiedSystem = state.world:addSystem(createWeaponUnifiedSystem(GameContext.extend(sharedContext)))
     state.shipSystem = state.world:addSystem(createShipSystem(GameContext.extend(sharedContext)))
@@ -148,7 +146,7 @@ function Systems.initialize(state, damageCallback)
         end,
     })
 
-    state.enemyAISystem = state.world:addSystem(createEnemyAISystem(enemyAIContext))
+    state.enemyBehaviorSystem = state.world:addSystem(createEnemyBehaviorSystem(enemyAIContext))
 
     state.engineTrailSystem = state.world:addSystem(EngineTrailSystem)
     state.renderSystem = state.world:addSystem(createRenderSystem(baseContext))
@@ -179,7 +177,6 @@ function Systems.teardown(state)
     state.movementSystem = nil
     state.pickupSystem = nil
     state.renderSystem = nil
-    state.weaponLogicSystem = nil
     state.weaponUnifiedSystem = nil
     state.weaponBeamVFXSystem = nil
     if state.projectileSystem and state.projectileSystem.detachPhysicsCallbacks then
@@ -191,7 +188,7 @@ function Systems.teardown(state)
     end
     state.collisionImpactSystem = nil
     state.lootDropSystem = nil
-    state.enemyAISystem = nil
+    state.enemyBehaviorSystem = nil
     state.targetingSystem = nil
     state.hudSystem = nil
     state.uiSystem = nil

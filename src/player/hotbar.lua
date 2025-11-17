@@ -1,5 +1,4 @@
 local constants = require("src.constants.game")
-local PlayerWeapons = require("src.player.weapons")
 
 local HotbarManager = {}
 
@@ -50,8 +49,6 @@ local function activate_weapon_from_item(player, item)
     if not (player and item) then
         return false
     end
-
-    -- Reuse previously instantiated weapon component if available so state (cooldowns, etc.) persists
     if item._weaponInstance and item._weaponInstance.weapon then
         local weaponInstance = item._weaponInstance
         player.weapon = weaponInstance.weapon
@@ -86,14 +83,70 @@ local function activate_weapon_from_item(player, item)
 
     item._weaponInstance = weaponInstance
 
-    -- Set the weapon component on the player
     player.weapon = weaponInstance.weapon
     player.weaponMount = weaponInstance.weaponMount
 
-    -- Make sure weapon is not firing initially
-    player.weapon.firing = false
+    if player.weapon then
+        player.weapon.firing = false
+    end
 
     return true
+end
+
+local function is_activatable_module(item)
+    if type(item) ~= "table" then
+        return false
+    end
+
+    if item._activatableType == "ability" and item._abilityKey then
+        return true
+    end
+
+    local abilityComponent = item.module and item.module.ability
+    if abilityComponent then
+        item._activatableType = item._activatableType or "ability"
+        item._abilityKey = item._abilityKey or abilityComponent.id
+        return true
+    end
+
+    return false
+end
+
+local function trigger_module_ability(player, item)
+    if not (player and item and player._abilityState and player._abilitySlotLookup) then
+        return false
+    end
+
+    local key = item._abilityKey
+    if not key then
+        return false
+    end
+
+    local slotEntry = player._abilitySlotLookup[key]
+    local state = player._abilityState[key]
+    if not (slotEntry and state) then
+        return false
+    end
+
+    state._hotbarTrigger = true
+    state._hotbarTriggerHold = slotEntry.ability and (slotEntry.ability.continuous == true or slotEntry.ability.holdToActivate == true)
+
+    if love and love.timer and type(love.timer.getTime) == "function" then
+        state._hotbarTriggerTime = love.timer.getTime()
+    elseif type(os) == "table" and type(os.clock) == "function" then
+        state._hotbarTriggerTime = os.clock()
+    else
+        state._hotbarTriggerTime = 0
+    end
+
+    return true
+end
+
+local function clear_weapon(player)
+    player.weapon = nil
+    if player.weaponMount then
+        player.weaponMount = nil
+    end
 end
 
 function HotbarManager.applySelectedWeapon(player)
@@ -113,19 +166,16 @@ function HotbarManager.applySelectedWeapon(player)
 
     local selectedItem = hotbar.slots[selectedIndex]
 
-    -- If selected slot has a weapon item, activate it
     if is_weapon_item(selectedItem) then
         if activate_weapon_from_item(player, selectedItem) then
             return true
         end
+    elseif is_activatable_module(selectedItem) then
+        clear_weapon(player)
+        return trigger_module_ability(player, selectedItem)
     end
 
-    -- If no weapon item in selected hotbar slot, clear the player's weapon
-    -- This allows other usable items or nothing at all
-    player.weapon = nil
-    if player.weaponMount then
-        player.weaponMount = nil
-    end
+    clear_weapon(player)
 
     return false
 end
@@ -195,6 +245,88 @@ function HotbarManager.getSlot(player, slotIndex)
     end
     
     return hotbar.slots[slotIndex]
+end
+
+local function find_empty_slot(hotbar)
+    for i = 1, HOTBAR_SIZE do
+        if not hotbar.slots[i] then
+            return i
+        end
+    end
+    return nil
+end
+
+local function ensure_item_hotbar_reference(item, slotIndex)
+    if type(item) == "table" then
+        item._hotbarSlot = slotIndex
+    end
+end
+
+function HotbarManager.syncActivatableModules(player, abilitySlots)
+    if not player then return end
+
+    local hotbar = HotbarManager.getHotbar(player)
+    if not hotbar then return end
+
+    abilitySlots = abilitySlots or {}
+
+    local occupiedByAbility = {}
+    for _, entry in ipairs(abilitySlots) do
+        local item = entry.item
+        if item then
+            occupiedByAbility[item] = true
+        end
+    end
+
+    for slotIndex = 1, HOTBAR_SIZE do
+        local slotItem = hotbar.slots[slotIndex]
+        if slotItem and slotItem._activatableType == "ability" and not occupiedByAbility[slotItem] then
+            hotbar.slots[slotIndex] = nil
+        end
+    end
+
+    for _, entry in ipairs(abilitySlots) do
+        local item = entry.item
+        if item then
+            local preferred = item._hotbarSlot
+            local index = preferred
+            if not (index and hotbar.slots[index] == item) then
+                local existing
+                if preferred and hotbar.slots[preferred] == nil then
+                    index = preferred
+                else
+                    for i = 1, HOTBAR_SIZE do
+                        if hotbar.slots[i] == item then
+                            existing = i
+                            break
+                        end
+                    end
+                    if not existing then
+                        index = find_empty_slot(hotbar)
+                    end
+                end
+
+                if existing then
+                    index = existing
+                end
+
+                if index then
+                    hotbar.slots[index] = item
+                    ensure_item_hotbar_reference(item, index)
+                end
+            else
+                ensure_item_hotbar_reference(item, index)
+            end
+        end
+    end
+
+    local selectedIndex = hotbar.selectedIndex or 1
+    if selectedIndex >= 1 and selectedIndex <= HOTBAR_SIZE then
+        local selectedItem = hotbar.slots[selectedIndex]
+        if selectedItem and selectedItem._activatableType == "ability" then
+            HotbarManager.applySelectedWeapon(player)
+        end
+    end
 end
 
 --- Swap two hotbar slots

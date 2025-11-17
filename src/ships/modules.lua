@@ -175,9 +175,10 @@ local function apply_module_effects(entity)
     -- Track ability modules
     local abilitySlots = {}
     local abilityLookup = {}
+    local abilitySlotLookup = {}
     for i = 1, #modules.slots do
         local slot = modules.slots[i]
-        if slot and slot.type == "ability" then
+        if slot then
             local item = slot.item
             local abilityComponent = item and item.module and item.module.ability
             if abilityComponent then
@@ -190,15 +191,15 @@ local function apply_module_effects(entity)
                     key = key,
                 }
                 abilityLookup[key] = true
-            else
-                -- Debug: log when ability module is missing ability component
-                if item then
-                    print(string.format("[DEBUG] Ability slot %d has item '%s' but no module.ability component", i, item.id or "unknown"))
-                    if item.module then
-                        print("  - item.module exists but no ability field")
-                    else
-                        print("  - item.module is nil")
-                    end
+                abilitySlotLookup[key] = abilitySlots[#abilitySlots]
+                item._abilityKey = key
+                item._activatableType = "ability"
+            elseif slot.type == "ability" and item then
+                print(string.format("[DEBUG] Ability slot %d has item '%s' but no module.ability component", i, item.id or "unknown"))
+                if item.module then
+                    print("  - item.module exists but no ability field")
+                else
+                    print("  - item.module is nil")
                 end
             end
         end
@@ -206,8 +207,10 @@ local function apply_module_effects(entity)
 
     if #abilitySlots > 0 then
         entity.abilityModules = abilitySlots
+        entity._abilitySlotLookup = abilitySlotLookup
     else
         entity.abilityModules = nil
+        entity._abilitySlotLookup = nil
     end
 
     local abilityState = entity._abilityState or {}
@@ -238,6 +241,13 @@ local function apply_module_effects(entity)
         entity._abilityState = abilityState
     else
         entity._abilityState = nil
+    end
+
+    if entity and entity.player then
+        local ok, HotbarManager = pcall(require, "src.player.hotbar")
+        if ok and HotbarManager and HotbarManager.syncActivatableModules then
+            HotbarManager.syncActivatableModules(entity, abilitySlots)
+        end
     end
 end
 
@@ -448,6 +458,9 @@ function Modules.unequip(entity, slotOrIndex)
         if not item._keep_slot_type then
             item.slot = nil
         end
+        item._abilityKey = nil
+        item._activatableType = nil
+        item._hotbarSlot = nil
     end
 
     attach_to_cargo(entity, item)

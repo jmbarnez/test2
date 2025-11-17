@@ -3,7 +3,7 @@ local BehaviorRegistry = require("src.weapons.behavior_registry")
 local missile_launcher_behavior = require("src.weapons.behaviors.missile_launcher")
 
 -- Register behavior plugin
-BehaviorRegistry.register("missile", missile_launcher_behavior)
+BehaviorRegistry:register("missile", missile_launcher_behavior)
 
 local defaults = {
     fire_rate = 2.2,

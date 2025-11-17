@@ -2,7 +2,7 @@ local BehaviorRegistry = require("src.abilities.behavior_registry")
 local afterburner_behavior = require("src.abilities.behaviors.afterburner")
 
 -- Register the afterburner behavior
-BehaviorRegistry.register("afterburner", afterburner_behavior)
+BehaviorRegistry:register("afterburner", afterburner_behavior)
 
 local blueprint = {
     category = "modules",

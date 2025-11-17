@@ -2,7 +2,7 @@ local BehaviorRegistry = require("src.abilities.behavior_registry")
 local temporal_field_behavior = require("src.abilities.behaviors.temporal_field")
 
 -- Register the temporal field behavior
-BehaviorRegistry.register("temporal_field", temporal_field_behavior)
+BehaviorRegistry:register("temporal_field", temporal_field_behavior)
 
 local blueprint = {
     category = "modules",

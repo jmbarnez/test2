@@ -3,7 +3,7 @@ local BehaviorRegistry = require("src.weapons.behavior_registry")
 local charging_orb_behavior = require("src.weapons.behaviors.charging_orb")
 
 -- Register the behavior
-BehaviorRegistry.register("charging_orb", charging_orb_behavior)
+BehaviorRegistry:register("charging_orb", charging_orb_behavior)
 
 local weapon_defaults = {
     fireRate = 1.5,

@@ -2,7 +2,7 @@ local BehaviorRegistry = require("src.abilities.behavior_registry")
 local shield_burst_behavior = require("src.abilities.behaviors.shield_burst")
 
 -- Register the shield burst behavior
-BehaviorRegistry.register("shield_burst", shield_burst_behavior)
+BehaviorRegistry:register("shield_burst", shield_burst_behavior)
 
 local blueprint = {
     category = "modules",

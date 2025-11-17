@@ -31,15 +31,24 @@ end
 
 local function read_blueprint_source(category, id)
     local fs_path = resolve_filesystem_path(category, id)
+    local last_err
 
     if love and love.filesystem and love.filesystem.read then
-        local ok, contents, read_err = pcall(love.filesystem.read, fs_path)
-        if ok then
-            if contents then
-                return contents, fs_path
-            end
-            return nil, read_err or string.format("Empty blueprint file '%s'", fs_path)
+        local contents, read_err = love.filesystem.read(fs_path)
+        if contents then
+            return contents, fs_path
         end
+        last_err = read_err or string.format("Unable to read blueprint file '%s'", fs_path)
+    end
+
+    if love and love.filesystem and love.filesystem.read then
+        local module_path = resolve_module_path(category, id)
+        local lua_path = string.gsub(module_path, "%.", "/") .. ".lua"
+        local contents, read_err = love.filesystem.read(lua_path)
+        if contents then
+            return contents, lua_path
+        end
+        last_err = last_err or read_err
     end
 
     if package and package.searchpath then
@@ -50,11 +59,11 @@ local function read_blueprint_source(category, id)
             if contents then
                 return contents, file_path
             end
-            return nil, io_err or string.format("Failed to read '%s'", file_path)
+            last_err = last_err or io_err or string.format("Failed to read '%s'", file_path)
         end
     end
 
-    return nil, string.format("Unable to locate blueprint '%s/%s'", category, id)
+    return nil, last_err or string.format("Unable to locate blueprint '%s/%s'", category, id)
 end
 
 local function create_blueprint_environment(category, id, chunk_name)

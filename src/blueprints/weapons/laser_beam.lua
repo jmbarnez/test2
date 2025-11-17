@@ -3,7 +3,7 @@ local BehaviorRegistry = require("src.weapons.behavior_registry")
 local laser_beam_behavior = require("src.weapons.behaviors.laser_beam")
 
 -- Register behavior plugin
-BehaviorRegistry.register("laser", laser_beam_behavior)
+BehaviorRegistry:register("laser", laser_beam_behavior)
 
 local weapon_defaults = {
     width = 1.2,
