@@ -224,6 +224,14 @@ function PlayerManager.attachShip(state, shipEntity, levelData, playerId)
         PlayerWeapons.initialize(shipEntity)
     end
 
+    -- Initialize hotbar
+    if shipEntity then
+        local HotbarManager = require("src.player.hotbar")
+        HotbarManager.initialize(shipEntity)
+        -- Autopopulate hotbar with cargo items
+        HotbarManager.autopopulate(shipEntity)
+    end
+
     return shipEntity
 end
 

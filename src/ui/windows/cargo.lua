@@ -608,7 +608,14 @@ function cargo_window.draw(context)
     if dragItem and just_released then
         local handled = false
 
-        if modulePanelResult and modulePanelResult.hoveredSlot and can_drop_module_item(dragItem, modulePanelResult.hoveredSlot) then
+        -- Check if dropping onto hotbar
+        local Hotbar = require("src.hud.hotbar")
+        local hotbarSlotIndex = Hotbar.getSlotAtPosition(mouse_x, mouse_y, context, player)
+        if hotbarSlotIndex and state.dragSource == "cargo" then
+            handled = Hotbar.moveFromCargo(player, dragItem, hotbarSlotIndex)
+        end
+
+        if not handled and modulePanelResult and modulePanelResult.hoveredSlot and can_drop_module_item(dragItem, modulePanelResult.hoveredSlot) then
             Modules.equip(player, dragItem, modulePanelResult.hoveredSlotIndex)
             handled = true
         elseif state.dragSource == "module" then

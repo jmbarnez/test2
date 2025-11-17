@@ -1,5 +1,5 @@
 local theme = require("src.ui.theme")
-local PlayerWeapons = require("src.player.weapons")
+local HotbarManager = require("src.player.hotbar")
 local ItemIconRenderer = require("src.util.item_icon_renderer")
 
 ---@diagnostic disable-next-line: undefined-global
@@ -20,59 +20,87 @@ local function draw_item_icon(icon, x, y, size)
     })
 end
 
+--- Get hotbar slot rectangles for external drag-drop support
+---@param context table
+---@param player table
+---@return table|nil Array of slot rectangles with x, y, width, height, slotIndex
+function Hotbar.getSlotRects(context, player)
+    if not player then return nil end
+    
+    local hotbar = HotbarManager.getHotbar(player)
+    if not hotbar then return nil end
+    
+    local screenWidth, screenHeight = love.graphics.getWidth(), love.graphics.getHeight()
+    local baseSlotSize = (theme_spacing and theme_spacing.slot_size) or 48
+    local slotSize = math.max(36, math.floor(baseSlotSize * 0.9))
+    local padding = 6
+    local gap = 5
+    
+    local barWidth = HOTBAR_SLOTS * slotSize + (HOTBAR_SLOTS - 1) * gap + padding * 2
+    local x = (screenWidth - barWidth) * 0.5
+    local y = screenHeight - (slotSize + padding * 2 + 16)
+    
+    local slotStartX = x + padding
+    local slotY = y + padding
+    
+    local rects = {}
+    for i = 1, HOTBAR_SLOTS do
+        local slotX = slotStartX + (i - 1) * (slotSize + gap)
+        rects[i] = {
+            x = slotX,
+            y = slotY,
+            width = slotSize,
+            height = slotSize,
+            slotIndex = i,
+        }
+    end
+    
+    return rects
+end
+
+--- Check if mouse position is over a hotbar slot
+---@param mouseX number
+---@param mouseY number
+---@param context table
+---@param player table
+---@return number|nil slotIndex The slot index if hovering, nil otherwise
+function Hotbar.getSlotAtPosition(mouseX, mouseY, context, player)
+    if not (mouseX and mouseY) then return nil end
+    
+    local rects = Hotbar.getSlotRects(context, player)
+    if not rects then return nil end
+    
+    for i = 1, #rects do
+        local rect = rects[i]
+        if mouseX >= rect.x and mouseX <= rect.x + rect.width and
+           mouseY >= rect.y and mouseY <= rect.y + rect.height then
+            return rect.slotIndex
+        end
+    end
+    
+    return nil
+end
+
 function Hotbar.draw(context, player)
     if not player then return end
 
     context = context or {}
     local state = context.state or context
 
-    local slots = PlayerWeapons.getSlots(player, { refresh = true })
-    if not (slots and slots.list and #slots.list > 0) then return end
+    local hotbar = HotbarManager.getHotbar(player)
+    if not hotbar then return end
 
-    local total = #slots.list
-    local selectedIndex = slots.selectedIndex or 1
-    if selectedIndex < 1 or selectedIndex > total then
+    local selectedIndex = hotbar.selectedIndex or 1
+    if selectedIndex < 1 or selectedIndex > HOTBAR_SLOTS then
         selectedIndex = 1
     end
 
     local fonts = theme.get_fonts()
-    local selectedEntry = slots.list[selectedIndex]
-    local selectedWeaponInstance = selectedEntry and selectedEntry.weaponInstance
-    local selectedWeaponComponent = (selectedWeaponInstance and selectedWeaponInstance.weapon) or player.weapon
-    if type(selectedWeaponComponent) ~= "table" then
-        selectedWeaponComponent = nil
-    end
-
-    local cooldownFractions = {}
-    local maxVisible = math.min(total, HOTBAR_SLOTS)
-
-    for i = 1, maxVisible do
-        local entry = slots.list[i]
-        local weaponInstance = entry.weaponInstance
-        local weaponComponent = weaponInstance and weaponInstance.weapon
-
-        if i == selectedIndex and not weaponComponent and selectedWeaponComponent then
-            weaponComponent = selectedWeaponComponent
-        end
-
-        local fraction = 0
-        local hasCooldown = false
-        local fireRate = weaponComponent and weaponComponent.fireRate
-        if weaponComponent and type(fireRate) == "number" and fireRate > 0 then
-            local remaining = math.max(weaponComponent.cooldown or 0, 0)
-            fraction = math.min(remaining / fireRate, 1)
-            hasCooldown = true
-        end
-
-        cooldownFractions[i] = {
-            value = fraction,
-            has = hasCooldown,
-        }
-    end
+    local selectedItem = hotbar.slots[selectedIndex]
 
     local name = nil
-    if selectedEntry then
-        name = selectedEntry.name or (selectedEntry.blueprintId and selectedEntry.blueprintId:gsub("_", " ")) or "Weapon"
+    if selectedItem then
+        name = selectedItem.name or (selectedItem.id and selectedItem.id:gsub("_", " ")) or "Item"
     end
 
     local slotsForLayout = HOTBAR_SLOTS
@@ -135,18 +163,23 @@ function Hotbar.draw(context, player)
     end
 
     local isMouseDown = false
+    local isRightMouseDown = false
     if allowInteraction and love.mouse and love.mouse.isDown then
         isMouseDown = love.mouse.isDown(1) or false
+        isRightMouseDown = love.mouse.isDown(2) or false
     end
 
     local wasMouseDown = hotbarState and hotbarState.wasMouseDown or false
+    local wasRightMouseDown = hotbarState and hotbarState.wasRightMouseDown or false
     local justPressed = allowInteraction and isMouseDown and not wasMouseDown
+    local justRightPressed = allowInteraction and isRightMouseDown and not wasRightMouseDown
 
     local hoveredIndex = nil
+    local draggedIndex = hotbarState and hotbarState.draggedIndex
 
     -- Icon
     for i = 1, HOTBAR_SLOTS do
-        local entry = slots.list[i]
+        local item = hotbar.slots[i]
         local slotX = slotStartX + (i - 1) * (slotSize + gap)
 
         local isHovered = false
@@ -160,19 +193,39 @@ function Hotbar.draw(context, player)
             end
         end
 
-        if allowInteraction and justPressed and isHovered and i <= total then
-            local selectedResult = PlayerWeapons.selectByIndex(player, i, { skipRefresh = true })
-            if selectedResult then
+        -- Handle drag start
+        if allowInteraction and justPressed and isHovered and item then
+            hotbarState.draggedIndex = i
+            hotbarState.dragStartX = mouseX
+            hotbarState.dragStartY = mouseY
+        end
+
+        -- Handle drag end / drop
+        if allowInteraction and not isMouseDown and wasMouseDown and hotbarState.draggedIndex then
+            if isHovered and hotbarState.draggedIndex ~= i then
+                -- Swap slots
+                HotbarManager.swapSlots(player, hotbarState.draggedIndex, i)
+                hotbarState.draggedIndex = nil
+            elseif hotbarState.draggedIndex == i then
+                -- Just a click, select this slot
+                HotbarManager.setSelected(player, i)
                 selectedIndex = i
-                selectedEntry = selectedResult
-                selectedWeaponInstance = selectedResult.weaponInstance
-                selectedWeaponComponent = (selectedWeaponInstance and selectedWeaponInstance.weapon) or player.weapon
-                selectedDisplayIndex = math.min(selectedIndex, HOTBAR_SLOTS)
+                selectedItem = hotbar.slots[i]
+            else
+                hotbarState.draggedIndex = nil
             end
         end
 
-        local isSelected = (i == selectedDisplayIndex)
-        if isSelected then
+        -- Handle right-click to remove item from hotbar
+        if allowInteraction and justRightPressed and isHovered and item then
+            HotbarManager.moveToCargo(player, i)
+        end
+
+        local isSelected = (i == selectedIndex)
+        local isDragging = (draggedIndex == i)
+        if isDragging then
+            set_color(window_colors.surface_subtle or { 0.03, 0.04, 0.07, 0.5 })
+        elseif isSelected then
             set_color(window_colors.surface or window_colors.background or { 0.05, 0.07, 0.10, 0.95 })
         else
             set_color(window_colors.surface_subtle or { 0.03, 0.04, 0.07, 0.9 })
@@ -187,8 +240,8 @@ function Hotbar.draw(context, player)
             love.graphics.pop()
         end
 
-        if entry then
-            local iconDrawn = draw_item_icon(entry.icon, slotX + 4, slotY + 4, slotSize - 8)
+        if item and not isDragging then
+            local iconDrawn = draw_item_icon(item.icon, slotX + 4, slotY + 4, slotSize - 8)
 
             if not iconDrawn then
                 set_color(window_colors.muted or { 0.5, 0.5, 0.55, 0.7 })
@@ -196,29 +249,19 @@ function Hotbar.draw(context, player)
                 love.graphics.circle("line", slotX + slotSize * 0.5, slotY + slotSize * 0.5, slotSize * 0.3)
             end
 
-            local cd = cooldownFractions[i]
-            if cd and cd.has and cd.value and cd.value > 0 then
-                local barPadding = 4
-                local barWidth = slotSize - barPadding * 2
-                local barHeight = 5
-                local barX = slotX + barPadding
-                local barY = slotY + slotSize - barPadding - barHeight
-
-                love.graphics.push("all")
-                set_color(window_colors.progress_background or window_colors.surface_subtle or { 0.08, 0.09, 0.12, 0.9 })
-                love.graphics.rectangle("fill", barX, barY, barWidth, barHeight)
-                set_color(window_colors.progress_fill or window_colors.accent or { 0.3, 0.6, 0.8, 1 })
-                love.graphics.rectangle("fill", barX, barY, barWidth * cd.value, barHeight)
-                set_color(window_colors.border or { 0.22, 0.28, 0.36, 0.88 })
-                love.graphics.setLineWidth(1)
-                love.graphics.rectangle("line", barX, barY, barWidth, barHeight)
-                love.graphics.pop()
+            -- Show quantity if > 1
+            if item.quantity and item.quantity > 1 and fonts.small then
+                love.graphics.setFont(fonts.small)
+                set_color({ 1, 1, 1, 1 })
+                local qtyText = tostring(item.quantity)
+                local qtyWidth = fonts.small:getWidth(qtyText)
+                love.graphics.print(qtyText, slotX + slotSize - qtyWidth - 4, slotY + 4)
             end
         end
 
         if fonts.small then
             love.graphics.setFont(fonts.small)
-            if entry then
+            if item then
                 if isSelected then
                     set_color(window_colors.accent or { 0.3, 0.6, 0.8, 1 })
                 else
@@ -238,37 +281,42 @@ function Hotbar.draw(context, player)
         end
     end
 
-    if fonts.small then
-        love.graphics.setFont(fonts.small)
-        set_color(window_colors.muted or { 0.6, 0.6, 0.65, 1 })
-
-        local countText = string.format("%d/%d", selectedIndex, total)
-        local countWidth = fonts.small:getWidth(countText)
-        local countX = x + barWidth - padding - countWidth
-        local countY = y + padding
-        love.graphics.print(countText, countX, countY)
+    -- Draw dragged item following cursor
+    if draggedIndex and mouseX and mouseY and hotbar.slots[draggedIndex] then
+        local draggedItem = hotbar.slots[draggedIndex]
+        local dragSize = slotSize * 0.8
+        local dragX = mouseX - dragSize / 2
+        local dragY = mouseY - dragSize / 2
+        
+        set_color({ 0.1, 0.1, 0.15, 0.9 })
+        love.graphics.rectangle("fill", dragX, dragY, dragSize, dragSize, 3, 3)
+        draw_item_icon(draggedItem.icon, dragX + 4, dragY + 4, dragSize - 8)
     end
 
     if hotbarState then
         hotbarState.wasMouseDown = allowInteraction and isMouseDown or false
+        hotbarState.wasRightMouseDown = allowInteraction and isRightMouseDown or false
+        -- Clear drag if mouse released
+        if not isMouseDown and wasMouseDown and hotbarState.draggedIndex then
+            hotbarState.draggedIndex = nil
+        end
     end
 
-    if hoveredIndex and hoveredIndex >= 1 and hoveredIndex <= total and state and not state.hudTooltipRequest then
-        local entry = slots.list[hoveredIndex]
-        local item = entry and entry.item
+    if hoveredIndex and hoveredIndex >= 1 and hoveredIndex <= HOTBAR_SLOTS and state and not state.hudTooltipRequest and not draggedIndex then
+        local item = hotbar.slots[hoveredIndex]
         if item then
-            local heading = item.name or entry.name or (entry.blueprintId and entry.blueprintId:gsub("_", " ")) or "Weapon"
+            local heading = item.name or (item.id and item.id:gsub("_", " ")) or "Item"
             local body = {}
 
-            local item_type = item.type or "weapon"
+            local item_type = item.type or "item"
             body[#body + 1] = string.format("Type: %s", tostring(item_type))
 
-            if item.installed ~= nil then
-                body[#body + 1] = string.format("Installed: %s", item.installed and "Yes" or "No")
+            if item.quantity and item.quantity > 1 then
+                body[#body + 1] = string.format("Quantity: %d", item.quantity)
             end
 
-            if entry.blueprintId then
-                body[#body + 1] = string.format("Blueprint: %s", entry.blueprintId)
+            if item.volume then
+                body[#body + 1] = string.format("Volume: %.1f", item.volume)
             end
 
             state.hudTooltipRequest = {
@@ -279,5 +327,12 @@ function Hotbar.draw(context, player)
         end
     end
 end
+
+--- Expose HotbarManager functions for external use
+Hotbar.moveFromCargo = HotbarManager.moveFromCargo
+Hotbar.moveToCargo = HotbarManager.moveToCargo
+Hotbar.swapSlots = HotbarManager.swapSlots
+Hotbar.setSlot = HotbarManager.setSlot
+Hotbar.getSlot = HotbarManager.getSlot
 
 return Hotbar

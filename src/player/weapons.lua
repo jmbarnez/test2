@@ -119,6 +119,55 @@ local function refresh_slots(player)
         end
     end
 
+    local existingOrder = nil
+    local maxExistingOrder = 0
+    if player.weaponSlots and player.weaponSlots.order then
+        existingOrder = player.weaponSlots.order
+        for _, value in pairs(existingOrder) do
+            if type(value) == "number" and value > maxExistingOrder then
+                maxExistingOrder = value
+            end
+        end
+    end
+
+    local nextOrder = maxExistingOrder
+    for i = 1, #list do
+        local entry = list[i]
+        local key = entry and entry._key
+        local orderValue = key and existingOrder and existingOrder[key]
+        if type(orderValue) == "number" then
+            entry._order = orderValue
+        else
+            nextOrder = nextOrder + 1
+            entry._order = nextOrder
+        end
+    end
+
+    table.sort(list, function(a, b)
+        local orderA = (a and a._order) or math.huge
+        local orderB = (b and b._order) or math.huge
+        if orderA == orderB then
+            local keyA = (a and a._key) or ""
+            local keyB = (b and b._key) or ""
+            if keyA ~= keyB then
+                return keyA < keyB
+            end
+            return tostring(a) < tostring(b)
+        end
+        return orderA < orderB
+    end)
+
+    local orderMap = {}
+    for i = 1, #list do
+        local entry = list[i]
+        if entry then
+            entry._order = i
+            if entry._key then
+                orderMap[entry._key] = i
+            end
+        end
+    end
+
     local selectedIndex
     if #list > 0 then
         for i = 1, #list do
@@ -157,6 +206,7 @@ local function refresh_slots(player)
         list = list,
         selectedIndex = (#list > 0) and selectedIndex or nil,
         selectedEntry = (selectedIndex and selectedIndex >= 1 and selectedIndex <= #list) and list[selectedIndex] or nil,
+        order = orderMap,
     }
 
     return player.weaponSlots

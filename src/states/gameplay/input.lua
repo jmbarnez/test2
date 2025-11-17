@@ -3,7 +3,7 @@
 
 local InputMapper = require("src.input.mapper")
 local PlayerManager = require("src.player.manager")
-local PlayerWeapons = require("src.player.weapons")
+local HotbarManager = require("src.player.hotbar")
 local UIStateManager = require("src.ui.state_manager")
 local SaveLoad = require("src.util.save_load")
 local View = require("src.states.gameplay.view")
@@ -215,17 +215,13 @@ function Input.keypressed(state, key, scancode, isrepeat)
         return
     end
 
-    -- Weapon slot selection
+    -- Hotbar slot selection
     if intent.weaponSlot and InputMapper.shouldProcessIntent(state, "weaponSlot") then
         local player = PlayerManager.getCurrentShip(state)
         if player then
-            local slots = PlayerWeapons.getSlots(player, { refresh = true })
-            if slots and slots.list and #slots.list > 0 then
-                local count = #slots.list
-                local index = intent.weaponSlot
-                if index >= 1 and index <= count then
-                    PlayerWeapons.selectByIndex(player, index)
-                end
+            local index = intent.weaponSlot
+            if index >= 1 and index <= 10 then
+                HotbarManager.setSelected(player, index)
             end
         end
         InputMapper.resetIntents(state)
