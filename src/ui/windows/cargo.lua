@@ -592,7 +592,7 @@ function cargo_window.draw(context)
     local Hotbar = require("src.hud.hotbar")
     local hotbarDrag = Hotbar.getDragState(context, player)
     
-    -- Initiate dragging when clicking on a module-capable item
+    -- Initiate dragging when clicking on cargo item, module item, or hotbar slot
     local clickOverSearchOrSort = (searchHovered or sortHovered)
     if not dragItem and not hotbarDrag and just_pressed and not clickOverSearchOrSort then
         if hoveredItem then
@@ -604,6 +604,17 @@ function cargo_window.draw(context)
             state.draggedItem = modulePanelResult.hoveredItem
             state.dragSource = "module"
             state.dragIndex = modulePanelResult.hoveredSlotIndex
+        else
+            -- Try to begin a hotbar drag if pressing over hotbar
+            local overHotbarSlot = Hotbar.getSlotAtPosition(mouse_x, mouse_y, context, player)
+            if overHotbarSlot then
+                print(string.format("[CARGO] Attempting to start drag on hotbar slot %d", overHotbarSlot))
+                local started = Hotbar.beginDragAtSlot(context, player, overHotbarSlot, mouse_x, mouse_y)
+                if started then
+                    hotbarDrag = Hotbar.getDragState(context, player)
+                    print(string.format("[CARGO] Hotbar drag started: %s", hotbarDrag and "SUCCESS" or "FAILED"))
+                end
+            end
         end
         dragItem = state.draggedItem
     end
@@ -612,10 +623,25 @@ function cargo_window.draw(context)
     if (dragItem or hotbarDrag) and just_released then
         local handled = false
 
-        -- Handle hotbar to cargo drops
+        -- Handle hotbar to cargo or hotbar drops
         if hotbarDrag then
             local overHotbarSlot = Hotbar.getSlotAtPosition(mouse_x, mouse_y, context, player)
-            if not overHotbarSlot then
+            if overHotbarSlot then
+                -- Debug
+                print(string.format("[CARGO] hotbar swap attempt: from %d to %d", hotbarDrag.slotIndex or 0, overHotbarSlot))
+                -- Dropped on another hotbar slot: swap or set selected (no cargo involvement)
+                if overHotbarSlot ~= hotbarDrag.slotIndex then
+                    handled = Hotbar.swapSlots(player, hotbarDrag.slotIndex, overHotbarSlot)
+                    if handled then
+                        Hotbar.clearDragState(context)
+                    end
+                else
+                    -- Dropped back on same slot: ensure it's selected and clear drag state
+                    Hotbar.setSelected(player, overHotbarSlot)
+                    Hotbar.clearDragState(context)
+                    handled = true
+                end
+            else
                 local insideCargoArea = mouse_x >= itemArea.x and mouse_x <= itemArea.x + itemArea.width and
                     mouse_y >= itemArea.y and mouse_y <= itemArea.y + itemArea.height
                 if insideCargoArea then
@@ -624,9 +650,41 @@ function cargo_window.draw(context)
                         Hotbar.clearDragState(context)
                     end
                 else
-                    -- Dropped outside cargo window and not over hotbar, clear the drag
+                    -- Dropped outside cargo window and not over hotbar - drop into world
+                    local uiContext = context
+                    local gameState = uiContext and uiContext.state or context
+                    local camera = uiContext and uiContext.camera or (gameState and gameState.camera)
+                    local worldX, worldY = mouse_x, mouse_y
+                    if camera then
+                        local zoom = camera.zoom or 1
+                        if zoom ~= 0 then
+                            worldX = mouse_x / zoom + (camera.x or 0)
+                            worldY = mouse_y / zoom + (camera.y or 0)
+                        else
+                            worldX = camera.x or mouse_x
+                            worldY = camera.y or mouse_y
+                        end
+                    end
+
+                    local droppedItem = hotbarDrag.item
+                    if droppedItem and gameState and gameState.world then
+                        -- Remove from hotbar
+                        local HotbarManager = require("src.player.hotbar")
+                        local hotbarSlot = HotbarManager.getSlot(player, hotbarDrag.slotIndex)
+                        if hotbarSlot == droppedItem then
+                            HotbarManager.setSlot(player, hotbarDrag.slotIndex, nil)
+                            
+                            -- Spawn as loot pickup in world
+                            require("src.states.gameplay.entities").spawnLootPickup(gameState, {
+                                item = droppedItem,
+                                quantity = droppedItem.quantity or 1,
+                                position = { x = worldX, y = worldY },
+                            })
+                            handled = true
+                        end
+                    end
+                    
                     Hotbar.clearDragState(context)
-                    handled = true
                 end
             end
         end

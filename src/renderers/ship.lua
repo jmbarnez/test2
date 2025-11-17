@@ -10,6 +10,7 @@ local vector = require("src.util.vector")
 local drawable_helpers = require("src.renderers.drawable_helpers")
 local shield_renderer = require("src.renderers.shield_renderer")
 local hud_health_bar = require("src.renderers.hud_health_bar")
+local table_util = require("src.util.table")
 
 local normalise_color = drawable_helpers.normalise_color
 
@@ -17,6 +18,12 @@ local TWO_PI = math.pi * 2
 
 local ship_renderer = {}
 local ship_bar_defaults = constants.ships and constants.ships.health_bar or {}
+local weapon_draw_defaults = constants.weapons and constants.weapons.render or {}
+
+local CHARGE_PREVIEW_COLOR = weapon_draw_defaults.gravitronChargeColor or { 0.5, 0.8, 1.0, 0.35 }
+local CHARGE_PREVIEW_GLOW = weapon_draw_defaults.gravitronChargeGlow or { 0.5, 0.9, 1.0, 0.22 }
+local CHARGE_PREVIEW_OUTLINE = weapon_draw_defaults.gravitronChargeOutline or { 0.2, 0.6, 1.0, 0.55 }
+local CHARGE_PREVIEW_MIN_RADIUS = weapon_draw_defaults.gravitronChargeMinRadius or 12
 
 ship_renderer.SHIELD_RING_COLOR = { 0.35, 0.95, 1.0, 0.85 }
 ship_renderer.SHIELD_GLOW_COLOR = { 0.18, 0.7, 1.0, 0.9 }
@@ -431,8 +438,87 @@ function ship_renderer.draw(entity, context)
         return
     end
 
+    ship_renderer.draw_weapon_charge_preview(entity, context)
     ship_renderer.draw_shield_pulses(entity)
     ship_renderer.draw_health_bar(entity)
+end
+
+local function draw_charge_preview_circle(x, y, radius, innerRadius)
+    love.graphics.setBlendMode("add")
+    love.graphics.setColor(CHARGE_PREVIEW_GLOW[1], CHARGE_PREVIEW_GLOW[2], CHARGE_PREVIEW_GLOW[3], CHARGE_PREVIEW_GLOW[4])
+    love.graphics.circle("fill", x, y, radius)
+
+    love.graphics.setColor(CHARGE_PREVIEW_COLOR[1], CHARGE_PREVIEW_COLOR[2], CHARGE_PREVIEW_COLOR[3], CHARGE_PREVIEW_COLOR[4])
+    love.graphics.circle("fill", x, y, innerRadius)
+
+    love.graphics.setBlendMode("alpha")
+    love.graphics.setColor(CHARGE_PREVIEW_OUTLINE[1], CHARGE_PREVIEW_OUTLINE[2], CHARGE_PREVIEW_OUTLINE[3], CHARGE_PREVIEW_OUTLINE[4])
+    love.graphics.setLineWidth(2)
+    love.graphics.circle("line", x, y, radius)
+    love.graphics.setLineWidth(1)
+end
+
+local function resolve_weapon_charge_preview(entity)
+    if not (entity and entity.weapon) then
+        return nil
+    end
+
+    local weapon = entity.weapon
+    if weapon.constantKey ~= "gravitron_orb" then
+        return nil
+    end
+
+    local scale = weapon._chargeScale
+    if not scale or scale <= 0 then
+        return nil
+    end
+
+    local mount = entity.weaponMount or {}
+    local offsetForward = mount.forward or mount.length or (weapon.offset or 0)
+    local offsetLateral = mount.lateral or 0
+    local offsetVertical = mount.vertical or 0
+    local offsetX = mount.offsetX or 0
+    local offsetY = mount.offsetY or 0
+
+    local position = entity.position or { x = 0, y = 0 }
+    local rotation = entity.rotation or 0
+    local cosRot = math.cos(rotation)
+    local sinRot = math.sin(rotation)
+
+    local muzzleX = position.x
+    local muzzleY = position.y
+
+    muzzleX = muzzleX + cosRot * (offsetForward - offsetVertical) - sinRot * (offsetLateral + offsetX)
+    muzzleY = muzzleY + sinRot * (offsetForward - offsetVertical) + cosRot * (offsetLateral + offsetX)
+    muzzleX = muzzleX + cosRot * offsetY
+    muzzleY = muzzleY + sinRot * offsetY
+
+    local baseSize = weapon.projectileSize or 3.2
+    local drawable = weapon.projectileBlueprint and weapon.projectileBlueprint.drawable
+    if drawable and drawable.size then
+        baseSize = drawable.size
+    end
+
+    local radius = math.max(CHARGE_PREVIEW_MIN_RADIUS, (baseSize * 4) * scale)
+    local innerRadius = radius * 0.6
+
+    return {
+        x = muzzleX,
+        y = muzzleY,
+        radius = radius,
+        innerRadius = innerRadius,
+    }
+end
+
+function ship_renderer.draw_weapon_charge_preview(entity, context)
+    local preview = resolve_weapon_charge_preview(entity)
+    if not preview then
+        return
+    end
+
+    love.graphics.push("all")
+    draw_charge_preview_circle(preview.x, preview.y, preview.radius, preview.innerRadius)
+    love.graphics.pop()
 end
 
 local function draw_shield_pulses(entity)

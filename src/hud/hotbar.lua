@@ -31,20 +31,48 @@ function Hotbar.getSlotRects(context, player)
     
     local hotbar = HotbarManager.getHotbar(player)
     if not hotbar then return nil end
-    
+
+    -- Mirror layout math from Hotbar.draw to keep hit-testing aligned
     local screenWidth, screenHeight = love.graphics.getWidth(), love.graphics.getHeight()
-    local baseSlotSize = (theme_spacing and theme_spacing.slot_size) or (hotbar_constants.slot_size or 48)
+    local baseSlotSize = (theme_spacing and theme_spacing.slot_size) or 48
     local slotSize = math.max(36, math.floor(baseSlotSize * 0.9))
     local padding = 6
     local gap = 5
-    
+
+    local selectedIndex = hotbar.selectedIndex or 1
+    if selectedIndex < 1 or selectedIndex > HOTBAR_SLOTS then
+        selectedIndex = 1
+    end
+
+    local selectedItem = hotbar.slots[selectedIndex]
+    local name = nil
+    if selectedItem then
+        name = selectedItem.name or (selectedItem.id and selectedItem.id:gsub("_", " ")) or "Item"
+    end
+
+    local fonts = theme.get_fonts()
     local barWidth = HOTBAR_SLOTS * slotSize + (HOTBAR_SLOTS - 1) * gap + padding * 2
+    local titleHeight = 0
+    if fonts.body and name then
+        titleHeight = fonts.body:getHeight() + padding
+        local nameWidth = fonts.body:getWidth(name)
+        if barWidth < nameWidth + padding * 2 then
+            barWidth = nameWidth + padding * 2
+        end
+    end
+
+    local barHeight = slotSize + padding * 2 + titleHeight
     local x = (screenWidth - barWidth) * 0.5
-    local y = screenHeight - (slotSize + padding * 2 + 16)
-    
+    local y = screenHeight - barHeight - 16
+
+    local contentY = y + padding
+    if fonts.body and name then
+        contentY = contentY + fonts.body:getHeight() + padding * 0.5
+    end
+
     local slotStartX = x + padding
-    local slotY = y + padding
-    
+    local slotY = contentY
+
     local rects = {}
     for i = 1, HOTBAR_SLOTS do
         local slotX = slotStartX + (i - 1) * (slotSize + gap)
@@ -56,7 +84,7 @@ function Hotbar.getSlotRects(context, player)
             slotIndex = i,
         }
     end
-    
+
     return rects
 end
 
@@ -222,30 +250,44 @@ function Hotbar.draw(context, player)
             end
         end
 
-        -- Handle drag start
-        if interactionEnabled and justPressed and isHovered and item then
+        -- Handle drag start (only if not already dragging from external UI)
+        if interactionEnabled and justPressed and isHovered and item and not hotbarState.draggedIndex then
             hotbarState.draggedIndex = i
             hotbarState.dragStartX = mouseX
             hotbarState.dragStartY = mouseY
         end
 
-        -- Handle drag end / drop
-        if interactionEnabled and justReleased and hotbarState.draggedIndex then
-            if isHovered and hotbarState.draggedIndex ~= i then
-                -- Swap slots
-                HotbarManager.swapSlots(player, hotbarState.draggedIndex, i)
+        -- Handle drag end / drop (only if cargo window doesn't have capture)
+        -- When cargo is open, it handles all hotbar drops
+        local cargoHasCapture = uiInput and uiInput.mouseCaptured and not ownsCapture
+        if interactionEnabled and justReleased and hotbarState.draggedIndex and not cargoHasCapture then
+            -- Check which slot the mouse is over when released
+            local mouseX, mouseY = love.mouse.getPosition()
+            local dropSlot = Hotbar.getSlotAtPosition(mouseX, mouseY, context, player)
+            
+            if dropSlot and dropSlot ~= hotbarState.draggedIndex then
+                -- Drop on a different slot -> swap
+                HotbarManager.swapSlots(player, hotbarState.draggedIndex, dropSlot)
                 hotbarState.draggedIndex = nil
                 hotbarState.capturingMouse = false
-            elseif hotbarState.draggedIndex == i then
+                if uiInput and uiInput.mouseCaptured then
+                    uiInput.mouseCaptured = false
+                end
+            elseif dropSlot == hotbarState.draggedIndex then
                 -- Just a click, select this slot
-                HotbarManager.setSelected(player, i)
-                selectedIndex = i
-                selectedItem = hotbar.slots[i]
+                HotbarManager.setSelected(player, dropSlot)
+                selectedIndex = dropSlot
+                selectedItem = hotbar.slots[dropSlot]
                 hotbarState.draggedIndex = nil
                 hotbarState.capturingMouse = false
+                if uiInput and uiInput.mouseCaptured then
+                    uiInput.mouseCaptured = false
+                end
+            else
+                -- Dropped outside hotbar, let other UI elements handle it (e.g., cargo window)
+                -- Don't clear drag state here - it will be cleared by whoever handles it
             end
-            -- If dropped outside hotbar, let other UI elements handle it (e.g., cargo window)
-            -- Don't clear drag state here - it will be cleared by whoever handles it
+            break  -- Exit loop after handling drop
         end
 
         -- Handle right-click to remove item from hotbar
@@ -423,13 +465,17 @@ function Hotbar.clearDragState(context)
     end
     
     if hotbarState then
+        -- Only release global capture if we owned it
+        local ownedCapture = hotbarState.capturingMouse
         hotbarState.draggedIndex = nil
         hotbarState.capturingMouse = false
-        
-        -- Release UI input capture if we own it
-        local uiInput = context.uiInput or (state and state.uiInput)
-        if uiInput and uiInput.mouseCaptured then
-            uiInput.mouseCaptured = false
+
+        -- Release UI input capture if we owned it
+        if ownedCapture then
+            local uiInput = context.uiInput or (state and state.uiInput)
+            if uiInput and uiInput.mouseCaptured then
+                uiInput.mouseCaptured = false
+            end
         end
     end
 end
@@ -440,5 +486,45 @@ Hotbar.moveToCargo = HotbarManager.moveToCargo
 Hotbar.swapSlots = HotbarManager.swapSlots
 Hotbar.setSlot = HotbarManager.setSlot
 Hotbar.getSlot = HotbarManager.getSlot
+
+--- Begin a hotbar drag on a specific slot (used by external UIs)
+---@param context table
+---@param player table
+---@param slotIndex number
+---@param mouseX number|nil
+---@param mouseY number|nil
+---@return boolean started True if drag was started
+function Hotbar.beginDragAtSlot(context, player, slotIndex, mouseX, mouseY)
+    local hotbar = HotbarManager.getHotbar(player)
+    if not (hotbar and slotIndex and slotIndex >= 1 and slotIndex <= HOTBAR_SLOTS) then
+        return false
+    end
+    local item = hotbar.slots[slotIndex]
+    if not item then
+        return false
+    end
+
+    local state = context.state or context
+    local hotbarState
+    if type(state) == "table" then
+        state.hotbarUI = state.hotbarUI or {}
+        hotbarState = state.hotbarUI
+    else
+        Hotbar._fallbackState = Hotbar._fallbackState or {}
+        hotbarState = Hotbar._fallbackState
+    end
+
+    hotbarState.draggedIndex = slotIndex
+    hotbarState.dragStartX = mouseX
+    hotbarState.dragStartY = mouseY
+    hotbarState.capturingMouse = true
+
+    local uiInput = context.uiInput or (state and state.uiInput)
+    if uiInput then
+        uiInput.mouseCaptured = true
+    end
+
+    return true
+end
 
 return Hotbar

@@ -200,6 +200,14 @@ function HotbarManager.swapSlots(player, slotA, slotB)
     local temp = hotbar.slots[slotA]
     hotbar.slots[slotA] = hotbar.slots[slotB]
     hotbar.slots[slotB] = temp
+    -- Debugging: log slot swap
+    if temp and (temp.id or temp.blueprintId or temp.name) then
+        print(string.format("[HOTBAR] swapSlots: %d <-> %d : %s <-> %s",
+            slotA, slotB, tostring(temp.id or temp.blueprintId or temp.name),
+            tostring((hotbar.slots[slotA] and (hotbar.slots[slotA].id or hotbar.slots[slotA].blueprintId or hotbar.slots[slotA].name)) or "nil")))
+    else
+        print(string.format("[HOTBAR] swapSlots: %d <-> %d", slotA, slotB))
+    end
     
     if hotbar.selectedIndex == slotA or hotbar.selectedIndex == slotB then
         HotbarManager.applySelectedWeapon(player)
@@ -223,32 +231,30 @@ function HotbarManager.moveFromCargo(player, cargoItem, slotIndex)
         return false
     end
     
+    -- Ensure cargo exists
+    if not player.cargo or not player.cargo.items then
+        return false
+    end
+    
     -- If slot is occupied, swap back to cargo
     local existingItem = hotbar.slots[slotIndex]
     if existingItem then
         -- Put existing item back in cargo
-        if not player.cargo or not player.cargo.items then
-            return false
-        end
         table.insert(player.cargo.items, existingItem)
     end
     
     -- Remove from cargo
-    if player.cargo and player.cargo.items then
-        for i = #player.cargo.items, 1, -1 do
-            if player.cargo.items[i] == cargoItem then
-                table.remove(player.cargo.items, i)
-                break
-            end
+    for i = #player.cargo.items, 1, -1 do
+        if player.cargo.items[i] == cargoItem then
+            table.remove(player.cargo.items, i)
+            break
         end
     end
     
     -- Place in hotbar
     hotbar.slots[slotIndex] = cargoItem
     
-    if player.cargo then
-        player.cargo.dirty = true
-    end
+    player.cargo.dirty = true
     
     if hotbar.selectedIndex == slotIndex then
         HotbarManager.applySelectedWeapon(player)
