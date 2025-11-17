@@ -51,6 +51,19 @@ local function activate_weapon_from_item(player, item)
         return false
     end
 
+    -- Reuse previously instantiated weapon component if available so state (cooldowns, etc.) persists
+    if item._weaponInstance and item._weaponInstance.weapon then
+        local weaponInstance = item._weaponInstance
+        player.weapon = weaponInstance.weapon
+        player.weaponMount = weaponInstance.weaponMount
+
+        if player.weapon then
+            player.weapon.firing = false
+        end
+
+        return true
+    end
+
     local blueprintId = normalize_weapon_id(item)
     if not blueprintId then
         return false
@@ -71,11 +84,11 @@ local function activate_weapon_from_item(player, item)
         return false
     end
 
+    item._weaponInstance = weaponInstance
+
     -- Set the weapon component on the player
     player.weapon = weaponInstance.weapon
-    if weaponInstance.weaponMount then
-        player.weaponMount = weaponInstance.weaponMount
-    end
+    player.weaponMount = weaponInstance.weaponMount
 
     -- Make sure weapon is not firing initially
     player.weapon.firing = false

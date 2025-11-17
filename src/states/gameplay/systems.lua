@@ -1,5 +1,4 @@
 local UIStateManager = require("src.ui.state_manager")
-local constants = require("src.constants.game")
 ---@diagnostic disable: undefined-global
 
 local tiny = require("libs.tiny")
@@ -29,11 +28,10 @@ local createUiSystem = require("src.systems.ui")
 local createTargetingSystem = require("src.systems.targeting")
 local createDestructionSystem = require("src.systems.destruction")
 local createLootDropSystem = require("src.systems.loot_drop")
-local FloatingText = require("src.effects.floating_text")
 local createPickupSystem = require("src.systems.pickup")
 local createEffectsRendererSystem = require("src.systems.effects_renderer")
 local Entities = require("src.states.gameplay.entities")
-local PlayerManager = require("src.player.manager")
+local LootRewards = require("src.player.loot_rewards")
 
 local Systems = {}
 
@@ -79,49 +77,6 @@ local Systems = {}
 --   createHudSystem(baseContext)
 --   createUiSystem(baseContext)
 
-local function resolve_player_id_from_entity(entity)
-    if not entity then
-        return nil
-    end
-
-    if entity.lastDamagePlayerId then
-        return entity.lastDamagePlayerId
-    end
-
-    local source = entity.lastDamageSource
-    if type(source) == "table" then
-        return source.playerId
-            or source.ownerPlayerId
-            or source.lastDamagePlayerId
-    end
-
-    return nil
-end
-
-local function resolve_loot_player_id(drop, sourceEntity)
-    local playerId = resolve_player_id_from_entity(sourceEntity)
-    if playerId then
-        return playerId
-    end
-
-    if drop and type(drop.source) == "table" then
-        return resolve_player_id_from_entity(drop.source)
-            or drop.source.playerId
-            or drop.source.ownerPlayerId
-            or drop.source.lastDamagePlayerId
-    end
-
-    return nil
-end
-
-local function floating_text_position(localPlayer, extraOffset)
-    local base = (localPlayer and localPlayer.mountRadius or 36) + 18
-    if extraOffset then
-        return base + extraOffset
-    end
-    return base
-end
-
 local function ensure_world(state)
     if not state.world then
         state.world = tiny.world()
@@ -155,66 +110,7 @@ local function add_common_systems(state, context)
             return Entities.spawnLootPickup(state, drop)
         end,
         onLootDropped = function(drop, entity)
-            if not drop then
-                return
-            end
-
-            local localPlayer = PlayerManager.getLocalPlayer(state)
-            local position
-            if drop.position then
-                position = drop.position
-            elseif entity and entity.position then
-                position = entity.position
-            elseif localPlayer then
-                position = localPlayer.position
-            end
-
-            local xpSpec = drop.xp_reward or (drop.raw and drop.raw.xp_reward)
-            if type(xpSpec) == "table" and xpSpec.amount then
-                local amount = tonumber(xpSpec.amount)
-                if amount and amount > 0 then
-                    local progression_constants = constants.progression or {}
-                    local category = xpSpec.category or progression_constants.default_xp_category or "combat"
-                    local skill = xpSpec.skill or progression_constants.default_xp_skill or "weapons"
-                    local playerId = resolve_loot_player_id(drop, entity)
-                    if playerId then
-                        PlayerManager.addSkillXP(state, category, skill, amount, playerId)
-
-                        if position and FloatingText and FloatingText.add then
-                            local ui_constants = (constants.ui and constants.ui.floating_text) or {}
-                            local xp_style = ui_constants.xp or {}
-                            FloatingText.add(state, position, string.format("+%d XP", amount), {
-                                offsetY = floating_text_position(localPlayer),
-                                color = xp_style.color or { 0.3, 0.9, 0.4, 1 },
-                                rise = xp_style.rise or 40,
-                                scale = xp_style.scale or 1.1,
-                                font = xp_style.font or "bold",
-                            })
-                        end
-                    end
-                end
-            end
-
-            local credits = drop.credit_reward or (drop.raw and drop.raw.credit_reward)
-            if type(credits) == "number" and credits > 0 then
-                if localPlayer then
-                    PlayerManager.adjustCurrency(state, credits)
-
-                    if position and FloatingText and FloatingText.add then
-                        local ui_constants = (constants.ui and constants.ui.floating_text) or {}
-                        local credits_style = ui_constants.credits or {}
-                        local offset_y = credits_style.offset_y or 22
-                        FloatingText.add(state, position, string.format("+%d credits", credits), {
-                            offsetY = floating_text_position(localPlayer, offset_y),
-                            color = credits_style.color or { 1.0, 0.9, 0.2, 1 },
-                            rise = credits_style.rise or 40,
-                            scale = credits_style.scale or 1.1,
-                            font = credits_style.font or "bold",
-                            icon = credits_style.icon or "currency",
-                        })
-                    end
-                end
-            end
+            LootRewards.apply(state, drop, entity)
         end,
     })))
     state.destructionSystem = state.world:addSystem(createDestructionSystem(GameContext.extend(sharedContext)))

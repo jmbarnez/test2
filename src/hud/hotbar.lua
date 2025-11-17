@@ -14,6 +14,27 @@ local hotbar_constants = (constants.ui and constants.ui.hotbar) or {}
 local set_color = theme.utils.set_color
 local HOTBAR_SLOTS = hotbar_constants.slot_count or 10
 local SELECTED_OUTLINE_COLOR = { 0.2, 0.85, 0.95, 1 }
+local COOLDOWN_OVERLAY_COLOR = { 0.2, 0.65, 0.95, 0.55 }
+
+local function is_weapon_item(item)
+    if type(item) ~= "table" then
+        return false
+    end
+
+    if item.type == "weapon" then
+        return true
+    end
+
+    if item.blueprintCategory == "weapons" then
+        return true
+    end
+
+    if type(item.id) == "string" and item.id:match("^weapon:") then
+        return true
+    end
+
+    return false
+end
 
 local function draw_item_icon(icon, x, y, size)
     return ItemIconRenderer.drawAt(icon, x, y, size, {
@@ -231,6 +252,28 @@ function Hotbar.draw(context, player)
     local draggedIndex = hotbarState and hotbarState.draggedIndex
     local pressIndex = hotbarState and hotbarState.pressIndex
 
+    local activeWeapon = player.weapon
+    local activeCooldownFraction
+    local activeCooldownSeconds
+
+    if activeWeapon then
+        local cooldown = tonumber(activeWeapon.cooldown) or 0
+        if cooldown > 0 then
+            local storedDuration = activeWeapon._uiCooldownDuration
+            if not storedDuration or cooldown > storedDuration + 1e-3 then
+                local fireRate = tonumber(activeWeapon.fireRate) or 0
+                storedDuration = math.max(cooldown, fireRate, 0.0001)
+                activeWeapon._uiCooldownDuration = storedDuration
+            end
+
+            local duration = math.max(activeWeapon._uiCooldownDuration or storedDuration or cooldown, 0.0001)
+            activeCooldownFraction = math.min(math.max(cooldown / duration, 0), 1)
+            activeCooldownSeconds = cooldown
+        else
+            activeWeapon._uiCooldownDuration = nil
+        end
+    end
+
     -- Icon
     for i = 1, HOTBAR_SLOTS do
         local item = hotbar.slots[i]
@@ -314,6 +357,23 @@ function Hotbar.draw(context, player)
             love.graphics.pop()
         end
 
+        local shouldShowCooldown = false
+        local cooldownFractionForSlot
+        local cooldownSecondsForSlot
+
+        if item and isSelected and is_weapon_item(item) and activeCooldownFraction and activeCooldownFraction > 0 then
+            shouldShowCooldown = true
+            cooldownFractionForSlot = activeCooldownFraction
+            cooldownSecondsForSlot = activeCooldownSeconds
+        end
+
+        local qtyText
+        local qtyWidth
+        if item and item.quantity and item.quantity > 1 and fonts.small then
+            qtyText = tostring(item.quantity)
+            qtyWidth = fonts.small:getWidth(qtyText)
+        end
+
         if item and not isDragging then
             local iconDrawn = draw_item_icon(item.icon, slotX + 4, slotY + 4, slotSize - 8)
 
@@ -322,15 +382,31 @@ function Hotbar.draw(context, player)
                 love.graphics.setLineWidth(1)
                 love.graphics.circle("line", slotX + slotSize * 0.5, slotY + slotSize * 0.5, slotSize * 0.3)
             end
+        end
 
-            -- Show quantity if > 1
-            if item.quantity and item.quantity > 1 and fonts.small then
+        if shouldShowCooldown and cooldownFractionForSlot and cooldownFractionForSlot > 0 then
+            set_color(window_colors.cooldown_overlay or COOLDOWN_OVERLAY_COLOR)
+            local fillHeight = slotSize * math.min(math.max(cooldownFractionForSlot, 0), 1)
+            love.graphics.rectangle("fill", slotX, slotY + slotSize - fillHeight, slotSize, fillHeight, 3, 3)
+
+            if cooldownSecondsForSlot and cooldownSecondsForSlot > 0 and fonts.small then
                 love.graphics.setFont(fonts.small)
-                set_color({ 1, 1, 1, 1 })
-                local qtyText = tostring(item.quantity)
-                local qtyWidth = fonts.small:getWidth(qtyText)
-                love.graphics.print(qtyText, slotX + slotSize - qtyWidth - 4, slotY + 4)
+                set_color(window_colors.text or { 0.85, 0.9, 0.95, 1 })
+                local timeText = string.format("%.1fs", cooldownSecondsForSlot)
+                local textWidth = fonts.small:getWidth(timeText)
+                love.graphics.print(timeText, slotX + slotSize - textWidth - 4, slotY + 4)
             end
+        elseif qtyText and fonts.small then
+            love.graphics.setFont(fonts.small)
+            set_color({ 1, 1, 1, 1 })
+            love.graphics.print(qtyText, slotX + slotSize - qtyWidth - 4, slotY + 4)
+        end
+
+        if shouldShowCooldown and cooldownFractionForSlot and cooldownFractionForSlot > 0 and qtyText and fonts.small and cooldownSecondsForSlot and cooldownSecondsForSlot > 0 then
+            -- Restore quantity text after overlay if needed
+            love.graphics.setFont(fonts.small)
+            set_color({ 1, 1, 1, 1 })
+            love.graphics.print(qtyText, slotX + slotSize - qtyWidth - 4, slotY + 4)
         end
 
         if fonts.small then

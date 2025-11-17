@@ -10,61 +10,23 @@
 -- ============================================================================
 
 local constants = require("src.constants.game")
-local AudioManager = require("src.audio.manager")
-local PlayerManager = require("src.player.manager")
-local PlayerWeapons = require("src.player.weapons")
 local UIStateManager = require("src.ui.state_manager")
-local SaveLoad = require("src.util.save_load")
-
--- Input system
-local InputMapper = require("src.input.mapper")
-local Intent = require("src.input.intent")
-
--- UI Windows
+local PlayerManager = require("src.player.manager")
+local PhysicsCallbacks = require("src.states.gameplay.physics_callbacks")
 
 -- Core gameplay modules
-local World = require("src.states.gameplay.world")
 local Entities = require("src.states.gameplay.entities")
-local Systems = require("src.states.gameplay.systems")
-local View = require("src.states.gameplay.view")
-local Universe = require("src.states.gameplay.universe")
 local Metrics = require("src.states.gameplay.metrics")
-local PhysicsCallbacks = require("src.states.gameplay.physics_callbacks")
 local Docking = require("src.states.gameplay.docking")
 local Targeting = require("src.states.gameplay.targeting")
 local PlayerLifecycle = require("src.states.gameplay.player")
-local Feedback = require("src.states.gameplay.feedback")
+local View = require("src.states.gameplay.view")
 local Input = require("src.states.gameplay.input")
-
--- Effects
-local EngineTrail = require("src.effects.engine_trail")
 local FloatingText = require("src.effects.floating_text")
-
--- Factories
-local ShipRuntime = require("src.ships.runtime")
-require("src.entities.ship_factory")
-require("src.entities.asteroid_factory")
-require("src.entities.weapon_factory")
-require("src.entities.station_factory")
-require("src.entities.warpgate_factory")
+local Lifecycle = require("src.states.gameplay.lifecycle")
 
 local love = love
 
--- ============================================================================
--- Utility Functions
--- ============================================================================
-
-local function resolveSectorId(config)
-    if type(config) == "table" then
-        return config.sectorId or config.sector
-    elseif type(config) == "string" then
-        return config
-    end
-    return nil
-end
-
--- ============================================================================
--- Main Gameplay State
 -- ============================================================================
 
 local gameplay = {}
@@ -98,116 +60,11 @@ end
          skip their runtime generation pass.
 ]]
 function gameplay:enter(_, config)
-    config = config or {}
-
-    local pendingSaveData
-    if config.loadGame then
-        local saveData, err = SaveLoad.loadSaveData()
-        if saveData then
-            pendingSaveData = saveData
-            if saveData.universe and saveData.universe.seed then
-                self.universeSeed = saveData.universe.seed
-            end
-            if saveData.sector then
-                config.sectorId = saveData.sector
-            end
-            self.skipProceduralSpawns = true
-        else
-            print("[SaveLoad] Failed to preload save: " .. tostring(err))
-            self.skipProceduralSpawns = nil
-        end
-    else
-        self.skipProceduralSpawns = nil
-    end
-
-    if not self.universeSeed then
-        local maxSeed = 0x7fffffff
-        self.universeSeed = love.math.random(0, maxSeed)
-    end
-
-    local sectorId = resolveSectorId(config)
-    self.currentSectorId = sectorId or self.currentSectorId
-
-    local prevSeed1, prevSeed2 = love.math.getRandomSeed()
-    love.math.setRandomSeed(self.universeSeed, self.universeSeed)
-
-    self.universe = Universe.generate({
-        galaxy_count = 3,
-        sectors_per_galaxy = { min = 10, max = 18 },
-    })
-
-    if prevSeed1 then
-        love.math.setRandomSeed(prevSeed1, prevSeed2)
-    end
-
-    -- Initialize subsystems
-    UIStateManager.initialize(self)
-    
-    self.performanceStatsRecords = {}
-    self.performanceStats = {}
-
-    FloatingText.setFallback(self)
-    FloatingText.clear(self)
-    
-    self.engineTrail = EngineTrail.new()
-
-    World.loadSector(self, sectorId)
-    World.initialize(self)
-    PhysicsCallbacks.ensureRouter(self)
-    View.initialize(self)
-    self.activeTarget = nil
-    Systems.initialize(self, Entities.damage)
-
-    AudioManager.play_music("music:adrift", { loop = true, restart = true })
-
-    local restoredFromSave = false
-    if pendingSaveData then
-        local ok, err = SaveLoad.loadGame(self, pendingSaveData)
-        if not ok then
-            print("[SaveLoad] Failed to load save data: " .. tostring(err))
-            self.skipProceduralSpawns = nil
-        else
-            restoredFromSave = true
-        end
-    end
-
-    -- Spawn and setup player
-    if not restoredFromSave then
-        local player = Entities.spawnPlayer(self)
-        if player then
-            if self.engineTrail then
-                self.engineTrail:attachPlayer(player)
-            end
-            PlayerLifecycle.registerCallbacks(self, player)
-        end
-    end
-    
-    View.updateCamera(self)
+    Lifecycle.enter(self, config)
 end
 
 function gameplay:leave()
-    PlayerManager.clearShip(self)
-    Entities.destroyWorldEntities(self.world)
-    self.activeTarget = nil
-    Systems.teardown(self)
-    PhysicsCallbacks.clear(self)
-    World.teardown(self)
-    View.teardown(self)
-
-    AudioManager.stop_music()
-
-    if self.engineTrail then
-        self.engineTrail:clear()
-        self.engineTrail = nil
-    end
-
-    FloatingText.clear(self)
-    FloatingText.setFallback(nil)
-    
-    UIStateManager.cleanup(self)
-
-    self.performanceStatsRecords = nil
-    self.performanceStats = nil
+    Lifecycle.leave(self)
 end
 
 -- ============================================================================
