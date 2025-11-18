@@ -2,6 +2,7 @@ local theme = require("src.ui.theme")
 local PlayerManager = require("src.player.manager")
 local Util = require("src.hud.util")
 local vector = require("src.util.vector")
+local ItemLabel = require("src.util.item_label")
 
 ---@diagnostic disable-next-line: undefined-global
 local love = love
@@ -198,6 +199,51 @@ function TargetPanel.draw(context, player)
     local text_x = x + padding
     local text_width = width - padding * 2
 
+    local isPickup = target and target.pickup ~= nil
+    local pickupInfo
+    local pickupWrappedDesc
+    local pickupLineCount = 0
+    local pickupDescLines = 0
+    local pickupHeadingFont = fonts.small or fonts.body or love.graphics.getFont()
+    local pickupDetailFont = fonts.tiny or fonts.small or pickupHeadingFont
+
+    if isPickup then
+        pickupInfo = cache and cache.pickupInfo
+        local pickupComponent = target.pickup
+        if not pickupInfo then
+            local fallbackLines = {}
+            local item = pickupComponent and pickupComponent.item
+            local quantity = pickupComponent and (pickupComponent.quantity or (item and item.quantity)) or 1
+            if quantity and quantity > 1 then
+                fallbackLines[#fallbackLines + 1] = string.format("Quantity: %d", quantity)
+            end
+
+            local value = item and (item.value or item.price or item.baseValue)
+            if type(value) == "number" and value > 0 then
+                fallbackLines[#fallbackLines + 1] = string.format("Value: %d credits", value * (quantity or 1))
+            end
+
+            local volume = item and (item.volume or item.unitVolume)
+            if type(volume) == "number" and volume > 0 then
+                fallbackLines[#fallbackLines + 1] = string.format("Volume: %.2f", volume * (quantity or 1))
+            end
+
+            pickupInfo = {
+                heading = ItemLabel.resolve(item),
+                lines = (#fallbackLines > 0) and fallbackLines or nil,
+                description = item and item.description,
+            }
+        end
+
+        pickupLineCount = pickupInfo and pickupInfo.lines and #pickupInfo.lines or 0
+
+        if pickupInfo and pickupInfo.description and pickupInfo.description ~= "" then
+            local _, wrapped = pickupDetailFont:getWrap(pickupInfo.description, text_width)
+            pickupWrappedDesc = wrapped
+            pickupDescLines = wrapped and #wrapped or 0
+        end
+    end
+
     local targetPos = target and target.position
     local hull_current, hull_max, shield_current, shield_max
     local hasTarget = false
@@ -212,17 +258,28 @@ function TargetPanel.draw(context, player)
     local isEnemy = hasTarget and not not target.enemy or false
     local showFullPanel = hasTarget and ((not isEnemy) or isLocked) or false
 
-    local height = hasTarget and (showFullPanel and 96 or 68) or 84
-
-    local isLocking = false
-    local lockProgress = 0
-    local lockDuration = nil
-    if hasTarget and cache and cache.lockCandidate == target and not isLocked then
-        lockDuration = cache.lockDuration
-        lockProgress = cache.lockProgress or 0
-        if lockDuration and lockDuration > 0 then
-            isLocking = lockProgress < 1
+    local height
+    if isPickup then
+        local headingHeight = pickupHeadingFont:getHeight()
+        local detailHeight = pickupDetailFont:getHeight()
+        height = padding * 2 + headingHeight
+        if pickupLineCount > 0 then
+            height = height + 6 + pickupLineCount * detailHeight + math.max(0, pickupLineCount - 1) * 4
         end
+
+        if pickupDescLines and pickupDescLines > 0 then
+            height = height + 6 + pickupDescLines * detailHeight
+        elseif pickupInfo and pickupInfo.description and pickupInfo.description ~= "" then
+            height = height + 6 + detailHeight
+        end
+
+        if pickupLineCount == 0 and (not pickupDescLines or pickupDescLines == 0) then
+            height = height + 12 + detailHeight
+        end
+
+        height = math.max(height, 72)
+    else
+        height = hasTarget and (showFullPanel and 96 or 68) or 84
     end
 
     set_color(hud_colors.status_panel or { 0.05, 0.06, 0.09, 0.95 })
@@ -231,6 +288,49 @@ function TargetPanel.draw(context, player)
     set_color(hud_colors.status_border or { 0.2, 0.26, 0.34, 0.9 })
     love.graphics.setLineWidth(1)
     love.graphics.rectangle("line", x + 0.5, y + 0.5, width - 1, height - 1)
+
+    if isPickup then
+        local info = pickupInfo or {}
+        local heading = info.heading or (target.pickup and target.pickup.item and ItemLabel.resolve(target.pickup.item)) or "Pickup"
+
+        love.graphics.setFont(pickupHeadingFont)
+        set_color(hud_colors.status_text or { 0.82, 0.88, 0.93, 1 })
+        love.graphics.print(heading, text_x, y + padding)
+
+        local contentY = y + padding + pickupHeadingFont:getHeight() + 6
+        love.graphics.setFont(pickupDetailFont)
+
+        if info.lines then
+            set_color(hud_colors.status_text or { 0.82, 0.88, 0.93, 1 })
+            for i = 1, #info.lines do
+                love.graphics.print(info.lines[i], text_x, contentY)
+                contentY = contentY + pickupDetailFont:getHeight() + 4
+            end
+        end
+
+        local descriptionPrinted = false
+        if pickupWrappedDesc and #pickupWrappedDesc > 0 then
+            set_color(hud_colors.status_muted or { 0.6, 0.66, 0.72, 1 })
+            if info.lines and #info.lines > 0 then
+                contentY = contentY + 2
+            end
+            for _, line in ipairs(pickupWrappedDesc) do
+                love.graphics.print(line, text_x, contentY)
+                contentY = contentY + pickupDetailFont:getHeight()
+            end
+            descriptionPrinted = true
+        end
+
+        if not descriptionPrinted and info.description and info.description ~= "" then
+            set_color(hud_colors.status_muted or { 0.6, 0.66, 0.72, 1 })
+            if info.lines and #info.lines > 0 then
+                contentY = contentY + 2
+            end
+            love.graphics.print(info.description, text_x, contentY)
+        end
+
+        return
+    end
 
     if not hasTarget then
         local headingFont = fonts.small

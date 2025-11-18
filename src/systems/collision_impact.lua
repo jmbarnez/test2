@@ -58,12 +58,13 @@ return function(context)
             end
 
             -- Avoid double-processing this collision pair this frame
-            local key1 = tostring(entity1) .. ":" .. tostring(entity2)
-            local key2 = tostring(entity2) .. ":" .. tostring(entity1)
-            if self.processedCollisions[key1] or self.processedCollisions[key2] then
+            self.processedCollisions[entity1] = self.processedCollisions[entity1] or {}
+            self.processedCollisions[entity2] = self.processedCollisions[entity2] or {}
+            if self.processedCollisions[entity1][entity2] or self.processedCollisions[entity2][entity1] then
                 return
             end
-            self.processedCollisions[key1] = true
+            self.processedCollisions[entity1][entity2] = true
+            self.processedCollisions[entity2][entity1] = true
 
             -- Calculate total impact force
             local totalImpulse = math.abs(normalImpulse or 0) + math.abs(tangentImpulse or 0)

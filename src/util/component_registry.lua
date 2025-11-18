@@ -38,7 +38,10 @@ local function prune_empty(tbl, seen)
 end
 
 -- Helper to deep copy serializable values
-local function deep_copy_serializable(value, seen)
+-- Max depth prevents infinite recursion and performance issues
+local MAX_COPY_DEPTH = 50
+
+local function deep_copy_serializable(value, seen, depth)
     local valueType = type(value)
     if valueType == "nil" or valueType == "number" or valueType == "string" or valueType == "boolean" then
         return value
@@ -46,6 +49,13 @@ local function deep_copy_serializable(value, seen)
 
     if valueType ~= "table" then
         return nil
+    end
+
+    -- Depth limit to prevent infinite recursion or excessive nesting
+    depth = depth or 0
+    if depth >= MAX_COPY_DEPTH then
+        print("[ComponentRegistry] Warning: Max depth reached during serialization, truncating")
+        return {}
     end
 
     seen = seen or {}
@@ -59,7 +69,7 @@ local function deep_copy_serializable(value, seen)
     for key, innerValue in pairs(value) do
         local keyType = type(key)
         if keyType == "string" or keyType == "number" then
-            local copied = deep_copy_serializable(innerValue, seen)
+            local copied = deep_copy_serializable(innerValue, seen, depth + 1)
             if copied ~= nil then
                 result[key] = copied
             end
@@ -282,7 +292,38 @@ ComponentRegistry.STATS = {
 
 ComponentRegistry.AI = {
     key = "ai",
-    copy = true,
+    serialize = function(entity)
+        local ai = entity.ai
+        if type(ai) ~= "table" then
+            return nil
+        end
+        
+        -- Only serialize essential AI state, skip runtime data
+        local copy = {
+            behavior = ai.behavior,
+            detectionRange = ai.detectionRange,
+            engagementRange = ai.engagementRange,
+            preferredDistance = ai.preferredDistance,
+            wanderRadius = ai.wanderRadius,
+            wanderSpeed = ai.wanderSpeed,
+            wanderArriveRadius = ai.wanderArriveRadius,
+            home = ai.home and { x = ai.home.x, y = ai.home.y } or nil,
+            aggroRange = ai.aggroRange,
+            leashRange = ai.leashRange,
+        }
+        
+        return prune_empty(copy)
+    end,
+    deserialize = function(entity, data)
+        if type(data) ~= "table" then
+            return
+        end
+        
+        entity.ai = entity.ai or {}
+        for key, value in pairs(data) do
+            entity.ai[key] = value
+        end
+    end,
 }
 
 ComponentRegistry.LOOT = {
@@ -290,9 +331,17 @@ ComponentRegistry.LOOT = {
     copy = true,
 }
 
+-- CARGO is handled by custom serialization in serialize_cargo_items
+-- Do NOT deep copy it here to avoid duplication and performance issues
 ComponentRegistry.CARGO = {
     key = "cargo",
-    copy = true,
+    serialize = function(entity)
+        -- Skip cargo serialization here - it's handled by entity_serializer
+        return nil
+    end,
+    deserialize = function(entity, data)
+        -- Skip cargo deserialization here - it's handled by restore_cargo_items
+    end,
 }
 
 ComponentRegistry.QUEST = {
@@ -300,9 +349,31 @@ ComponentRegistry.QUEST = {
     copy = true,
 }
 
+-- Spawner is typically recreated from blueprints
 ComponentRegistry.SPAWNER = {
     key = "spawner",
-    copy = true,
+    serialize = function(entity)
+        local spawner = entity.spawner
+        if type(spawner) ~= "table" then
+            return nil
+        end
+        
+        -- Only save essential spawner state
+        return prune_empty({
+            spawnTimer = spawner.spawnTimer,
+            spawnCount = spawner.spawnCount,
+            maxSpawns = spawner.maxSpawns,
+        })
+    end,
+    deserialize = function(entity, data)
+        if type(data) ~= "table" or not entity.spawner then
+            return
+        end
+        
+        for key, value in pairs(data) do
+            entity.spawner[key] = value
+        end
+    end,
 }
 
 -- Simple Value Components (copied as-is)
@@ -366,6 +437,429 @@ ComponentRegistry.ASTEROID = {
     end,
 }
 
+ComponentRegistry.DRAWABLE = {
+    key = "drawable",
+    serialize = function(entity)
+        local drawable = entity.drawable
+        if type(drawable) ~= "table" then
+            return nil
+        end
+
+        -- Only serialize essential drawable properties, not the entire part tree
+        -- The blueprint will recreate the full drawable on load
+        local copy = {
+            radius = drawable.radius,
+            color = drawable.color,
+            renderLayer = drawable.renderLayer,
+            -- Skip parts array - it's huge and recreated from blueprint
+        }
+
+        return prune_empty(copy)
+    end,
+    deserialize = function(entity, data)
+        if type(data) ~= "table" or not entity.drawable then
+            return
+        end
+
+        -- Only restore essential properties, blueprint handles the rest
+        if data.radius then
+            entity.drawable.radius = data.radius
+        end
+        if data.color then
+            entity.drawable.color = data.color
+        end
+        if data.renderLayer then
+            entity.drawable.renderLayer = data.renderLayer
+        end
+    end,
+}
+
+ComponentRegistry.WEAPON = {
+    key = "weapon",
+    serialize = function(entity)
+        local weapon = entity.weapon
+        if type(weapon) ~= "table" then
+            return nil
+        end
+
+        local copy = deep_copy_serializable(weapon)
+        if not copy then
+            return nil
+        end
+
+        copy._fireRequested = nil
+        copy._pendingTravelIndicator = nil
+        copy._beamSegments = nil
+        copy._beamImpactEvents = nil
+        copy._chargeState = nil
+        copy._activeTarget = nil
+        copy._isLocalPlayer = nil
+        copy._muzzleX = nil
+        copy._muzzleY = nil
+        copy._fireDirX = nil
+        copy._fireDirY = nil
+
+        return prune_empty(copy)
+    end,
+    deserialize = function(entity, data)
+        if type(data) ~= "table" then
+            return
+        end
+
+        local weapon = deep_copy_serializable(data)
+        if not weapon then
+            return
+        end
+
+        weapon._fireRequested = nil
+        weapon._pendingTravelIndicator = nil
+        weapon._beamSegments = nil
+        weapon._beamImpactEvents = nil
+        weapon._chargeState = nil
+        weapon._activeTarget = nil
+        weapon._isLocalPlayer = nil
+        weapon._muzzleX = nil
+        weapon._muzzleY = nil
+        weapon._fireDirX = nil
+        weapon._fireDirY = nil
+
+        entity.weapon = weapon
+    end,
+}
+
+ComponentRegistry.WEAPONS = {
+    key = "weapons",
+    serialize = function(entity)
+        local weapons = entity.weapons
+        if type(weapons) ~= "table" or #weapons == 0 then
+            return nil
+        end
+
+        local serialized = {}
+
+        local function serialize_weapon_state(component)
+            if type(component) ~= "table" then
+                return nil
+            end
+
+            local state = prune_empty({
+                firing = component.firing,
+                alwaysFire = component.alwaysFire,
+                cooldown = component.cooldown,
+                beamTimer = component.beamTimer,
+                maxRange = component.maxRange,
+                targetX = component.targetX,
+                targetY = component.targetY,
+                sequence = component.sequence,
+                charge = component.charge,
+                heat = component.heat,
+                ammo = component.ammo,
+            })
+
+            return state and next(state) and state or nil
+        end
+
+        local function serialize_mount(mount)
+            if type(mount) ~= "table" then
+                return nil
+            end
+
+            local copy = prune_empty({
+                forward = mount.forward,
+                inset = mount.inset,
+                lateral = mount.lateral,
+                vertical = mount.vertical,
+                offsetX = mount.offsetX,
+                offsetY = mount.offsetY,
+            })
+
+            return copy and next(copy) and copy or nil
+        end
+
+        for i = 1, #weapons do
+            local weapon = weapons[i]
+            if type(weapon) == "table" then
+                local entry = {}
+
+                if weapon.id then
+                    entry.id = weapon.id
+                end
+
+                if weapon.itemId then
+                    entry.itemId = weapon.itemId
+                end
+
+                if weapon.assign then
+                    entry.assign = weapon.assign
+                end
+
+                if type(weapon.blueprint) == "table" then
+                    entry.blueprint = {
+                        category = weapon.blueprint.category,
+                        id = weapon.blueprint.id,
+                    }
+                end
+
+                local state = serialize_weapon_state(weapon.weapon)
+                if state then
+                    entry.state = state
+                end
+
+                local mount = serialize_mount(weapon.weaponMount)
+                if mount then
+                    entry.mount = mount
+                end
+
+                if next(entry) then
+                    serialized[#serialized + 1] = entry
+                end
+            end
+        end
+
+        if #serialized == 0 then
+            return nil
+        end
+
+        return serialized
+    end,
+    deserialize = function(entity, data)
+        if type(data) ~= "table" or type(entity) ~= "table" then
+            return
+        end
+
+        local weapons = entity.weapons
+        if type(weapons) ~= "table" or #weapons == 0 then
+            return
+        end
+
+        local function matches(instance, snapshot)
+            if not instance or not snapshot then
+                return false
+            end
+
+            if snapshot.itemId and instance.itemId == snapshot.itemId then
+                return true
+            end
+
+            if snapshot.id and instance.id == snapshot.id then
+                return true
+            end
+
+            local blueprint = instance.blueprint
+            local snapBlueprint = snapshot.blueprint
+            if snapBlueprint and blueprint and blueprint.id == snapBlueprint.id then
+                if not snapBlueprint.category or blueprint.category == snapBlueprint.category then
+                    return true
+                end
+            end
+
+            if snapshot.assign and instance.assign == snapshot.assign then
+                return true
+            end
+
+            return false
+        end
+
+        for index = 1, #data do
+            local entry = data[index]
+            if type(entry) == "table" then
+                local target
+                for w = 1, #weapons do
+                    local candidate = weapons[w]
+                    if matches(candidate, entry) then
+                        target = candidate
+                        break
+                    end
+                end
+
+                if not target then
+                    target = weapons[index]
+                end
+
+                if target then
+                    if entry.assign and not target.assign then
+                        target.assign = entry.assign
+                    end
+
+                    if entry.mount then
+                        target.weaponMount = target.weaponMount or {}
+                        for key, value in pairs(entry.mount) do
+                            target.weaponMount[key] = value
+                        end
+                    end
+
+                    if entry.state and type(target.weapon) == "table" then
+                        for key, value in pairs(entry.state) do
+                            target.weapon[key] = value
+                        end
+                    end
+                end
+            end
+        end
+    end,
+}
+
+ComponentRegistry.ABILITY_MODULES = {
+    key = "abilityModules",
+    serialize = function(entity)
+        local modules = entity.abilityModules
+        if type(modules) ~= "table" or #modules == 0 then
+            return nil
+        end
+
+        local serialized = {}
+        for index = 1, #modules do
+            local entry = modules[index]
+            if type(entry) == "table" then
+                local copy = deep_copy_serializable(entry)
+                if copy then
+                    serialized[#serialized + 1] = prune_empty(copy)
+                end
+            end
+        end
+
+        if #serialized == 0 then
+            return nil
+        end
+
+        return serialized
+    end,
+    deserialize = function(entity, data)
+        if type(data) ~= "table" then
+            return
+        end
+
+        local modules = {}
+        for index = 1, #data do
+            local entry = data[index]
+            if type(entry) == "table" then
+                local copy = deep_copy_serializable(entry)
+                if copy then
+                    modules[#modules + 1] = copy
+                end
+            end
+        end
+
+        if #modules > 0 then
+            entity.abilityModules = modules
+        else
+            entity.abilityModules = nil
+        end
+    end,
+}
+
+ComponentRegistry.ABILITY_STATE = {
+    key = "_abilityState",
+    serialize = function(entity)
+        local state = entity._abilityState
+        if type(state) ~= "table" then
+            return nil
+        end
+
+        local copy = deep_copy_serializable(state)
+        if not copy or next(copy) == nil then
+            return nil
+        end
+
+        for _, abilityState in pairs(copy) do
+            if type(abilityState) == "table" then
+                abilityState.wasDown = nil
+                abilityState.holdActive = nil
+                abilityState._restoreFn = nil
+                abilityState._dash_restore = nil
+                abilityState._dash_prevDamping = nil
+                abilityState._dash_prevBullet = nil
+                abilityState._temporalFieldRemaining = nil
+                abilityState._afterburnerZoomData = nil
+            end
+        end
+
+        return prune_empty(copy)
+    end,
+    deserialize = function(entity, data)
+        if type(data) ~= "table" then
+            return
+        end
+
+        local copy = deep_copy_serializable(data)
+        if not copy then
+            return
+        end
+
+        for _, abilityState in pairs(copy) do
+            if type(abilityState) == "table" then
+                abilityState.wasDown = nil
+                abilityState.holdActive = nil
+                abilityState._restoreFn = nil
+                abilityState._dash_restore = nil
+                abilityState._dash_prevDamping = nil
+                abilityState._dash_prevBullet = nil
+                abilityState._temporalFieldRemaining = nil
+                abilityState._afterburnerZoomData = nil
+            end
+        end
+
+        entity._abilityState = copy
+    end,
+}
+
+-- Colliders are recreated from blueprints, no need to serialize
+ComponentRegistry.COLLIDERS = {
+    key = "colliders",
+    serialize = function(entity) return nil end,
+    deserialize = function(entity, data) end,
+}
+
+ComponentRegistry.COLLIDER = {
+    key = "collider",
+    serialize = function(entity) return nil end,
+    deserialize = function(entity, data) end,
+}
+
+ComponentRegistry.SHIP_RUNTIME = {
+    key = "shipRuntime",
+    serialize = function(entity)
+        if entity.shipRuntime then
+            return true
+        end
+        return nil
+    end,
+    deserialize = function(entity, data)
+        if data then
+            entity.shipRuntime = true
+        end
+    end,
+}
+
+ComponentRegistry.PILOT = {
+    key = "pilot",
+    serialize = function(entity)
+        local pilot = entity.pilot
+        if type(pilot) ~= "table" then
+            return nil
+        end
+
+        local copy = deep_copy_serializable(pilot)
+        if not copy then
+            return nil
+        end
+
+        return prune_empty(copy)
+    end,
+    deserialize = function(entity, data)
+        if type(data) ~= "table" then
+            return
+        end
+
+        local copy = deep_copy_serializable(data)
+        if not copy then
+            return
+        end
+
+        entity.pilot = copy
+    end,
+}
+
 --- Returns an ordered list of all component definitions
 ---@return ComponentDefinition[]
 function ComponentRegistry.getAllComponents()
@@ -390,6 +884,15 @@ function ComponentRegistry.getAllComponents()
         ComponentRegistry.ENEMY,
         ComponentRegistry.STATION,
         ComponentRegistry.ASTEROID,
+        ComponentRegistry.DRAWABLE,
+        ComponentRegistry.WEAPON,
+        ComponentRegistry.WEAPONS,
+        ComponentRegistry.ABILITY_MODULES,
+        ComponentRegistry.ABILITY_STATE,
+        ComponentRegistry.COLLIDERS,
+        ComponentRegistry.COLLIDER,
+        ComponentRegistry.SHIP_RUNTIME,
+        ComponentRegistry.PILOT,
     }
 end
 
@@ -398,9 +901,11 @@ end
 ---@return table
 function ComponentRegistry.serializeEntity(entity)
     local data = {}
+    local timer = love and love.timer
     
     for _, component in ipairs(ComponentRegistry.getAllComponents()) do
         local value
+        local startTime = timer and timer.getTime and timer.getTime() or nil
         
         if component.serialize then
             -- Use custom serializer
@@ -412,6 +917,13 @@ function ComponentRegistry.serializeEntity(entity)
         
         if value ~= nil then
             data[component.key] = value
+        end
+
+        if startTime then
+            local elapsed = timer.getTime() - startTime
+            if elapsed > 0.2 then
+                print(string.format("[ComponentRegistry] Slow serialize '%s' (%.2fs)", component.key, elapsed))
+            end
         end
     end
     

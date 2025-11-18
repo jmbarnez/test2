@@ -50,6 +50,13 @@ return {
             offset_y = 22,
             icon = "currency",
         },
+        pickup = {
+            color = { 0.85, 0.95, 1.0, 1 },
+            rise = 36,
+            scale = 1.0,
+            font = "bold",
+            offset_y = 26,
+        },
     },
     shop = {
         scrollbar_width = 10,

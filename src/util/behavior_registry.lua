@@ -117,14 +117,8 @@ function BehaviorRegistry:list()
 end
 
 function BehaviorRegistry:clear()
-    for key in pairs(self._behaviors) do
-        self._behaviors[key] = nil
-    end
-
-    for key in pairs(self._fallbacks) do
-        self._fallbacks[key] = nil
-    end
-
+    self._behaviors = {}
+    self._fallbacks = {}
     self._default = nil
 end
 

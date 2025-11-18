@@ -286,19 +286,31 @@ end
 ---@return boolean success
 ---@return string|nil error
 function SaveLoad.saveGame(state)
+    print("[SaveLoad] Starting save process...")
+    
+    print("[SaveLoad] Serializing game state...")
     local saveData = SaveLoad.serialize(state)
     if not saveData then
         return false, "Failed to serialize game state"
     end
+    print("[SaveLoad] Game state serialization complete")
 
+    print("[SaveLoad] Encoding to JSON...")
     local ok, jsonString = pcall(json.encode, saveData)
     if not ok then
-        return false, "Failed to encode save data: " .. tostring(jsonString)
+        local errorMsg = "Failed to encode save data: " .. tostring(jsonString)
+        print("[SaveLoad] ERROR: " .. errorMsg)
+        return false, errorMsg
     end
+    local sizeKB = math.floor(#jsonString / 1024)
+    print(string.format("[SaveLoad] JSON encoding complete (%d KB)", sizeKB))
 
+    print("[SaveLoad] Writing to disk...")
     local writeOk, writeError = pcall(love.filesystem.write, SAVE_FILE_NAME, jsonString)
     if not writeOk then
-        return false, "Failed to write save file: " .. tostring(writeError)
+        local errorMsg = "Failed to write save file: " .. tostring(writeError)
+        print("[SaveLoad] ERROR: " .. errorMsg)
+        return false, errorMsg
     end
 
     print("[SaveLoad] Game saved successfully to " .. SAVE_FILE_NAME)

@@ -10,6 +10,40 @@ local PlayerSkills = require("src.player.skills")
 ---@diagnostic disable-next-line: undefined-global
 local love = love
 
+local pilotShipLinks = setmetatable({}, { __mode = "kv" })
+
+local function get_pilot_current_ship(pilot)
+    return pilot and pilotShipLinks[pilot] or nil
+end
+
+local function set_pilot_current_ship(pilot, ship)
+    if not pilot then
+        return
+    end
+
+    if ship == nil then
+        pilotShipLinks[pilot] = nil
+    else
+        pilotShipLinks[pilot] = ship
+    end
+end
+
+local PILOT_METATABLE = {
+    __index = function(t, key)
+        if key == "currentShip" then
+            return get_pilot_current_ship(t)
+        end
+    end,
+    __newindex = function(t, key, value)
+        if key == "currentShip" then
+            set_pilot_current_ship(t, value)
+            return
+        end
+
+        rawset(t, key, value)
+    end,
+}
+
 local PlayerManager = {}
 
 --- Resolves state reference from various context types
@@ -38,10 +72,12 @@ function PlayerManager.ensurePilot(state, playerId)
 
     local pilot = state.playerPilot
     if not pilot then
-        pilot = {
+        pilot = setmetatable({
             playerPilot = true,
-        }
+        }, PILOT_METATABLE)
         state.playerPilot = pilot
+    elseif getmetatable(pilot) ~= PILOT_METATABLE then
+        setmetatable(pilot, PILOT_METATABLE)
     end
 
     if playerId then

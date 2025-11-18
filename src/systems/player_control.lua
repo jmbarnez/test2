@@ -9,6 +9,8 @@ local tiny = require("libs.tiny")
 local vector = require("src.util.vector")
 local GameContext = require("src.states.gameplay.context")
 
+local keyboard_isDown = love and love.keyboard and love.keyboard.isDown
+
 ---@class PlayerControlSystemContext
 ---@field state table               # Gameplay state or context-resolvable state
 ---@field camera table|nil          # Camera used for mouse-to-world aim
@@ -25,11 +27,6 @@ return function(context)
         process = function(_, entity, dt)
             local body = entity.body
             if not body or body:isDestroyed() then
-                return
-            end
-
-            -- Skip remote networked players - they're controlled by network interpolation
-            if entity.networkState and entity.networkState.initialized then
                 return
             end
 
@@ -75,26 +72,20 @@ return function(context)
             -- Poll local player input directly
             local move_x, move_y = 0, 0
             if entity.playerId and localPlayerId and entity.playerId == localPlayerId then
-                if not (uiInput and uiInput.keyboardCaptured) then
-                    if love.keyboard.isDown("a", "left") then
+                if not (uiInput and uiInput.keyboardCaptured) and keyboard_isDown then
+                    if keyboard_isDown("a", "left") then
                         move_x = move_x - 1
                     end
-                    if love.keyboard.isDown("d", "right") then
+                    if keyboard_isDown("d", "right") then
                         move_x = move_x + 1
                     end
-                    if love.keyboard.isDown("w", "up") then
+                    if keyboard_isDown("w", "up") then
                         move_y = move_y - 1
                     end
-                    if love.keyboard.isDown("s", "down") then
+                    if keyboard_isDown("s", "down") then
                         move_y = move_y + 1
                     end
                     
-                    -- Normalize movement vector
-                    if move_x ~= 0 or move_y ~= 0 then
-                        local length = math.sqrt(move_x * move_x + move_y * move_y)
-                        move_x = move_x / length
-                        move_y = move_y / length
-                    end
                 end
             end
 

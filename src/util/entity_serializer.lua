@@ -154,6 +154,15 @@ local function should_skip_entity(entity)
         return true
     end
 
+    -- Skip blueprint-based enemies (not procedural ships)
+    -- Procedural ships have blueprint.id starting with "proc_ship"
+    if entity.enemy and not entity.quest and not entity.uniqueEnemy and not entity.bossEnemy then
+        local blueprintId = entity.blueprint and entity.blueprint.id
+        if blueprintId and not blueprintId:match("^proc_ship") then
+            return true
+        end
+    end
+
     return false
 end
 
@@ -279,20 +288,80 @@ function EntitySerializer.serialize_entity(state, entity)
     return prune_empty(snapshot)
 end
 
-function EntitySerializer.serialize_world(state)
+function EntitySerializer.serialize_world(state, options)
     if not (state and state.world and state.world.entities) then
         return {}
     end
 
+    options = options or {}
+    local on_progress = options.on_progress
+    local yield_func = options.yield_func
+    local yield_interval = options.yield_interval or 0
+
     local results = {}
-    for index = 1, #state.world.entities do
+    local totalEntities = #state.world.entities
+    local startTime = love.timer and love.timer.getTime() or 0
+    local lastReportTime = startTime
+    local lastYieldTime = startTime
+
+    for index = 1, totalEntities do
         local entity = state.world.entities[index]
-        local serialized = EntitySerializer.serialize_entity(state, entity)
-        if serialized then
+        local entityStartTime = love.timer and love.timer.getTime() or 0
+
+        -- Progress reporting every 2 seconds
+        local currentTime = love.timer and love.timer.getTime() or 0
+        if currentTime - lastReportTime >= 2.0 then
+            local elapsed = currentTime - startTime
+            local rate = index / elapsed
+            local remaining = (totalEntities - index) / rate
+            print(string.format("[EntitySerializer] Progress: %d/%d (%.0f%%) - %.1fs elapsed, ~%.1fs remaining", 
+                index, totalEntities, (index / totalEntities) * 100, elapsed, remaining))
+            lastReportTime = currentTime
+        end
+
+        -- Wrap in pcall to prevent a single entity from breaking the entire save
+        local ok, serialized = pcall(EntitySerializer.serialize_entity, state, entity)
+        if ok and serialized then
             results[#results + 1] = serialized
+        elseif not ok then
+            local entityInfo = "unknown"
+            if entity then
+                entityInfo = string.format("%s (id: %s)", 
+                    entity.blueprint and entity.blueprint.id or entity.type or "?",
+                    entity.entityId or entity.id or "?")
+            end
+            print(string.format("[EntitySerializer] Warning: Failed to serialize entity %s: %s", entityInfo, tostring(serialized)))
+        end
+
+        -- Warn about slow entities (>100ms)
+        local entityTime = (love.timer and love.timer.getTime() or 0) - entityStartTime
+        if entityTime > 0.1 then
+            local entityInfo = entity.blueprint and entity.blueprint.id or entity.type or "unknown"
+            print(string.format("[EntitySerializer] Warning: Slow entity serialization (%.2fs): %s", entityTime, entityInfo))
+        end
+
+        if on_progress then
+            local okProgress, progressErr = pcall(on_progress, index, totalEntities, entity)
+            if not okProgress then
+                print(string.format("[EntitySerializer] Warning: Progress callback error: %s", tostring(progressErr)))
+            end
+        end
+
+        if yield_func then
+            if yield_interval <= 0 then
+                yield_func()
+            else
+                local currentTimeYield = love.timer and love.timer.getTime() or 0
+                if currentTimeYield - lastYieldTime >= yield_interval then
+                    yield_func()
+                    lastYieldTime = currentTimeYield
+                end
+            end
         end
     end
 
+    local totalTime = (love.timer and love.timer.getTime() or 0) - startTime
+    print(string.format("[EntitySerializer] Serialization complete: %d/%d entities saved in %.2fs", #results, totalEntities, totalTime))
     return results
 end
 

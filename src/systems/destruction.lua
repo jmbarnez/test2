@@ -23,20 +23,43 @@ return function(context)
 
     local destruction_system = tiny.system {
         filter = tiny.requireAll("pendingDestroy"),
+
+        init = function(self)
+            self._destroyQueue = {}
+        end,
+
+        postProcess = function(self)
+            local queue = self._destroyQueue
+            if not queue or #queue == 0 then
+                return
+            end
+
+            for i = 1, #queue do
+                local body = queue[i]
+                if body and not body:isDestroyed() then
+                    body:destroy()
+                end
+                queue[i] = nil
+            end
+        end,
+
         process = function(self, entity, dt)
             safe_call(entity.onDestroyed, entity, context)
 
             -- Safely destroy physics body with error handling
             local body = entity.body
-            if body and not body:isDestroyed() then
-                local ok, err = pcall(function()
-                    body:destroy()
-                end)
-                if not ok then
-                    print(string.format("[destruction] Failed to destroy physics body: %s", tostring(err)))
+            if body then
+                entity.body = nil
+
+                if not body:isDestroyed() then
+                    local queue = self._destroyQueue
+                    if queue then
+                        queue[#queue + 1] = body
+                    else
+                        self._destroyQueue = { body }
+                    end
                 end
             end
-            entity.body = nil
 
             -- Clear physics references
             if entity.fixtures then

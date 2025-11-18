@@ -2,9 +2,11 @@ local loader = require("src.blueprints.loader")
 local constants = require("src.constants.game")
 local PlayerManager = require("src.player.manager")
 local Items = require("src.items.registry")
+local table_util = require("src.util.table")
 
 ---@diagnostic disable-next-line: undefined-global
 local love = love
+local math = math
 
 local Spawning = {}
 
@@ -426,26 +428,42 @@ function Spawning.spawnLootPickup(state, drop)
         return nil
     end
 
-    local item = drop.item
-    if not item and drop.id then
+    local baseItem = drop.item
+    if not baseItem and drop.id then
         local instantiated = Items.instantiate(drop.id, {
             quantity = drop.quantity,
             name = drop.name,
         })
         if instantiated then
-            item = instantiated
+            baseItem = instantiated
         end
     end
 
-    if not item then
+    if not baseItem then
         return nil
     end
 
-    local quantity = drop.quantity or item.quantity or 1
-    item.quantity = quantity
+    local totalQuantity = drop.quantity or baseItem.quantity or 1
+    if type(totalQuantity) ~= "number" then
+        totalQuantity = 1
+    end
+
+    totalQuantity = math.floor(totalQuantity)
+    if totalQuantity < 1 then
+        return nil
+    end
+
+    local templateItem = table_util.deep_copy(baseItem)
+    if not templateItem then
+        return nil
+    end
+    templateItem.quantity = 1
 
     local position = drop.position
-    local velocity = drop.velocity or {}
+    local centerX = position and position.x or 0
+    local centerY = position and position.y or 0
+    local baseVelocity = drop.velocity
+    local speedMultiplier = drop.speedMultiplier or 1
 
     local function scaled_size(value)
         if type(value) ~= "number" then
@@ -458,42 +476,123 @@ function Spawning.spawnLootPickup(state, drop)
         return scaled
     end
 
-    if not (velocity.x or velocity.y) then
-        velocity = {
-            x = (love and love.math and (love.math.random() - 0.5) or 0) * 20,
-            y = (love and love.math and (love.math.random() - 0.5) or 0) * 20,
+    local function resolve_burst_speed()
+        local minSpeed = drop.unitBurstSpeedMin or drop.burstSpeedMin or drop.burstSpeed or 38
+        local maxSpeed = drop.unitBurstSpeedMax or drop.burstSpeedMax or drop.burstSpeed or 62
+
+        if minSpeed < 0 then
+            minSpeed = 0
+        end
+        if maxSpeed < minSpeed then
+            maxSpeed = minSpeed
+        end
+
+        if love and love.math and love.math.random then
+            if maxSpeed > minSpeed then
+                return love.math.random() * (maxSpeed - minSpeed) + minSpeed
+            end
+            return minSpeed
+        end
+
+        if maxSpeed > minSpeed then
+            return (minSpeed + maxSpeed) * 0.5
+        end
+        return minSpeed
+    end
+
+    local function resolve_velocity(px, py)
+        local vx = baseVelocity and baseVelocity.x or 0
+        local vy = baseVelocity and baseVelocity.y or 0
+
+        local dx = (px or centerX) - centerX
+        local dy = (py or centerY) - centerY
+        local dist = math.sqrt(dx * dx + dy * dy)
+
+        local dirX, dirY
+        if dist > 0.0001 then
+            dirX, dirY = dx / dist, dy / dist
+        else
+            local angle = love and love.math and love.math.random()
+                and love.math.random() * math.pi * 2
+                or 0
+            dirX, dirY = math.cos(angle), math.sin(angle)
+        end
+
+        local burstSpeed = resolve_burst_speed()
+        vx = vx + dirX * burstSpeed
+        vy = vy + dirY * burstSpeed
+
+        if love and love.math and love.math.random then
+            local wobble = (love.math.random() - 0.5) * 8
+            local wobbleAngle = love.math.random() * math.pi * 2
+            vx = vx + math.cos(wobbleAngle) * wobble
+            vy = vy + math.sin(wobbleAngle) * wobble
+        end
+
+        return {
+            x = vx * speedMultiplier,
+            y = vy * speedMultiplier,
         }
     end
 
-    local entity = {
-        pickup = {
-            item = item,
-            itemId = item.id,
-            quantity = quantity,
-            collectRadius = drop.collectRadius or 48,
-            lifetime = drop.lifetime or 45,
-            age = 0,
-            source = drop.source,
-        },
-        position = {
-            x = position.x or 0,
-            y = position.y or 0,
-        },
-        velocity = {
-            x = (velocity.x or 0) * (drop.speedMultiplier or 1),
-            y = (velocity.y or 0) * (drop.speedMultiplier or 1),
-        },
-        drawable = {
-            type = "pickup",
-            icon = item.icon,
-            size = scaled_size(drop.size or 28) or 28,
-            spinSpeed = drop.spinSpeed or 0.6,
-            bobAmplitude = drop.bobAmplitude or 4,
-        },
-        rotation = drop.initialRotation or 0,
-    }
+    local function spawn_single_pickup(item_instance)
+        if not item_instance then
+            return nil
+        end
 
-    return state.world:add(entity)
+        item_instance.quantity = 1
+
+        local px = position.x or 0
+        local py = position.y or 0
+
+        if totalQuantity > 1 then
+            local radius = drop.unitScatterRadius
+                or drop.singleScatterRadius
+                or 10
+
+            if radius and radius > 0 and love and love.math and love.math.random then
+                local angle = love.math.random() * math.pi * 2
+                local dist = love.math.random() * radius
+                px = px + math.cos(angle) * dist
+                py = py + math.sin(angle) * dist
+            end
+        end
+
+        local entity = {
+            pickup = {
+                item = item_instance,
+                itemId = item_instance.id,
+                quantity = 1,
+                collectRadius = drop.collectRadius or 48,
+                lifetime = drop.lifetime or 45,
+                age = 0,
+                source = drop.source,
+            },
+            position = {
+                x = px,
+                y = py,
+            },
+            velocity = resolve_velocity(px, py),
+            drawable = {
+                type = "pickup",
+                icon = item_instance.icon,
+                size = scaled_size(drop.size or 28) or 28,
+                spinSpeed = drop.spinSpeed or 0.6,
+                bobAmplitude = drop.bobAmplitude or 4,
+            },
+            rotation = drop.initialRotation or 0,
+        }
+
+        return state.world:add(entity)
+    end
+
+    local lastEntity
+    for _ = 1, totalQuantity do
+        local itemCopy = table_util.deep_copy(templateItem)
+        lastEntity = spawn_single_pickup(itemCopy)
+    end
+
+    return lastEntity
 end
 
 return Spawning

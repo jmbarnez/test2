@@ -225,8 +225,52 @@ local function engage_target_action(entity, blackboard, dt)
 
         if canFire then
             weapon.firing = (not weapon.cooldown or weapon.cooldown <= 0)
-            weapon.targetX = weapon.firing and tx or nil
-            weapon.targetY = weapon.firing and ty or nil
+            
+            -- Use predictive aiming for better accuracy
+            local aimX, aimY = tx, ty
+            if weapon.firing and target.body and not target.body:isDestroyed() then
+                local targetVX, targetVY = target.body:getLinearVelocity()
+                
+                -- Determine projectile speed based on weapon type
+                local projectileSpeed
+                if weapon.fireMode == "hitscan" then
+                    -- Hitscan weapons are essentially instant
+                    projectileSpeed = 10000
+                elseif weapon.projectileSpeed then
+                    projectileSpeed = weapon.projectileSpeed
+                elseif weapon.fireMode == "projectile" then
+                    -- Default projectile speed if not specified
+                    projectileSpeed = weapon.speed or 400
+                else
+                    -- Fallback to a reasonable default
+                    projectileSpeed = 500
+                end
+                
+                -- Calculate lead point
+                local leadX, leadY = vector.predictive_aim(
+                    ex, ey,
+                    tx, ty,
+                    targetVX or 0, targetVY or 0,
+                    projectileSpeed
+                )
+                
+                if leadX and leadY then
+                    aimX, aimY = leadX, leadY
+                    
+                    -- Add some inaccuracy based on AI skill (0.0 = perfect, 1.0 = terrible)
+                    local aimError = ai.aimError or stats.aim_error or 0.15
+                    if aimError > 0 then
+                        local errorRange = distance * aimError
+                        local errorX = (random() - 0.5) * 2 * errorRange
+                        local errorY = (random() - 0.5) * 2 * errorRange
+                        aimX = aimX + errorX
+                        aimY = aimY + errorY
+                    end
+                end
+            end
+            
+            weapon.targetX = weapon.firing and aimX or nil
+            weapon.targetY = weapon.firing and aimY or nil
         else
             weapon.firing = false
             weapon.targetX = nil

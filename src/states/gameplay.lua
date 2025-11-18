@@ -117,7 +117,7 @@ function gameplay:update(dt)
 
         -- Cap accumulator to prevent spiral of death
         if self.physicsAccumulator > FIXED_DT * MAX_STEPS then
-            self.physicsAccumulator = 0
+            self.physicsAccumulator = FIXED_DT * MAX_STEPS
         end
     elseif world then
         -- No physics world available; fall back to variable timestep updates
@@ -175,11 +175,7 @@ function gameplay:draw()
     self.world:draw()
     FloatingText.draw(self)
     
-    -- Safe pop (handle potential stack underflow)
-    local stack_depth = love.graphics.getStackDepth and love.graphics.getStackDepth() or nil
-    if not stack_depth or stack_depth > 1 then
-        love.graphics.pop()
-    end
+    love.graphics.pop()
 
     Metrics.finalizeRender(self, renderStart)
 end

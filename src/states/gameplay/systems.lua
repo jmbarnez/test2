@@ -3,6 +3,9 @@ local UIStateManager = require("src.ui.state_manager")
 
 local tiny = require("libs.tiny")
 local GameContext = require("src.states.gameplay.context")
+local constants = require("src.constants.game")
+local FloatingText = require("src.effects.floating_text")
+local ItemLabel = require("src.util.item_label")
 local createMovementSystem = require("src.systems.movement")
 local createRenderSystem = require("src.renderers.render")
 local createPlayerControlSystem = require("src.systems.player_control")
@@ -28,11 +31,127 @@ local createTargetingSystem = require("src.systems.targeting")
 local createDestructionSystem = require("src.systems.destruction")
 local createLootDropSystem = require("src.systems.loot_drop")
 local createPickupSystem = require("src.systems.pickup")
+local createPickupHoverSystem = require("src.systems.pickup_hover")
 local createEffectsRendererSystem = require("src.systems.effects_renderer")
 local Entities = require("src.states.gameplay.entities")
 local LootRewards = require("src.player.loot_rewards")
 
 local Systems = {}
+
+local function build_pickup_label(item_name, quantity)
+    if quantity and quantity > 1 then
+        return string.format("+%dx %s", quantity, item_name)
+    end
+    return string.format("+%s", item_name)
+end
+
+local function is_floating_entry_active(entry)
+    return entry
+        and entry.__alive ~= false
+        and entry.duration
+        and entry.age
+        and entry.age < entry.duration
+end
+
+local function update_entry_lines(entry, label)
+    local lines = {}
+    for line in string.gmatch(label, "[^\n]+") do
+        lines[#lines + 1] = line
+    end
+    if #lines == 0 then
+        lines[1] = label
+    end
+    entry.lines = lines
+end
+
+local function handle_pickup_collected(pickup, ship, entity, state)
+    if not (state and pickup and type(pickup) == "table" and pickup.item) then
+        return
+    end
+
+    local floating_text_module = FloatingText
+    if not (floating_text_module and floating_text_module.add) then
+        return
+    end
+
+    local position = (entity and entity.position)
+        or (pickup.position)
+        or (ship and ship.position)
+
+    if not (position and position.x and position.y) then
+        return
+    end
+
+    local item = pickup.item
+    local quantity = pickup.quantity or item.quantity or 1
+    local item_name = ItemLabel.resolve(item)
+    local ui_constants = constants.ui
+    local floating_constants = ui_constants and ui_constants.floating_text or {}
+    local pickup_style = floating_constants.pickup or {}
+
+    local offsetY = pickup_style.offsetY or pickup_style.offset_y or 26
+    local cache_key = item.id or item_name
+    local accumulator_map = state._pickupFloatingAccum or {}
+    state._pickupFloatingAccum = accumulator_map
+
+    local accumulator = cache_key and accumulator_map[cache_key] or nil
+    if accumulator then
+        local entry = accumulator.entry
+        if not is_floating_entry_active(entry) then
+            accumulator_map[cache_key] = nil
+            accumulator = nil
+        end
+    end
+
+    local total_quantity = quantity
+    local entry
+
+    if accumulator then
+        total_quantity = (accumulator.quantity or 0) + quantity
+        entry = accumulator.entry
+    end
+
+    local label = build_pickup_label(item_name, total_quantity)
+
+    if entry and is_floating_entry_active(entry) then
+        entry.text = label
+        update_entry_lines(entry, label)
+        entry.age = 0
+        entry.__alive = true
+        entry.x = (position.x or 0)
+        entry.y = (position.y or 0) - offsetY
+        accumulator.quantity = total_quantity
+    else
+        entry = floating_text_module.add(state, position, label, {
+            color = pickup_style.color,
+            rise = pickup_style.rise,
+            scale = pickup_style.scale,
+            font = pickup_style.font,
+            offsetY = offsetY,
+        })
+
+        if cache_key and entry then
+            accumulator_map[cache_key] = {
+                entry = entry,
+                quantity = total_quantity,
+            }
+        elseif cache_key then
+            accumulator_map[cache_key] = nil
+        end
+    end
+
+    if state.targetingCache then
+        if state.targetingCache.pickupHoveredEntity == entity then
+            state.targetingCache.pickupHoveredEntity = nil
+            state.targetingCache.pickupHoverRadius = nil
+        end
+    end
+
+    if state.pickupHoverEntity == entity then
+        state.pickupHoverEntity = nil
+        state.pickupHoverRadius = nil
+    end
+end
 
 -- System wiring overview:
 --   baseContext = GameContext.compose(state, { damageEntity = ... })
@@ -95,7 +214,12 @@ end
 local function add_common_systems(state, context)
     state.movementSystem = state.world:addSystem(createMovementSystem())
     local sharedContext = context or GameContext.compose(state)
-    state.pickupSystem = state.world:addSystem(createPickupSystem(GameContext.extend(sharedContext)))
+    local pickupContext = GameContext.extend(sharedContext, {
+        onCollected = function(pickup, ship, entity, game_state)
+            handle_pickup_collected(pickup, ship, entity, game_state)
+        end,
+    })
+    state.pickupSystem = state.world:addSystem(createPickupSystem(pickupContext))
 
     -- Unified weapon system (behavior plugin architecture)
     state.weaponUnifiedSystem = state.world:addSystem(createWeaponUnifiedSystem(GameContext.extend(sharedContext)))
@@ -112,6 +236,7 @@ local function add_common_systems(state, context)
         end,
     })))
     state.destructionSystem = state.world:addSystem(createDestructionSystem(GameContext.extend(sharedContext)))
+    state.pickupHoverSystem = state.world:addSystem(createPickupHoverSystem(GameContext.extend(sharedContext)))
 end
 
 function Systems.initialize(state, damageCallback)

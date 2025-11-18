@@ -117,22 +117,31 @@ local function update_targeting_cache(cache, world_x, world_y, best_entity, best
     cache.cursorWorldX = world_x
     cache.cursorWorldY = world_y
     cache.distanceToCursorSq = best_entity and best_dist_sq or nil
-    cache.hoveredEntity = best_entity
-    cache.hoveredRadius = best_entity and best_radius or nil
+    local hovered_entity = best_entity
+    local hovered_radius = best_radius
+
+    if not hovered_entity and cache.pickupHoveredEntity then
+        hovered_entity = cache.pickupHoveredEntity
+        hovered_radius = cache.pickupHoverRadius
+        cache.distanceToCursorSq = nil
+    end
+
+    cache.hoveredEntity = hovered_entity
+    cache.hoveredRadius = hovered_radius
 
     if active_target then
         cache.activeEntity = active_target
-        cache.activeRadius = active_target == best_entity and best_radius 
+        cache.activeRadius = active_target == hovered_entity and hovered_radius
             or get_hover_radius(active_target) * HOVER_RADIUS_MULTIPLIER
     else
         cache.activeEntity = nil
         cache.activeRadius = nil
     end
 
-    cache.entity = cache.activeEntity or best_entity
+    cache.entity = cache.activeEntity or hovered_entity
     cache.highlightMode = nil
     cache.highlightRadius = nil
-    cache.hoverRadius = cache.activeEntity and cache.activeRadius or cache.hoveredRadius
+    cache.hoverRadius = cache.activeEntity and cache.activeRadius or hovered_radius
 
     cache.lockCandidate = state and state.targetLockTarget or cache.lockCandidate
     cache.lockProgress = state and state.targetLockTimer and cache.lockDuration and cache.lockDuration > 0

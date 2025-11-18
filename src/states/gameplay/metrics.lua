@@ -69,6 +69,11 @@ local function update_performance_strings(state)
         return
     end
 
+    if not (state.debugUI and state.debugUI.visible) then
+        state.performanceStats = nil
+        return
+    end
+
     local METRIC_ORDER = { "frame_dt_ms", "update_ms", "render_ms" }
     local METRIC_LABELS = {
         frame_dt_ms = "Frame dt",

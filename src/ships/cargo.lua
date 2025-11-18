@@ -29,6 +29,26 @@ local function ensure_items_table(component)
     return component.items
 end
 
+local function resolve_stackable(source)
+    if type(source) ~= "table" then
+        return false
+    end
+
+    if source.stackable ~= nil then
+        return source.stackable and true or false
+    end
+
+    local id = source.id
+    if id then
+        local definition = Items.get(id)
+        if definition and definition.stackable ~= nil then
+            return definition.stackable and true or false
+        end
+    end
+
+    return false
+end
+
 function cargo.populate_from_descriptors(cargoComponent, descriptors)
     if type(cargoComponent) ~= "table" or type(descriptors) ~= "table" then
         return
@@ -40,11 +60,33 @@ function cargo.populate_from_descriptors(cargoComponent, descriptors)
         local descriptor = descriptors[i]
         local item = ship_util.instantiate_initial_item(descriptor, loader, Items)
         if item then
-            local existing = find_existing_item(items, item.id)
-            if existing then
-                existing.quantity = sanitize_quantity((existing.quantity or 0) + (item.quantity or 0))
+            local stackable = resolve_stackable(item)
+            item.stackable = stackable
+            local quantity = sanitize_quantity(item.quantity or 1)
+
+            if stackable then
+                if quantity > 0 then
+                    item.quantity = quantity
+                    local existing = find_existing_item(items, item.id)
+                    if existing and resolve_stackable(existing) then
+                        existing.quantity = sanitize_quantity((existing.quantity or 0) + quantity)
+                    else
+                        items[#items + 1] = item
+                    end
+                end
             else
-                items[#items + 1] = item
+                local count = quantity > 0 and quantity or 1
+                for index = 1, count do
+                    local entry
+                    if index == 1 then
+                        entry = item
+                    else
+                        entry = table_util.deep_copy(item)
+                    end
+                    entry.quantity = 1
+                    entry.stackable = false
+                    items[#items + 1] = entry
+                end
             end
         end
     end
@@ -76,11 +118,33 @@ function cargo.add_weapon_items(cargoComponent, weapons, context)
             })
 
             if itemInstance then
-                local existing = find_existing_item(items, itemInstance.id)
-                if existing then
-                    existing.quantity = sanitize_quantity((existing.quantity or 0) + (itemInstance.quantity or 0))
+                local stackable = resolve_stackable(itemInstance)
+                itemInstance.stackable = stackable
+                local quantity = sanitize_quantity(itemInstance.quantity or 1)
+
+                if stackable then
+                    if quantity > 0 then
+                        itemInstance.quantity = quantity
+                        local existing = find_existing_item(items, itemInstance.id)
+                        if existing and resolve_stackable(existing) then
+                            existing.quantity = sanitize_quantity((existing.quantity or 0) + quantity)
+                        else
+                            items[#items + 1] = itemInstance
+                        end
+                    end
                 else
-                    items[#items + 1] = itemInstance
+                    local count = quantity > 0 and quantity or 1
+                    for index = 1, count do
+                        local entry
+                        if index == 1 then
+                            entry = itemInstance
+                        else
+                            entry = table_util.deep_copy(itemInstance)
+                        end
+                        entry.quantity = 1
+                        entry.stackable = false
+                        items[#items + 1] = entry
+                    end
                 end
                 cargoComponent.dirty = true
             end
@@ -208,34 +272,50 @@ function cargo.try_add_item(cargoComponent, descriptor, quantity)
         return false, "insufficient_capacity"
     end
 
+    local stackable = resolve_stackable(descriptor)
+    descriptor.stackable = stackable
+
     local id = descriptor.id
     local target
 
-    if id then
-        for i = 1, #items do
-            local existing = items[i]
-            if existing and existing.id == id then
-                target = existing
-                break
-            end
+    if stackable and id then
+        target = find_existing_item(items, id)
+        if target and not resolve_stackable(target) then
+            target = nil
         end
     end
 
-    if target then
+    if stackable and target then
         target.quantity = sanitize_quantity(target.quantity) + qty
         target.volume = ship_util.sanitize_positive_number(target.volume)
         if target.volume == 0 then
             target.volume = perVolume
         end
-    else
-        target = {
-            id = id,
-            name = descriptor.name or descriptor.displayName or id or "Unknown Cargo",
-            quantity = qty,
-            volume = perVolume,
-            icon = descriptor.icon,
-        }
+        target.stackable = true
+    elseif stackable then
+        if qty <= 0 then
+            qty = 1
+        end
+        target = table_util.deep_copy(descriptor)
+        target.id = id
+        target.name = target.name or target.displayName or descriptor.name or descriptor.displayName or id or "Unknown Cargo"
+        target.quantity = qty
+        target.volume = perVolume
+        target.icon = target.icon or descriptor.icon
+        target.stackable = true
         items[#items + 1] = target
+    else
+        local count = qty > 0 and qty or 1
+        for _ = 1, count do
+            local entry = table_util.deep_copy(descriptor)
+            entry.id = entry.id or id
+            entry.name = entry.name or entry.displayName or descriptor.name or descriptor.displayName or id or "Unknown Cargo"
+            entry.quantity = 1
+            entry.volume = perVolume
+            entry.icon = entry.icon or descriptor.icon
+            entry.stackable = false
+            items[#items + 1] = entry
+        end
     end
 
     cargoComponent.used = ship_util.sanitize_positive_number(cargoComponent.used) + deltaVolume

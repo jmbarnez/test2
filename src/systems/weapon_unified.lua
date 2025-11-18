@@ -8,6 +8,7 @@ local weapon_common = require("src.util.weapon_common")
 local weapon_beam = require("src.util.weapon_beam")
 
 local love = love
+local keyboard_isDown = love and love.keyboard and love.keyboard.isDown
 
 ---@class WeaponUnifiedContext
 ---@field world table|nil The ECS world
@@ -36,10 +37,10 @@ local function resolve_local_player(intentHolder)
 end
 
 local function is_control_held()
-    if not (love and love.keyboard and love.keyboard.isDown) then
+    if not keyboard_isDown then
         return false
     end
-    return love.keyboard.isDown("lctrl") or love.keyboard.isDown("rctrl")
+    return keyboard_isDown("lctrl") or keyboard_isDown("rctrl")
 end
 
 return function(systemContext)
@@ -194,9 +195,6 @@ return function(systemContext)
 
             -- Prepare context for behavior while reusing the same table to reduce GC churn
             local behaviorContext = self.behaviorContext
-            for key in pairs(behaviorContext) do
-                behaviorContext[key] = nil
-            end
             behaviorContext.world = self.world
             behaviorContext.physicsWorld = systemContext.physicsWorld
             behaviorContext.damageEntity = systemContext.damageEntity
