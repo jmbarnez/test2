@@ -4,9 +4,11 @@ local UIStateManager = require("src.ui.state_manager")
 local tiny = require("libs.tiny")
 local GameContext = require("src.states.gameplay.context")
 local constants = require("src.constants.game")
+local SpatialGrid = require("src.util.spatial_grid")
 local FloatingText = require("src.effects.floating_text")
 local ItemLabel = require("src.util.item_label")
 local createMovementSystem = require("src.systems.movement")
+local createSpatialIndexSystem = require("src.systems.spatial_index")
 local createRenderSystem = require("src.renderers.render")
 local createPlayerControlSystem = require("src.systems.player_control")
 local EngineTrailSystem = require("src.systems.engine_trail")
@@ -212,8 +214,15 @@ local function reset_ui_input(state)
 end
 
 local function add_common_systems(state, context)
-    state.movementSystem = state.world:addSystem(createMovementSystem())
     local sharedContext = context or GameContext.compose(state)
+
+    state.movementSystem = state.world:addSystem(createMovementSystem())
+    sharedContext.spatialGrid = sharedContext.spatialGrid or state.spatialGrid
+
+    state.spatialIndexSystem = state.world:addSystem(createSpatialIndexSystem(GameContext.extend(sharedContext, {
+        spatialGrid = state.spatialGrid,
+        cellSize = state.spatialGrid and state.spatialGrid.cellSize,
+    })))
     local pickupContext = GameContext.extend(sharedContext, {
         onCollected = function(pickup, ship, entity, game_state)
             handle_pickup_collected(pickup, ship, entity, game_state)
@@ -244,8 +253,20 @@ function Systems.initialize(state, damageCallback)
 
     reset_ui_input(state)
 
+    local performance = constants.performance or {}
+    local spatialCellSize = performance.spatial_grid_cell_size or 256
+    local spatialGrid = SpatialGrid.new(spatialCellSize)
+    state.constants = state.constants or constants
+    state.spatialGrid = spatialGrid
+
+    if state.world then
+        spatialGrid:setOwner(state.world)
+    end
+
     local baseContext = GameContext.compose(state, {
         damageEntity = damageCallback or state.damageEntity,
+        spatialGrid = spatialGrid,
+        spatialCellSize = spatialCellSize,
     })
 
     state.damageEntity = baseContext.damageEntity
@@ -317,6 +338,19 @@ function Systems.teardown(state)
     state.targetingSystem = nil
     state.hudSystem = nil
     state.uiSystem = nil
+    if state.spatialIndexSystem then
+        if state.spatialIndexSystem.clear then
+            state.spatialIndexSystem:clear()
+        end
+        state.spatialIndexSystem = nil
+    end
+    if state.spatialGrid then
+        state.spatialGrid:clear()
+        if state.world and state.world.spatialGrid == state.spatialGrid then
+            state.world.spatialGrid = nil
+        end
+        state.spatialGrid = nil
+    end
     state.damageEntity = nil
     state.destructionSystem = nil
 

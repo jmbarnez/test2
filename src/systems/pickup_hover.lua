@@ -109,6 +109,32 @@ local function build_pickup_info(pickup)
     }
 end
 
+local function collect_candidates(state, world_x, world_y, search_radius, out)
+    local grid = state and (state.spatialGrid or (state.world and state.world.spatialGrid))
+    if grid then
+        local count = 0
+        grid:eachCircle(world_x, world_y, search_radius, function(entity)
+            count = count + 1
+            out[count] = entity
+        end, function(entity)
+            return entity and entity.pickup and not entity.pendingDestroy
+        end)
+        for i = count + 1, #out do
+            out[i] = nil
+        end
+        return out, count
+    end
+
+    local entities = state.world and state.world.entities or {}
+    for i = 1, #entities do
+        out[i] = entities[i]
+    end
+    for i = #entities + 1, #out do
+        out[i] = nil
+    end
+    return out, #entities
+end
+
 return function(context)
     context = context or {}
 
@@ -133,11 +159,14 @@ return function(context)
             local camera = state.camera or context.camera
             local world_x, world_y = screen_to_world(mouse_x, mouse_y, camera)
 
-            local entities = state.world.entities
             local best_entity, best_radius, best_dist_sq
+            local candidates = state._pickupCandidates or {}
+            local SEARCH_RADIUS = 256
+            local candidateList, count = collect_candidates(state, world_x, world_y, SEARCH_RADIUS, candidates)
+            state._pickupCandidates = candidateList
 
-            for i = 1, #entities do
-                local entity = entities[i]
+            for i = 1, count do
+                local entity = candidateList[i]
                 local pickup = entity.pickup
                 local position = entity.position
 

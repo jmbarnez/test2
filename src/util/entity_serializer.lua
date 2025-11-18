@@ -275,13 +275,25 @@ function EntitySerializer.serialize_entity(state, entity)
         return nil
     end
 
+    -- For procedural ships, save the full blueprint since it doesn't exist as a file
+    local blueprintData
+    if blueprint then
+        if blueprint._procedural then
+            -- Save full blueprint for procedural entities
+            blueprintData = table_util.deep_copy(blueprint)
+        else
+            -- Save only reference for file-based blueprints
+            blueprintData = {
+                category = blueprint.category,
+                id = blueprint.id,
+            }
+        end
+    end
+
     local snapshot = {
         id = resolve_entity_id(state, entity, blueprint, archetype),
         archetype = archetype,
-        blueprint = blueprint and {
-            category = blueprint.category,
-            id = blueprint.id,
-        } or nil,
+        blueprint = blueprintData,
         data = payload,
     }
 
@@ -314,8 +326,6 @@ function EntitySerializer.serialize_world(state, options)
             local elapsed = currentTime - startTime
             local rate = index / elapsed
             local remaining = (totalEntities - index) / rate
-            print(string.format("[EntitySerializer] Progress: %d/%d (%.0f%%) - %.1fs elapsed, ~%.1fs remaining", 
-                index, totalEntities, (index / totalEntities) * 100, elapsed, remaining))
             lastReportTime = currentTime
         end
 
@@ -323,27 +333,17 @@ function EntitySerializer.serialize_world(state, options)
         local ok, serialized = pcall(EntitySerializer.serialize_entity, state, entity)
         if ok and serialized then
             results[#results + 1] = serialized
-        elseif not ok then
-            local entityInfo = "unknown"
-            if entity then
-                entityInfo = string.format("%s (id: %s)", 
-                    entity.blueprint and entity.blueprint.id or entity.type or "?",
-                    entity.entityId or entity.id or "?")
-            end
-            print(string.format("[EntitySerializer] Warning: Failed to serialize entity %s: %s", entityInfo, tostring(serialized)))
         end
 
         -- Warn about slow entities (>100ms)
         local entityTime = (love.timer and love.timer.getTime() or 0) - entityStartTime
         if entityTime > 0.1 then
             local entityInfo = entity.blueprint and entity.blueprint.id or entity.type or "unknown"
-            print(string.format("[EntitySerializer] Warning: Slow entity serialization (%.2fs): %s", entityTime, entityInfo))
         end
 
         if on_progress then
             local okProgress, progressErr = pcall(on_progress, index, totalEntities, entity)
             if not okProgress then
-                print(string.format("[EntitySerializer] Warning: Progress callback error: %s", tostring(progressErr)))
             end
         end
 
@@ -361,7 +361,6 @@ function EntitySerializer.serialize_world(state, options)
     end
 
     local totalTime = (love.timer and love.timer.getTime() or 0) - startTime
-    print(string.format("[EntitySerializer] Serialization complete: %d/%d entities saved in %.2fs", #results, totalEntities, totalTime))
     return results
 end
 

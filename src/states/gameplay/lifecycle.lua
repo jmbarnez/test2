@@ -11,6 +11,8 @@ local Entities = require("src.states.gameplay.entities")
 local PlayerLifecycle = require("src.states.gameplay.player")
 local AudioManager = require("src.audio.manager")
 local PlayerManager = require("src.player.manager")
+local OptionsData = require("src.settings.options_data")
+local Bindings = require("src.input.bindings")
 
 -- Factories (side-effect registration)
 require("src.entities.ship_factory")
@@ -81,6 +83,12 @@ end
 local function initialize_subsystems(state, sectorId)
     UIStateManager.initialize(state)
 
+    state.optionsUI = state.optionsUI or {}
+    local settings = OptionsData.ensure(state.optionsUI, state)
+    if settings and settings.keybindings then
+        Bindings.applyExternalOverrides(settings.keybindings)
+    end
+
     state.performanceStatsRecords = {}
     state.performanceStats = {}
 
@@ -101,12 +109,15 @@ local function restore_or_spawn_player(state, pendingSaveData)
     local restoredFromSave = false
 
     if pendingSaveData then
-        local ok, err = SaveLoad.loadGame(state, pendingSaveData)
+        -- Pass skipClear=true since we just initialized fresh subsystems in initialize_subsystems()
+        -- and haven't spawned anything yet
+        local ok, err = SaveLoad.loadGame(state, pendingSaveData, true)
         if not ok then
             print("[SaveLoad] Failed to load save data: " .. tostring(err))
             state.skipProceduralSpawns = nil
         else
             restoredFromSave = true
+            -- skipProceduralSpawns stays true and will be cleared after first update
         end
     end
 
@@ -114,6 +125,9 @@ local function restore_or_spawn_player(state, pendingSaveData)
         return
     end
 
+    -- Clear the flag since we're spawning a new player (not loading)
+    state.skipProceduralSpawns = nil
+    
     local player = Entities.spawnPlayer(state)
     if player then
         if state.engineTrail then

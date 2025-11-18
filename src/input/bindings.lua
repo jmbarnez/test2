@@ -4,6 +4,68 @@
 
 local Bindings = {}
 
+local function normalizeBindingIntent(intentName)
+    if type(intentName) ~= "string" then
+        return intentName
+    end
+
+    local mapping = {
+        pause = "togglePause",
+        saveGame = "quickSave",
+        loadGame = "quickLoad",
+        respawn = "confirm",
+    }
+
+    local normalized = mapping[intentName]
+    if normalized then
+        return normalized
+    end
+
+    local hotbarIndex = intentName:match("^hotbarSlot(%d+)$")
+    if hotbarIndex then
+        if hotbarIndex == "10" then
+            return "weaponSlot0"
+        end
+        return "weaponSlot" .. hotbarIndex
+    end
+
+    return intentName
+end
+
+local function coerceBindings(bindings)
+    local normalized = {}
+
+    if type(bindings) ~= "table" then
+        return normalized
+    end
+
+    for intentName, value in pairs(bindings) do
+        local normalizedIntent = normalizeBindingIntent(intentName)
+        local target = normalized[normalizedIntent]
+
+        if type(value) == "table" then
+            local keys = value.keys or value
+            if type(keys) == "table" then
+                target = target or { keys = {} }
+                for _, key in ipairs(keys) do
+                    if type(key) == "string" then
+                        target.keys[#target.keys + 1] = key
+                    end
+                end
+            end
+        elseif type(value) == "string" then
+            target = target or { keys = {} }
+            target.keys[#target.keys + 1] = value
+        end
+
+        if target then
+            normalized[normalizedIntent] = target
+        end
+    end
+
+    return normalized
+end
+
 -- Default key bindings
 -- Format: [intent_name] = { keys = {...}, mouse = {...}, context = "..." }
 Bindings.defaults = {
@@ -12,13 +74,22 @@ Bindings.defaults = {
     toggleDebug = { keys = { "f1" } },
     toggleFullscreen = { keys = { "f11" } },
     confirm = { keys = { "return", "kpenter", "space" } },
-    
+
+    -- Movement
+    moveLeft = { keys = { "a", "left" } },
+    moveRight = { keys = { "d", "right" } },
+    moveUp = { keys = { "w", "up" } },
+    moveDown = { keys = { "s", "down" } },
+
+    -- Abilities
+    abilityPrimary = { keys = { "space" } },
+
     -- Gameplay UI
     interact = { keys = { "e" } },
     toggleCargo = { keys = { "tab" } },
     toggleMap = { keys = { "m" } },
     toggleSkills = { keys = { "k" } },
-    
+
     -- Save/Load
     quickSave = { keys = { "f5" } },
     quickLoad = { keys = { "f9" } },
@@ -144,6 +215,43 @@ function Bindings.reset()
     Bindings.current = nil
     Bindings.keyToIntent = nil
     Bindings.initialize()
+end
+
+--- Provide an external bindings table (settings-driven)
+---@param overrides table
+function Bindings.applyExternalOverrides(overrides)
+    Bindings.current = coerceBindings(overrides)
+
+    -- ensure defaults are preserved for any missing intents
+    for intentName, binding in pairs(Bindings.defaults) do
+        local current = Bindings.current[intentName]
+        if not current or type(current.keys) ~= "table" or #current.keys == 0 then
+            Bindings.current[intentName] = { keys = {} }
+            if binding.keys then
+                for i, key in ipairs(binding.keys) do
+                    Bindings.current[intentName].keys[i] = key
+                end
+            end
+        end
+    end
+
+    Bindings.keyToIntent = buildKeyToIntentMap(Bindings.current)
+end
+
+function Bindings.getCurrentBindings()
+    if not Bindings.current then
+        Bindings.initialize()
+    end
+
+    return Bindings.current
+end
+
+function Bindings.getCurrentBindings()
+    if not Bindings.current then
+        Bindings.initialize()
+    end
+
+    return Bindings.current
 end
 
 -- Initialize on load

@@ -176,8 +176,9 @@ function TargetPanel.draw(context, player)
     local state = context.state or context
     local cache = state and state.targetingCache
     local active = cache and cache.activeEntity
+    local selected = cache and cache.selectedEntity
     local hovered = cache and cache.hoveredEntity
-    local target = active or hovered or (cache and cache.entity)
+    local target = active or selected or hovered or (cache and cache.entity)
 
     local fonts = theme.get_fonts()
     if not fonts then
@@ -255,6 +256,7 @@ function TargetPanel.draw(context, player)
     end
 
     local isLocked = hasTarget and active ~= nil and target == active or false
+    local isSelected = hasTarget and selected ~= nil and target == selected or false
     local isEnemy = hasTarget and not not target.enemy or false
     local showFullPanel = hasTarget and ((not isEnemy) or isLocked) or false
 

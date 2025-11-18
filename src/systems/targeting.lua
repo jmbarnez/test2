@@ -9,6 +9,7 @@ local love = love
 local DEFAULT_RADIUS = 48
 local MIN_RADIUS = 24
 local HOVER_RADIUS_MULTIPLIER = 1.15
+local TARGET_SEARCH_RADIUS = 800
 
 local function screen_to_world(x, y, camera)
     if not camera then
@@ -113,6 +114,32 @@ local function find_closest_target(entities, world_x, world_y, player_entity)
     return best_entity, best_dist_sq, best_radius
 end
 
+local function collect_candidates(state, world_x, world_y, out)
+    local grid = state and (state.spatialGrid or (state.world and state.world.spatialGrid))
+    if grid then
+        local count = 0
+        grid:eachCircle(world_x, world_y, TARGET_SEARCH_RADIUS, function(entity)
+            count = count + 1
+            out[count] = entity
+        end, function(entity)
+            return entity and not entity.pendingDestroy and entity.position
+        end)
+        for i = count + 1, #out do
+            out[i] = nil
+        end
+        return out, count
+    end
+
+    local entities = state.world and state.world.entities or {}
+    for i = 1, #entities do
+        out[i] = entities[i]
+    end
+    for i = #entities + 1, #out do
+        out[i] = nil
+    end
+    return out, #entities
+end
+
 local function update_targeting_cache(cache, world_x, world_y, best_entity, best_dist_sq, best_radius, active_target, state)
     cache.cursorWorldX = world_x
     cache.cursorWorldY = world_y
@@ -138,10 +165,15 @@ local function update_targeting_cache(cache, world_x, world_y, best_entity, best
         cache.activeRadius = nil
     end
 
-    cache.entity = cache.activeEntity or hovered_entity
+    cache.entity = cache.activeEntity or cache.selectedEntity or hovered_entity
     cache.highlightMode = nil
     cache.highlightRadius = nil
     cache.hoverRadius = cache.activeEntity and cache.activeRadius or hovered_radius
+
+    -- Preserve selected entity unless we're hovering something else and no active target
+    if state and state.selectedTarget and not active_target then
+        cache.selectedEntity = state.selectedTarget
+    end
 
     cache.lockCandidate = state and state.targetLockTarget or cache.lockCandidate
     cache.lockProgress = state and state.targetLockTimer and cache.lockDuration and cache.lockDuration > 0
@@ -197,8 +229,10 @@ return function(context)
 
             -- Find closest valid target
             local player_entity = PlayerManager.getCurrentShip(state)
+            state._targetCandidates = state._targetCandidates or {}
+            local candidateBuffer, count = collect_candidates(state, world_x, world_y, state._targetCandidates)
             local best_entity, best_dist_sq, best_radius = find_closest_target(
-                state.world.entities, world_x, world_y, player_entity
+                candidateBuffer, world_x, world_y, player_entity
             )
 
             -- Update cache with results

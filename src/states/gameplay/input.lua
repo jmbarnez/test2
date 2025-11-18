@@ -114,6 +114,7 @@ function Input.mousepressed(state, x, y, button, istouch, presses)
     local hovered = cache and cache.hoveredEntity or nil
 
     if not hovered or not hovered.enemy then
+        Targeting.clearSelected(state)
         Targeting.clearActive(state)
         Targeting.clearLock(state)
         if cache then
@@ -122,8 +123,9 @@ function Input.mousepressed(state, x, y, button, istouch, presses)
         return
     end
 
-    -- Toggle off if clicking active target
+    -- Toggle off if clicking already locked target
     if hovered == state.activeTarget then
+        Targeting.clearSelected(state)
         Targeting.clearActive(state)
         Targeting.clearLock(state)
         if cache then
@@ -132,8 +134,14 @@ function Input.mousepressed(state, x, y, button, istouch, presses)
         return
     end
 
-    -- Begin lock on new target
-    Targeting.beginLock(state, hovered)
+    -- If clicking already selected target, begin lock
+    if hovered == state.selectedTarget then
+        Targeting.beginLock(state, hovered)
+        return
+    end
+
+    -- First click: select target (don't lock yet)
+    Targeting.setSelected(state, hovered)
 end
 
 --- Handle mouse release events

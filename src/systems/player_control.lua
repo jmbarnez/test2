@@ -8,6 +8,7 @@
 local tiny = require("libs.tiny")
 local vector = require("src.util.vector")
 local GameContext = require("src.states.gameplay.context")
+local Bindings = require("src.input.bindings")
 
 local keyboard_isDown = love and love.keyboard and love.keyboard.isDown
 
@@ -30,7 +31,8 @@ return function(context)
                 return
             end
 
-            local intentHolder = context.intentHolder or context.state
+            local gameplayState = context.state or GameContext.resolveState(context)
+            local intentHolder = context.intentHolder or gameplayState
             local localPlayerId = intentHolder and intentHolder.localPlayerId
             local uiInput = context.uiInput
 
@@ -69,23 +71,41 @@ return function(context)
             local max_speed = stats.max_speed or entity.max_speed
             local max_accel = stats.max_acceleration
 
-            -- Poll local player input directly
+            -- Poll local player input directly using bindings
             local move_x, move_y = 0, 0
             if entity.playerId and localPlayerId and entity.playerId == localPlayerId then
                 if not (uiInput and uiInput.keyboardCaptured) and keyboard_isDown then
-                    if keyboard_isDown("a", "left") then
+                    local bindings = Bindings.getCurrentBindings()
+                    
+                    -- Check movement keys based on current bindings
+                    local function isBindingActive(intentName)
+                        local binding = bindings[intentName]
+                        if not (binding and binding.keys) then
+                            return false
+                        end
+                        for _, key in ipairs(binding.keys) do
+                            if keyboard_isDown(key) then
+                                return true
+                            end
+                        end
+                        return false
+                    end
+                    
+                    if isBindingActive("moveLeft") then
                         move_x = move_x - 1
                     end
-                    if keyboard_isDown("d", "right") then
+                    if isBindingActive("moveRight") then
                         move_x = move_x + 1
                     end
-                    if keyboard_isDown("w", "up") then
+                    if isBindingActive("moveUp") then
                         move_y = move_y - 1
                     end
-                    if keyboard_isDown("s", "down") then
+                    if isBindingActive("moveDown") then
                         move_y = move_y + 1
                     end
                     
+                    -- Debug logging
+                    -- Movement logging removed after debugging
                 end
             end
 

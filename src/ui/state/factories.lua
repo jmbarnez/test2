@@ -73,6 +73,17 @@ function factories.createPauseUIState()
         hint = "Press Esc or Enter to resume",
         buttonLabel = "Resume",
         buttonHovered = false,
+        saveStatus = nil,
+        saveStatusColor = nil,
+        progress = {
+            visible = false,
+            current = 0,
+            total = 0,
+            label = nil,
+            completedAt = nil,
+            isSaving = false,
+            error = false,
+        },
         _was_mouse_down = false,
     }
 end

@@ -30,6 +30,133 @@ local SaveLoad = {}
 
 local SAVE_FILE_NAME = "savegame.json"
 local SAVE_VERSION = 1
+local HASH_ALGORITHM = "sha256"
+
+local function is_array(tbl)
+    if type(tbl) ~= "table" then
+        return false
+    end
+
+    local count = 0
+    for key in pairs(tbl) do
+        if type(key) ~= "number" or key <= 0 or key % 1 ~= 0 then
+            return false
+        end
+        count = count + 1
+    end
+
+    return count == #tbl
+end
+
+local function sort_keys(keys)
+    local type_order = {
+        string = 1,
+        number = 2,
+        boolean = 3,
+    }
+
+    table.sort(keys, function(a, b)
+        local ta, tb = type(a), type(b)
+        if ta ~= tb then
+            return (type_order[ta] or 99) < (type_order[tb] or 99)
+        end
+
+        if ta == "string" then
+            return a < b
+        elseif ta == "number" then
+            return a < b
+        elseif ta == "boolean" then
+            return (a and 1 or 0) > (b and 1 or 0)
+        end
+
+        return tostring(a) < tostring(b)
+    end)
+
+    return keys
+end
+
+local function append_key_signature(key, buffer)
+    local keyType = type(key)
+    if keyType == "string" then
+        buffer[#buffer + 1] = "ks:" .. #key .. ":" .. key .. ";"
+    elseif keyType == "number" then
+        buffer[#buffer + 1] = "kn:" .. string.format("%.17g", key) .. ";"
+    elseif keyType == "boolean" then
+        buffer[#buffer + 1] = key and "kb:1;" or "kb:0;"
+    else
+        buffer[#buffer + 1] = "ku:" .. tostring(key) .. ";"
+    end
+end
+
+local function append_value_signature(value, buffer, seen)
+    local valueType = type(value)
+
+    if valueType == "nil" then
+        buffer[#buffer + 1] = "v:nil;"
+    elseif valueType == "boolean" then
+        buffer[#buffer + 1] = value and "v:b:1;" or "v:b:0;"
+    elseif valueType == "number" then
+        buffer[#buffer + 1] = "v:n:" .. string.format("%.17g", value) .. ";"
+    elseif valueType == "string" then
+        buffer[#buffer + 1] = "v:s:" .. #value .. ":" .. value .. ";"
+    elseif valueType == "table" then
+        if seen[value] then
+            error("Cannot compute checksum for cyclic tables")
+        end
+
+        seen[value] = true
+
+        if is_array(value) then
+            buffer[#buffer + 1] = "v:a:" .. #value .. ":["
+            for index = 1, #value do
+                append_value_signature(value[index], buffer, seen)
+            end
+            buffer[#buffer + 1] = "];"
+        else
+            local keys = {}
+            for key in pairs(value) do
+                keys[#keys + 1] = key
+            end
+
+            sort_keys(keys)
+
+            buffer[#buffer + 1] = "v:t:" .. #keys .. ":{"
+            for i = 1, #keys do
+                local key = keys[i]
+                append_key_signature(key, buffer)
+                append_value_signature(value[key], buffer, seen)
+            end
+            buffer[#buffer + 1] = "};"
+        end
+
+        seen[value] = nil
+    else
+        buffer[#buffer + 1] = "v:u:" .. tostring(value) .. ";"
+    end
+end
+
+local function compute_checksum(payload)
+    if not (love and love.data and love.data.hash) then
+        return nil, "love.data.hash is unavailable"
+    end
+
+    local buffer = {}
+    local ok, err = pcall(function()
+        append_value_signature(payload, buffer, {})
+    end)
+
+    if not ok then
+        return nil, err
+    end
+
+    local signature = table.concat(buffer, "")
+    local hashOk, hashValue = pcall(love.data.hash, HASH_ALGORITHM, signature)
+    if not hashOk then
+        return nil, hashValue
+    end
+
+    return hashValue
+end
 
 local function copy_into_table(target, source)
     if type(source) ~= "table" then
@@ -125,20 +252,54 @@ local function instantiate_entity_from_snapshot(state, snapshot)
         rotation = snapshot.data and snapshot.data.rotation or nil,
     }
 
-    local ok, entityOrError = pcall(loader.instantiate, blueprint.category, blueprint.id, context)
-    if not ok then
-        print(string.format("[SaveLoad] Failed to instantiate '%s/%s' from snapshot: %s", blueprint.category or "?", blueprint.id or "?", tostring(entityOrError)))
+    -- For procedural entities, use the full blueprint directly instead of loading from file
+    local entity, entityOrError
+    if blueprint._procedural then
+        -- Procedural blueprint - get factory and instantiate directly
+        local category = blueprint.category
+        local factoryModule = category == "ships" and require("src.entities.ship_factory") or nil
+        
+        if factoryModule and factoryModule.instantiate then
+            local ok, result = pcall(factoryModule.instantiate, blueprint, context)
+            if ok then
+                entity = result
+                -- Ensure the full blueprint is attached to the entity
+                entity.blueprint = blueprint
+            else
+                entityOrError = result
+            end
+        else
+            entityOrError = string.format("No factory found for procedural category '%s'", tostring(category))
+        end
+    else
+        -- File-based blueprint - load normally
+        local ok, result = pcall(loader.instantiate, blueprint.category, blueprint.id, context)
+        if ok then
+            entity = result
+        else
+            entityOrError = result
+        end
+    end
+
+    if not entity then
         return nil, false
     end
 
-    local entity = entityOrError
     local snapshotId = snapshot.id
     if type(snapshotId) == "string" and snapshotId ~= "" then
         EntityIds.assign(entity, snapshotId)
     else
         EntityIds.ensure(entity)
     end
-    entity.blueprint = entity.blueprint or blueprint
+    -- Ensure the entity has the full blueprint with all metadata (including _procedural)
+    if not entity.blueprint then
+        entity.blueprint = blueprint
+    elseif blueprint._procedural or blueprint._seed or blueprint._size_class then
+        -- If restoring a procedural entity, ensure metadata is preserved
+        entity.blueprint._procedural = blueprint._procedural
+        entity.blueprint._seed = blueprint._seed
+        entity.blueprint._size_class = blueprint._size_class
+    end
     apply_snapshot_payload(entity, snapshot)
 
     return entity, false
@@ -150,6 +311,7 @@ local function restore_world_entities(state, snapshots)
     end
 
     state.stationEntities = nil
+    local restoredCount = 0
 
     for index = 1, #snapshots do
         local snapshot = snapshots[index]
@@ -158,6 +320,7 @@ local function restore_world_entities(state, snapshots)
             if not alreadyAdded then
                 state.world:add(entity)
             end
+            restoredCount = restoredCount + 1
 
             if entity.station then
                 state.stationEntities = state.stationEntities or {}
@@ -219,7 +382,7 @@ end
 --- Serializes the current game state
 ---@param state table The gameplay state
 ---@return table|nil
-function SaveLoad.serialize(state)
+function SaveLoad.serialize(state, options)
     if type(state) ~= "table" then
         return nil
     end
@@ -230,7 +393,6 @@ function SaveLoad.serialize(state)
         or (state.pilot and state.pilot.ship)
 
     if not player then
-        print("[SaveLoad] Cannot save: no player ship found")
         return nil
     end
 
@@ -266,7 +428,8 @@ function SaveLoad.serialize(state)
         },
     }
 
-    local worldEntities = EntitySerializer.serialize_world(state)
+    local worldOptions = options or {}
+    local worldEntities = EntitySerializer.serialize_world(state, worldOptions)
     if worldEntities and #worldEntities > 0 then
         saveData.world = {
             entities = worldEntities,
@@ -286,34 +449,103 @@ end
 ---@return boolean success
 ---@return string|nil error
 function SaveLoad.saveGame(state)
-    print("[SaveLoad] Starting save process...")
-    
-    print("[SaveLoad] Serializing game state...")
-    local saveData = SaveLoad.serialize(state)
+    state.saveProgress = state.saveProgress or {
+        isSaving = false,
+        current = 0,
+        total = 0,
+        status = "",
+        error = false,
+        completedAt = nil,
+    }
+
+    local progressState = state.saveProgress
+    progressState.isSaving = true
+    progressState.error = false
+    progressState.current = 0
+    local world = state.world
+    if world and world.entities then
+        progressState.total = #world.entities
+    else
+        progressState.total = 0
+    end
+    progressState.status = "Preparing..."
+    progressState.completedAt = nil
+
+    local function on_progress(current, total)
+        progressState.current = current
+        progressState.total = total
+        local percent
+        if total and total > 0 then
+            percent = math.floor((current / total) * 100)
+        end
+
+        if percent then
+            progressState.status = string.format("Saving... %d%% (%d / %d)", percent, current, total)
+        else
+            progressState.status = string.format("Saving... %d", current)
+        end
+    end
+
+    local function yield_func()
+        if love and love.timer and love.timer.sleep then
+            love.timer.sleep(0)
+        end
+    end
+
+    local saveData = SaveLoad.serialize(state, {
+        on_progress = on_progress,
+        yield_func = yield_func,
+        yield_interval = 0.05,
+    })
     if not saveData then
+        progressState.status = "Failed"
+        progressState.isSaving = false
         return false, "Failed to serialize game state"
     end
-    print("[SaveLoad] Game state serialization complete")
 
-    print("[SaveLoad] Encoding to JSON...")
-    local ok, jsonString = pcall(json.encode, saveData)
-    if not ok then
-        local errorMsg = "Failed to encode save data: " .. tostring(jsonString)
-        print("[SaveLoad] ERROR: " .. errorMsg)
+    local checksum, checksumError = compute_checksum(saveData)
+    if not checksum then
+        local errorMsg = "Failed to compute checksum: " .. tostring(checksumError)
+        progressState.status = "Checksum Failed"
+        progressState.isSaving = false
+        progressState.error = true
+        progressState.completedAt = love and love.timer and love.timer.getTime and love.timer.getTime() or nil
         return false, errorMsg
     end
-    local sizeKB = math.floor(#jsonString / 1024)
-    print(string.format("[SaveLoad] JSON encoding complete (%d KB)", sizeKB))
 
-    print("[SaveLoad] Writing to disk...")
+    local envelope = {
+        version = SAVE_VERSION,
+        checksum = checksum,
+        algorithm = HASH_ALGORITHM,
+        data = saveData,
+    }
+
+    local ok, jsonString = pcall(json.encode, envelope)
+    if not ok then
+        local errorMsg = "Failed to encode save data: " .. tostring(jsonString)
+        progressState.status = "Encode Failed"
+        progressState.isSaving = false
+        progressState.error = true
+        progressState.completedAt = love and love.timer and love.timer.getTime and love.timer.getTime() or nil
+        return false, errorMsg
+    end
+
     local writeOk, writeError = pcall(love.filesystem.write, SAVE_FILE_NAME, jsonString)
     if not writeOk then
         local errorMsg = "Failed to write save file: " .. tostring(writeError)
         print("[SaveLoad] ERROR: " .. errorMsg)
+        progressState.status = "Save Failed"
+        progressState.isSaving = false
+        progressState.error = true
+        progressState.completedAt = love and love.timer and love.timer.getTime and love.timer.getTime() or nil
         return false, errorMsg
     end
 
-    print("[SaveLoad] Game saved successfully to " .. SAVE_FILE_NAME)
+    progressState.current = progressState.total
+    progressState.status = "Game Saved"
+    progressState.isSaving = false
+    progressState.error = false
+    progressState.completedAt = love and love.timer and love.timer.getTime and love.timer.getTime() or nil
     return true
 end
 
@@ -341,21 +573,48 @@ function SaveLoad.loadSaveData()
         return nil, "Failed to read save file: " .. tostring(contents)
     end
 
-    local decodeOk, saveData = pcall(json.decode, contents)
+    local decodeOk, decoded = pcall(json.decode, contents)
     if not decodeOk then
-        return nil, "Failed to decode save file: " .. tostring(saveData)
+        return nil, "Failed to decode save file: " .. tostring(decoded)
     end
 
-    if type(saveData) ~= "table" then
+    if type(decoded) ~= "table" then
         return nil, "Invalid save data format"
     end
 
-    if saveData.version ~= SAVE_VERSION then
-        return nil, string.format("Incompatible save version (expected %d, got %s)", 
-            SAVE_VERSION, tostring(saveData.version))
+    local saveData = decoded
+    local isWrapped = type(decoded.data) == "table" and type(decoded.checksum) == "string"
+
+    if isWrapped then
+        saveData = decoded.data
+
+        if decoded.version and decoded.version ~= SAVE_VERSION then
+            return nil, string.format(
+                "Incompatible save version (expected %d, got %s)",
+                SAVE_VERSION,
+                tostring(decoded.version)
+            )
+        end
+
+        local expectedChecksum = decoded.checksum
+        local computedChecksum, checksumError = compute_checksum(saveData)
+        if not computedChecksum then
+            return nil, "Failed to validate save file checksum: " .. tostring(checksumError)
+        end
+
+        if computedChecksum ~= expectedChecksum then
+            return nil, "Save file integrity check failed (checksum mismatch)"
+        end
     end
 
-    print("[SaveLoad] Save data loaded successfully")
+    if saveData.version ~= SAVE_VERSION then
+        return nil, string.format(
+            "Incompatible save version (expected %d, got %s)",
+            SAVE_VERSION,
+            tostring(saveData.version)
+        )
+    end
+
     return saveData
 end
 
@@ -460,24 +719,29 @@ function SaveLoad.restoreGameState(state, saveData)
 
     -- Restore player ship
     if playerData.ship then
+        print("[SaveLoad] Restoring player ship...")
         local player = restore_player_ship(state, playerData.ship)
         if not player then
+            print("[SaveLoad] ERROR: Failed to restore player ship!")
             return false, "Failed to restore player ship"
         end
+        print("[SaveLoad] Player ship restored successfully")
 
         -- Mark as player entity
         player.player = true
         player.playerId = 1
 
-        -- Add to ECS world
+        -- Add to ECS world (will be flushed later)
         if state.world and state.world.add then
             state.world:add(player)
+            print("[SaveLoad] Player added to world, will flush later")
+            -- Store player temporarily so we can attach it after flush
+            state._restoredPlayer = player
+        else
+            print("[SaveLoad] ERROR: Cannot add player to world!")
         end
-
-        -- Register with player manager
-        local PlayerManager = require("src.player.manager")
-        PlayerManager.ensurePilot(state)
-        PlayerManager.attachShip(state, player)
+    else
+        print("[SaveLoad] WARNING: No player ship data in save file!")
     end
 
     -- Restore pilot data
@@ -518,16 +782,16 @@ function SaveLoad.restoreGameState(state, saveData)
         QuestTracker.restore(state, saveData.quests)
     end
 
-    print("[SaveLoad] Game state restored successfully")
     return true
 end
 
 --- Loads a saved game into the current state
 ---@param state table The gameplay state
 ---@param saveData table|nil Preloaded save data to use instead of reading from disk
+---@param skipClear boolean|nil If true, skip clearing existing entities (used during fresh state entry)
 ---@return boolean success
 ---@return string|nil error
-function SaveLoad.loadGame(state, saveData)
+function SaveLoad.loadGame(state, saveData, skipClear)
     state.skipProceduralSpawns = true
     local loadError
     if not saveData then
@@ -538,15 +802,18 @@ function SaveLoad.loadGame(state, saveData)
         end
     end
 
-    -- Clear existing entities before loading
-    local Entities = require("src.states.gameplay.entities")
-    if state.world then
-        Entities.destroyWorldEntities(state.world)
-    end
+    -- Only clear entities if not already cleared (e.g., during mid-game reload vs. initial entry)
+    if not skipClear then
+        -- Clear existing entities before loading
+        local Entities = require("src.states.gameplay.entities")
+        if state.world then
+            Entities.destroyWorldEntities(state.world)
+        end
 
-    -- Clear player state
-    local PlayerManager = require("src.player.manager")
-    PlayerManager.clearShip(state)
+        -- Clear player state
+        local PlayerManager = require("src.player.manager")
+        PlayerManager.clearShip(state)
+    end
 
     -- Restore game state
     local restoreOk, restoreError = SaveLoad.restoreGameState(state, saveData)
@@ -554,6 +821,32 @@ function SaveLoad.loadGame(state, saveData)
         state.skipProceduralSpawns = nil
         return false, restoreError
     end
+
+    -- Flush any pending entity additions to ensure they're immediately in the world
+    -- This MUST happen before attaching the player, so entities are actually in the world
+    if state.world and state.world._flush then
+        print("[SaveLoad] Flushing world...")
+        state.world:_flush()
+        print(string.format("[SaveLoad] World flushed. Total entities: %d", #state.world.entities))
+    end
+    
+    -- NOW attach the player to the manager AFTER it's in the world
+    if state._restoredPlayer then
+        local player = state._restoredPlayer
+        state._restoredPlayer = nil
+        print("[SaveLoad] Attaching player to manager...")
+        local PlayerManager = require("src.player.manager")
+        PlayerManager.ensurePilot(state)
+        PlayerManager.attachShip(state, player)
+        print("[SaveLoad] Player attached successfully")
+    else
+        print("[SaveLoad] WARNING: No _restoredPlayer found after world flush!")
+    end
+    
+    -- Verify player is in the world AFTER flushing and attaching
+    local PlayerManager = require("src.player.manager")
+    local player = PlayerManager.getCurrentShip(state)
+    print(string.format("[SaveLoad] Final check - player exists: %s", tostring(player ~= nil)))
 
     -- Update camera to follow restored player
     local View = require("src.states.gameplay.view")
@@ -568,7 +861,8 @@ function SaveLoad.loadGame(state, saveData)
         end
     end
 
-    state.skipProceduralSpawns = nil
+    -- Keep skipProceduralSpawns = true so spawners won't run on first update
+    -- It will be cleared after the game is fully loaded
     return true
 end
 

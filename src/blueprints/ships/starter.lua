@@ -216,15 +216,7 @@ return {
             },
         },
     },
-    weapons = {
-        {
-            id = "laser_turret",
-            mount = {
-                anchor = { x = 0, y = 0.68 },
-                inset = 3,
-            },
-        },
-    },
+    weapons = {},
     physics = {
         body = {
             type = "dynamic",

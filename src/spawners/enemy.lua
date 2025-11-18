@@ -8,6 +8,93 @@ local LevelScaling = require("src.combat.level_scaling")
 
 local TAU = math_util.TAU
 
+local DEFAULT_STATION_EXCLUSION_RADIUS = 1500
+
+local function resolve_station_id(spec)
+    if type(spec) == "table" then
+        return spec.id or spec.stationId or spec.blueprint or spec[1]
+    end
+    return spec
+end
+
+local function resolve_station_position(state, spec)
+    if type(spec) ~= "table" then
+        return nil
+    end
+
+    local offsetX, offsetY = 0, 0
+    local offset = spec.offset
+    if type(offset) == "table" then
+        offsetX = offset.x or 0
+        offsetY = offset.y or 0
+    end
+
+    if spec.position then
+        local base = spec.position
+        return {
+            x = (base.x or 0) + offsetX,
+            y = (base.y or 0) + offsetY,
+        }
+    end
+
+    local bounds = state and state.worldBounds
+    if bounds then
+        return {
+            x = (bounds.x or 0) + (bounds.width or 0) * 0.5 + offsetX,
+            y = (bounds.y or 0) + (bounds.height or 0) * 0.5 + offsetY,
+        }
+    end
+
+    return {
+        x = offsetX,
+        y = offsetY,
+    }
+end
+
+local function build_restricted_zones(state)
+    if type(state) ~= "table" then
+        return {}
+    end
+
+    local configs = state.stationConfig
+    if type(configs) ~= "table" then
+        return {}
+    end
+
+    local zones = {}
+
+    local function consider_spec(spec)
+        local position = resolve_station_position(state, spec)
+        if not position then
+            return
+        end
+
+        local exclusion = (type(spec) == "table" and spec.exclusion_radius)
+            or DEFAULT_STATION_EXCLUSION_RADIUS
+        if type(exclusion) ~= "number" or exclusion <= 0 then
+            exclusion = DEFAULT_STATION_EXCLUSION_RADIUS
+        end
+
+        zones[#zones + 1] = {
+            x = position.x or 0,
+            y = position.y or 0,
+            radius_sq = exclusion * exclusion,
+        }
+    end
+
+    if configs[1] ~= nil then
+        for index = 1, #configs do
+            consider_spec(configs[index])
+        end
+    else
+        for _, spec in pairs(configs) do
+            consider_spec(spec)
+        end
+    end
+
+    return zones
+end
+
 local function random_point_in_ring(bounds, radius, inner_override)
     local cx = bounds.x + bounds.width * 0.5
     local cy = bounds.y + bounds.height * 0.5
@@ -242,6 +329,7 @@ return function(context)
     }
 
     local spawn_positions = {}
+    local restricted_zones = build_restricted_zones(context.state or context)
 
     local function resolve_avoid_entity()
         return PlayerManager.resolveLocalPlayer(context)
@@ -280,14 +368,48 @@ return function(context)
                 end
             end
 
+            if valid and restricted_zones and #restricted_zones > 0 then
+                for i = 1, #restricted_zones do
+                    local zone = restricted_zones[i]
+                    local dx = spawn_x - zone.x
+                    local dy = spawn_y - zone.y
+                    if (dx * dx + dy * dy) < zone.radius_sq then
+                        valid = false
+                        break
+                    end
+                end
+            end
+
             if valid then
                 return spawn_x, spawn_y
             end
         end
 
         -- Fallback: random position in world bounds
-        return love.math.random(bounds.x + safe_radius, bounds.x + bounds.width - safe_radius),
-               love.math.random(bounds.y + safe_radius, bounds.y + bounds.height - safe_radius)
+        local fallback_x, fallback_y
+        for _ = 1, 80 do
+            fallback_x = love.math.random(bounds.x + safe_radius, bounds.x + bounds.width - safe_radius)
+            fallback_y = love.math.random(bounds.y + safe_radius, bounds.y + bounds.height - safe_radius)
+
+            local valid = true
+            if restricted_zones and #restricted_zones > 0 then
+                for i = 1, #restricted_zones do
+                    local zone = restricted_zones[i]
+                    local dx = fallback_x - zone.x
+                    local dy = fallback_y - zone.y
+                    if (dx * dx + dy * dy) < zone.radius_sq then
+                        valid = false
+                        break
+                    end
+                end
+            end
+
+            if valid then
+                return fallback_x, fallback_y
+            end
+        end
+
+        return fallback_x, fallback_y
     end
 
     local function spawn_once(world)

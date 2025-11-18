@@ -167,11 +167,78 @@ function pause_window.draw(context)
         return true
     end
 
-    if state.statusMessage and state.statusMessage ~= "" then
+    local progressState = context and context.saveProgress
+    local progressVisible = false
+    local progressLabel
+    local progressPercent = 0
+
+    if progressState then
+        local progressNow = now or (love.timer and love.timer.getTime and love.timer.getTime())
+        local total = progressState.total or 0
+        if total > 0 then
+            progressPercent = math.max(0, math.min(1, progressState.current / total))
+        else
+            progressPercent = progressState.isSaving and 0 or 1
+        end
+
+        local completedAt = progressState.completedAt
+        local showDuration = progressState.error and 6 or 4
+        if progressState.isSaving then
+            progressVisible = true
+        elseif completedAt and progressNow then
+            progressVisible = (progressNow - completedAt) < showDuration
+        end
+
+        if progressVisible then
+            progressLabel = progressState.status or (progressState.isSaving and "Saving...")
+
+            love.graphics.setFont(fonts.small)
+            love.graphics.setColor(progressState.error and { 1.0, 0.5, 0.5, 1.0 } or textColor)
+            love.graphics.printf(progressLabel or "Saving...", content.x, buttonY, content.width, "center")
+
+            local labelHeight = fonts.small:getHeight()
+            local barWidth = math.min(320, content.width - 32)
+            local barHeight = 14
+            local barX = content.x + (content.width - barWidth) * 0.5
+            local barY = buttonY + labelHeight + 6
+
+            local barBackground = windowColors.progressBackground or { 0.12, 0.14, 0.18, 0.85 }
+            local barBorder = windowColors.border or { 0.22, 0.28, 0.36, 0.9 }
+            local barFill
+            if progressState.error then
+                barFill = { 1.0, 0.45, 0.45, 1.0 }
+            elseif progressState.isSaving then
+                barFill = windowColors.accent or { 0.35, 0.65, 0.95, 1.0 }
+            else
+                barFill = windowColors.accent_player or { 0.45, 0.95, 0.55, 1.0 }
+            end
+
+            love.graphics.setColor(barBackground)
+            love.graphics.rectangle("fill", barX, barY, barWidth, barHeight, 4, 4)
+
+            if progressPercent > 0 then
+                love.graphics.setColor(barFill)
+                love.graphics.rectangle("fill", barX, barY, barWidth * progressPercent, barHeight, 4, 4)
+            end
+
+            love.graphics.setColor(barBorder)
+            love.graphics.setLineWidth(1)
+            love.graphics.rectangle("line", barX + 0.5, barY + 0.5, barWidth - 1, barHeight - 1, 4, 4)
+
+            buttonY = barY + barHeight + 10
+        end
+    end
+
+    local statusMessage = state.statusMessage
+    if progressVisible and statusMessage and progressLabel and statusMessage == progressLabel then
+        statusMessage = nil
+    end
+
+    if statusMessage and statusMessage ~= "" then
         love.graphics.setFont(fonts.small)
         local statusColor = state.statusColor or mutedColor
         love.graphics.setColor(statusColor)
-        love.graphics.printf(state.statusMessage, content.x, buttonY + 6, content.width, "center")
+        love.graphics.printf(statusMessage, content.x, buttonY + 6, content.width, "center")
     end
 
     if frame.close_clicked then

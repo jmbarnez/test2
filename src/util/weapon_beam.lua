@@ -1,6 +1,8 @@
 local damage_util = require("src.util.damage")
 local vector = require("src.util.vector")
 
+local sqrt = math.sqrt
+
 local weapon_beam = {}
 
 local function resolve_entity_position(entity)
@@ -119,39 +121,93 @@ function weapon_beam.apply_hitscan_damage(damageEntity, target, baseDamage, sour
 end
 
 function weapon_beam.find_chain_target(world, shooter, originX, originY, rangeSq, alreadyHit, chainCategory)
-    if not (world and world.entities) then
+    if not world then
         return nil
     end
+
+    local spatialGrid = world.spatialGrid
 
     local bestTarget
     local bestDistanceSq
 
-    for i = 1, #world.entities do
-        local candidate = world.entities[i]
-        if candidate and candidate ~= shooter and not (alreadyHit and alreadyHit[candidate]) then
-            if candidate.health and (candidate.health.current or 0) > 0 and not candidate.pendingDestroy then
-                if not is_friendly_fire(shooter, candidate) then
-                    local matchesCategory = true
-                    if chainCategory then
-                        local candidateCategory = resolve_chain_category(candidate)
-                        matchesCategory = candidateCategory == chainCategory
-                    end
+    local function matches_category(candidate)
+        if not chainCategory then
+            return true
+        end
+        local candidateCategory = resolve_chain_category(candidate)
+        return candidateCategory == chainCategory
+    end
 
-                    if matchesCategory then
-                        local cx, cy = resolve_entity_position(candidate)
-                        if cx and cy then
-                            local distSq = distance_sq(originX, originY, cx, cy)
-                            if distSq <= rangeSq then
-                                if not bestDistanceSq or distSq < bestDistanceSq then
-                                    bestDistanceSq = distSq
-                                    bestTarget = candidate
-                                end
-                            end
-                        end
-                    end
-                end
+    local function consider_candidate(candidate)
+        if not candidate or candidate == shooter then
+            return
+        end
+        if alreadyHit and alreadyHit[candidate] then
+            return
+        end
+        if candidate.pendingDestroy then
+            return
+        end
+        local health = candidate.health
+        if not (health and (health.current or 0) > 0) then
+            return
+        end
+        if is_friendly_fire(shooter, candidate) then
+            return
+        end
+        if not matches_category(candidate) then
+            return
+        end
+
+        local cx, cy = resolve_entity_position(candidate)
+        if not (cx and cy) then
+            return
+        end
+
+        local distSq = distance_sq(originX, originY, cx, cy)
+        if distSq <= rangeSq then
+            if not bestDistanceSq or distSq < bestDistanceSq then
+                bestDistanceSq = distSq
+                bestTarget = candidate
             end
         end
+    end
+
+    if spatialGrid and rangeSq and rangeSq > 0 and rangeSq < math.huge then
+        local searchRadius = sqrt(rangeSq)
+        if searchRadius > 0 then
+            spatialGrid:eachCircle(originX, originY, searchRadius, consider_candidate, function(candidate)
+                if not candidate or candidate == shooter then
+                    return false
+                end
+                if alreadyHit and alreadyHit[candidate] then
+                    return false
+                end
+                if candidate.pendingDestroy then
+                    return false
+                end
+                if not (candidate.health and (candidate.health.current or 0) > 0) then
+                    return false
+                end
+                if is_friendly_fire(shooter, candidate) then
+                    return false
+                end
+                if chainCategory then
+                    local candidateCategory = resolve_chain_category(candidate)
+                    return candidateCategory == chainCategory
+                end
+                return true
+            end)
+            return bestTarget
+        end
+    end
+
+    if not world.entities then
+        return nil
+    end
+
+    for i = 1, #world.entities do
+        consider_candidate(world.entities[i])
     end
 
     return bestTarget

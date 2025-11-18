@@ -5,6 +5,41 @@ local PlayerManager = require("src.player.manager")
 
 local Targeting = {}
 
+--- Set selected target (not locked yet)
+---@param state table Gameplay state
+---@param target table Target entity
+function Targeting.setSelected(state, target)
+    if not (state and target) then
+        return
+    end
+
+    state.selectedTarget = target
+    
+    local cache = state.targetingCache
+    if cache then
+        cache.selectedEntity = target
+        cache.entity = target
+    end
+end
+
+--- Clear selected target
+---@param state table Gameplay state
+function Targeting.clearSelected(state)
+    if not state then
+        return
+    end
+
+    state.selectedTarget = nil
+    
+    local cache = state.targetingCache
+    if cache then
+        cache.selectedEntity = nil
+        if not cache.activeEntity then
+            cache.entity = cache.hoveredEntity
+        end
+    end
+end
+
 --- Initialize target lock on an entity
 ---@param state table Gameplay state
 ---@param target table Target entity
@@ -24,10 +59,12 @@ function Targeting.beginLock(state, target)
     state.targetLockTimer = targetingTime
     state.targetLockDuration = targetingTime
     state.activeTarget = nil
+    state.selectedTarget = target  -- Keep selected during lock
 
     local cache = state.targetingCache
     if cache then
         cache.activeEntity = nil
+        cache.selectedEntity = target
         cache.entity = target
         cache.lockCandidate = target
         cache.lockProgress = 0
@@ -51,6 +88,10 @@ function Targeting.clearLock(state)
         cache.lockCandidate = nil
         cache.lockProgress = nil
         cache.lockDuration = nil
+        -- If we had a selected target, restore it
+        if cache.selectedEntity and not cache.activeEntity then
+            cache.entity = cache.selectedEntity
+        end
     end
 end
 
@@ -66,7 +107,8 @@ function Targeting.clearActive(state)
     local cache = state.targetingCache
     if cache then
         cache.activeEntity = nil
-        cache.entity = cache.hoveredEntity
+        -- If we have a selected target, show it; otherwise show hovered
+        cache.entity = cache.selectedEntity or cache.hoveredEntity
     end
 end
 
@@ -115,6 +157,7 @@ function Targeting.update(state, dt)
     -- Check if lock is complete
     if not state.targetLockTimer or state.targetLockTimer <= 0 then
         state.activeTarget = target
+        state.selectedTarget = target  -- Keep selected when locked
         state.targetLockTarget = nil
         state.targetLockTimer = nil
         state.targetLockDuration = nil

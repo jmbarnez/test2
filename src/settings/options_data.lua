@@ -20,6 +20,7 @@ local DEFAULT_KEYBINDINGS = {
     moveRight = { "d", "right" },
     moveUp = { "w", "up" },
     moveDown = { "s", "down" },
+    abilityPrimary = { "space" },
     hotbarSlot1 = { "1" },
     hotbarSlot2 = { "2" },
     hotbarSlot3 = { "3" },

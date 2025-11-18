@@ -21,6 +21,13 @@ local function create_default_intent()
         showSeed = false,
         dumpWorld = false,
         
+        -- Movement intents
+        moveLeft = false,
+        moveRight = false,
+        moveUp = false,
+        moveDown = false,
+        abilityPrimary = false,
+        
         -- Weapon selection (special case)
         weaponSlot = nil, -- number 1-10 or nil
     }
@@ -84,6 +91,13 @@ function Intent.reset(intent)
     intent.showSeed = false
     intent.dumpWorld = false
     
+    -- Movement intents
+    intent.moveLeft = false
+    intent.moveRight = false
+    intent.moveUp = false
+    intent.moveDown = false
+    intent.abilityPrimary = false
+    
     -- Weapon selection
     intent.weaponSlot = nil
 end
@@ -100,6 +114,42 @@ function Intent.setWeaponSlot(intent, slotIndex)
     if intent then
         intent.weaponSlot = slotIndex
     end
+end
+
+function Intent.computeMovement(intent)
+    if not intent then
+        return 0, 0
+    end
+
+    local moveX = 0
+    local moveY = 0
+
+    if intent.moveLeft then
+        moveX = moveX - 1
+    end
+    if intent.moveRight then
+        moveX = moveX + 1
+    end
+    if intent.moveUp then
+        moveY = moveY - 1
+    end
+    if intent.moveDown then
+        moveY = moveY + 1
+    end
+
+    return moveX, moveY
+end
+
+function Intent.isAbilityActive(intent, abilityIndex)
+    if not intent then
+        return false
+    end
+
+    if abilityIndex == 1 then
+        return not not intent.abilityPrimary
+    end
+
+    return false
 end
 
 return Intent

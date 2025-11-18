@@ -87,6 +87,9 @@ local function instantiate_weapons(entity, blueprint, context)
         if weapon_id and instantiate_context then
             local mount = instantiate_context.mount
             if mount then
+                if entity.mountRadius == nil then
+                    entity.mountRadius = ShipRuntime.compute_drawable_radius(entity.drawable)
+                end
                 local mount_copy = table_util.deep_copy(mount)
                 ShipRuntime.resolve_mount_anchor(mount_copy, entity)
                 instantiate_context.mount = mount_copy

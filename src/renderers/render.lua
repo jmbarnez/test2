@@ -138,15 +138,17 @@ local function draw_highlight(entity, cache)
     end
 
     local hovered_entity = cache.hoveredEntity
+    local selected_entity = cache.selectedEntity
     local active_entity = cache.activeEntity
     local lock_candidate = cache.lockCandidate
     local lock_progress = cache.lockProgress or 0
 
     local is_hovered = hovered_entity == entity
+    local is_selected = selected_entity == entity
     local is_active = active_entity == entity
     local is_lock_candidate = (lock_candidate == entity) and not is_active
 
-    if not (is_hovered or is_active or is_lock_candidate) then
+    if not (is_hovered or is_selected or is_active or is_lock_candidate) then
         return
     end
 
@@ -200,15 +202,32 @@ local function draw_highlight(entity, cache)
 
         if active_radius and active_radius > 0 then
             love.graphics.push("all")
+            -- Thick primary circle for locked target
             love.graphics.setLineWidth(3)
             love.graphics.setColor(lock_primary)
             love.graphics.circle("line", position.x, position.y, active_radius + 4)
 
+            -- Second outer ring for locked target
             love.graphics.setLineWidth(1.5)
             love.graphics.setColor(lock_secondary)
             love.graphics.circle("line", position.x, position.y, active_radius + 7)
             love.graphics.pop()
         end
+        return
+    end
+
+    -- Selected target (not locked): show thin circle
+    if is_selected and not is_active then
+        local selected_radius = cache.hoveredRadius or cache.hoverRadius or compute_highlight_radius(entity)
+        if selected_radius > 0 then
+            love.graphics.push("all")
+            -- Thin circle for selected target
+            love.graphics.setLineWidth(1.5)
+            love.graphics.setColor(highlight_primary[1], highlight_primary[2], highlight_primary[3], 0.7)
+            love.graphics.circle("line", position.x, position.y, selected_radius + 6)
+            love.graphics.pop()
+        end
+        return
     end
 
     if not is_hovered then

@@ -76,6 +76,12 @@ function gameplay:update(dt)
         return
     end
 
+    -- Clear skipProceduralSpawns after first update when loading from save
+    -- This allows spawner systems to check the flag on their first run, then clears it
+    if self.skipProceduralSpawns then
+        self.skipProceduralSpawns = nil
+    end
+
     local updateStart = Metrics.beginUpdate(self, dt)
 
     -- Handle respawn request
